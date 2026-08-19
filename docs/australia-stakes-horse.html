@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Horse Stakes Record | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="racing.css">
+<link rel="stylesheet" href="archive.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3; --surface:#ffffff; --ink:#0f141a; --muted:#69727c; --faint:#9aa3ad;
+  --line:#e3e8ee; --board:#0c130f; --board-2:#161f16; --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16); --win-bg:#e6f4ea; --win-text:#1e7a3d;
+  --display:'Oswald',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --radius:16px;
+}
+*{box-sizing:border-box;}
+body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; margin:0; }
+
+#global-nav nav{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;}
+#global-nav nav a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+#global-nav nav a:hover{opacity:1;}
+
+.page{ max-width:1050px; margin:0 auto; padding:26px 20px 70px; }
+
+.search-wrap{ max-width:500px; margin:0 auto 26px; position:relative; }
+.search-wrap input{
+  width:100%; padding:13px 20px; border-radius:999px; border:1px solid var(--line);
+  font-family:var(--body); font-size:15px; font-weight:600; outline:none; background:var(--surface);
+}
+.search-wrap input:focus{ border-color:var(--accent); }
+.suggestions{
+  position:absolute; width:100%; background:var(--surface); border-radius:14px; margin-top:8px;
+  overflow:hidden; box-shadow:0 14px 30px -12px rgba(10,16,24,.4); z-index:10; max-height:320px; overflow-y:auto;
+}
+.suggestion{ padding:12px 18px; cursor:pointer; font-weight:600; font-size:14px; }
+.suggestion:hover{ background:var(--accent-soft); }
+
+.hero{
+  position:relative; background:linear-gradient(160deg,var(--board-2),var(--board)); color:#fff;
+  padding:32px 34px; border-radius:var(--radius); margin-bottom:22px; text-align:center;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+}
+.hero .eyebrow{
+  font-family:var(--body); font-size:11.5px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:10px;
+}
+.hero h1{
+  margin:0; font-family:var(--display); font-weight:600; font-size:clamp(24px,5vw,38px);
+  letter-spacing:.01em; text-transform:uppercase; color:#fff;
+}
+
+.summary{ display:flex; justify-content:center; gap:14px; margin-bottom:22px; flex-wrap:wrap; }
+.summary div{
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:14px 22px; text-align:center; font-weight:600; color:var(--muted); font-size:13px;
+}
+.summary span{
+  display:block; font-family:var(--display); font-weight:600; font-size:26px;
+  color:var(--ink); margin-top:4px; font-variant-numeric:tabular-nums;
+}
+
+.table-wrap{ overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+table{ width:100%; border-collapse:collapse; min-width:800px; }
+th, td{ padding:11px 14px; text-align:left; font-size:13.5px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th{ background:#f7f9fb; color:var(--muted); font-family:var(--body); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+td{ color:#27313c; font-variant-numeric:tabular-nums; }
+td:first-child{ font-weight:700; color:var(--ink); }
+tbody tr{ cursor:pointer; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover td{ background:#f9fbfd; }
+.win td{ background:var(--win-bg) !important; font-weight:600; color:var(--win-text); }
+.win td:first-child{ color:var(--win-text); }
+
+.grade-pill{
+  display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;
+}
+.grade-G1{background:#fbe7e5;color:#c0362c;}
+.grade-G2{background:var(--accent-soft);color:#8a6a25;}
+.grade-G3{background:#e6f0fb;color:#2a5d8f;}
+.grade-LR{background:#eceef0;color:var(--muted);}
+
+.loading{ text-align:center; color:var(--muted); font-style:italic; padding:20px; }
+</style>
+</head>
+
+<body>
+
+<div id="global-nav"></div>
+
+<div class="page">
+
+  <div class="search-wrap">
+    <input id="horseSearchBox" placeholder="Search for a horse..." autocomplete="off">
+    <div id="suggestions" class="suggestions"></div>
+  </div>
+
+  <div class="hero">
+    <div class="eyebrow">Australian Stakes Races</div>
+    <h1 id="horseName">Search for a horse above</h1>
+  </div>
+
+  <div class="summary" id="summary" style="display:none;">
+    <div>Starts<span id="starts">0</span></div>
+    <div>Wins<span id="wins">0</span></div>
+    <div>Placings<span id="placings">0</span></div>
+    <div>Group 1<span id="g1Wins">0</span></div>
+    <div>Group 2<span id="g2Wins">0</span></div>
+    <div>Group 3<span id="g3Wins">0</span></div>
+    <div>Listed<span id="lrWins">0</span></div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Race</th>
+        <th>Track</th>
+        <th>Grade</th>
+        <th>Fin</th>
+        <th>Starters</th>
+        <th>Jockey</th>
+        <th>Trainer</th>
+      </tr>
+    </thead>
+    <tbody id="results">
+      <tr><td colspan="8" class="loading">Search for a horse to see their stakes record.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+</div>
+
+<script>
+
+const GRADE_LABELS = { G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed" };
+
+let allData = [];
+let horseNames = [];
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.trim().replace(/\r/g,"").split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{ obj[h] = (values[i]||"").replace(/^"|"$/g,"").trim(); });
+    return obj;
+  });
+}
+
+fetch("/data/australia-stakes.csv")
+  .then(res => res.text())
+  .then(text => {
+    allData = parseCSV(text);
+    const seen = new Set();
+    allData.forEach(r => { if(r.Horse) seen.add(r.Horse); });
+    horseNames = [...seen].sort();
+
+    const params = new URLSearchParams(window.location.search);
+    const horse = params.get("horse");
+    if(horse){
+      document.getElementById("horseSearchBox").value = horse;
+      showHorse(horse);
+    }
+  });
+
+const searchBox = document.getElementById("horseSearchBox");
+const suggestions = document.getElementById("suggestions");
+
+searchBox.addEventListener("input", () => {
+  const value = searchBox.value.toLowerCase();
+  suggestions.innerHTML = "";
+  if(!value) return;
+  const matches = horseNames.filter(h => h.toLowerCase().includes(value)).slice(0, 8);
+  matches.forEach(h => {
+    const div = document.createElement("div");
+    div.className = "suggestion";
+    div.textContent = h;
+    div.onclick = () => {
+      searchBox.value = h;
+      suggestions.innerHTML = "";
+      window.history.pushState({}, "", `?horse=${encodeURIComponent(h)}`);
+      showHorse(h);
+    };
+    suggestions.appendChild(div);
+  });
+});
+
+document.addEventListener("click", (e) => {
+  if(!e.target.closest(".search-wrap")){ suggestions.innerHTML = ""; }
+});
+
+function dateToSortable(d){
+  const [day, month, year] = d.split("/").map(Number);
+  return year * 10000 + month * 100 + day;
+}
+
+function showHorse(horseName){
+  const rows = allData.filter(r => r.Horse === horseName);
+  if(rows.length === 0){
+    document.getElementById("horseName").textContent = "No stakes record found";
+    document.getElementById("summary").style.display = "none";
+    document.getElementById("results").innerHTML = '<tr><td colspan="8" class="loading">No results.</td></tr>';
+    return;
+  }
+
+  document.getElementById("horseName").textContent = horseName;
+  document.getElementById("summary").style.display = "flex";
+
+  const starts = rows.length;
+  const wins = rows.filter(r => r.Position === "1").length;
+  const placings = rows.filter(r => ["2","3"].includes(r.Position)).length;
+  const g1 = rows.filter(r => r.GRADE === "G1" && r.Position === "1").length;
+  const g2 = rows.filter(r => r.GRADE === "G2" && r.Position === "1").length;
+  const g3 = rows.filter(r => r.GRADE === "G3" && r.Position === "1").length;
+  const lr = rows.filter(r => r.GRADE === "LR" && r.Position === "1").length;
+
+  document.getElementById("starts").textContent = starts;
+  document.getElementById("wins").textContent = wins;
+  document.getElementById("placings").textContent = placings;
+  document.getElementById("g1Wins").textContent = g1;
+  document.getElementById("g2Wins").textContent = g2;
+  document.getElementById("g3Wins").textContent = g3;
+  document.getElementById("lrWins").textContent = lr;
+
+  const sorted = [...rows].sort((a,b) => dateToSortable(b.Date) - dateToSortable(a.Date));
+
+  const tbody = document.getElementById("results");
+  tbody.innerHTML = "";
+  sorted.forEach(r => {
+    const grade = r.GRADE || "";
+    const gradeLabel = GRADE_LABELS[grade] || grade;
+    const tr = document.createElement("tr");
+    if(r.Position === "1") tr.classList.add("win");
+    tr.innerHTML = `
+      <td>${r.Date}</td>
+      <td>${r["Race Name"]}</td>
+      <td>${r.Track}</td>
+      <td><span class="grade-pill grade-${grade}">${gradeLabel}</span></td>
+      <td>${r.Position}</td>
+      <td>${r.Starters}</td>
+      <td>${r.Jockey}</td>
+      <td>${r.Trainer}</td>
+    `;
+    tr.onclick = () => {
+      window.location.href = `australia-stakes-race.html?race=${encodeURIComponent(r["Race Name"])}&date=${encodeURIComponent(r.Date)}`;
+    };
+    tbody.appendChild(tr);
+  });
+}
+
+/* LOAD NAV BAR */
+fetch("g1-archive.html")
+  .then(res => res.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const nav = doc.querySelector("nav");
+    if(nav){ document.getElementById("global-nav").innerHTML = nav.outerHTML; }
+  });
+
+</script>
+
+</body>
+</html>

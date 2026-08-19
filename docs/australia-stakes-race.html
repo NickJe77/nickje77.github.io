@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Race Result | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="racing.css">
+<link rel="stylesheet" href="archive.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3; --surface:#ffffff; --ink:#0f141a; --muted:#69727c; --faint:#9aa3ad;
+  --line:#e3e8ee; --board:#0c130f; --board-2:#161f16; --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16); --win-bg:#e6f4ea; --win-text:#1e7a3d;
+  --display:'Oswald',system-ui,sans-serif; --body:'Inter',system-ui,sans-serif; --radius:16px;
+}
+*{box-sizing:border-box;}
+body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; margin:0; }
+
+#global-nav nav{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;}
+#global-nav nav a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+#global-nav nav a:hover{opacity:1;}
+
+.page{ max-width:1100px; margin:0 auto; padding:26px 20px 70px; }
+
+.hero{
+  position:relative; background:linear-gradient(160deg,var(--board-2),var(--board)); color:#fff;
+  border-radius:var(--radius); margin-bottom:22px; box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  padding:24px 28px;
+}
+.eyebrow{
+  font-family:var(--body); font-size:11.5px; font-weight:600; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--accent); margin-bottom:14px; text-align:center;
+}
+.nav-header{ display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.nav-header a{
+  color:rgba(255,255,255,.75); text-decoration:none; font-family:var(--body); font-weight:600;
+  font-size:13px; white-space:nowrap; transition:color .15s;
+}
+.nav-header a:hover{ color:var(--accent); }
+.nav-header a:empty{ visibility:hidden; }
+h1{
+  margin:0; text-align:center; flex:1; font-family:var(--display); font-weight:600;
+  font-size:clamp(20px,4vw,30px); letter-spacing:.01em; text-transform:uppercase; color:#fff;
+}
+.race-meta{ text-align:center; color:rgba(255,255,255,.65); font-size:12.5px; margin-top:10px; }
+
+.section-title{
+  font-family:var(--display); font-weight:600; font-size:16px; text-transform:uppercase;
+  letter-spacing:.02em; color:var(--ink); margin:26px 0 10px;
+}
+
+.table-wrap{ overflow-x:auto; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
+table{ width:100%; border-collapse:collapse; min-width:750px; }
+th, td{ padding:11px 14px; text-align:left; font-size:13.5px; border-bottom:1px solid var(--line); white-space:nowrap; }
+th{ background:#f7f9fb; color:var(--muted); font-family:var(--body); font-weight:600; font-size:11px; letter-spacing:.04em; text-transform:uppercase; }
+td{ color:#27313c; font-variant-numeric:tabular-nums; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover td{ background:#f9fbfd; }
+.win td{ background:var(--win-bg) !important; font-weight:600; color:var(--win-text); }
+.win td:first-child{ color:var(--win-text); }
+
+.horse-link{ color:var(--ink); text-decoration:none; }
+.horse-link:hover{ color:var(--accent); }
+
+.boxes-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-top:10px; }
+@media (max-width:900px){ .boxes-grid{ grid-template-columns:1fr 1fr; } }
+@media (max-width:520px){ .boxes-grid{ grid-template-columns:1fr; } }
+
+.box{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+.box-header{
+  padding:12px 16px; font-family:var(--display); font-weight:600; font-size:13px;
+  text-transform:uppercase; letter-spacing:.02em; color:#fff;
+}
+.box-G1 .box-header{ background:#c0362c; }
+.box-G2 .box-header{ background:#a5791f; }
+.box-G3 .box-header{ background:#2a5d8f; }
+.box-LR .box-header{ background:var(--muted); }
+
+.winner-row{ padding:10px 16px; border-bottom:1px solid var(--line); font-size:13.5px; cursor:pointer; }
+.winner-row:hover{ background:#f9fbfd; }
+.winner-row:last-child{ border-bottom:none; }
+
+.loading{ text-align:center; color:var(--muted); font-style:italic; padding:20px; font-size:13px; }
+</style>
+</head>
+
+<body>
+
+<div id="global-nav"></div>
+
+<div class="page">
+
+  <div class="hero">
+    <div class="eyebrow">Australian Stakes Races</div>
+    <div class="nav-header">
+      <a id="prev"></a>
+      <h1 id="title">Loading...</h1>
+      <a id="next"></a>
+    </div>
+    <div class="race-meta" id="race-meta"></div>
+  </div>
+
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Fin</th>
+        <th>Horse</th>
+        <th>Wgt</th>
+        <th>Marg</th>
+        <th>SP</th>
+        <th>Jockey</th>
+        <th>Trainer</th>
+      </tr>
+    </thead>
+    <tbody id="results">
+      <tr><td colspan="7" class="loading">Loading...</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="section-title">Subsequent Winners (this field)</div>
+  <div class="boxes-grid">
+    <div class="box box-G1">
+      <div class="box-header">Group 1 Winners</div>
+      <div id="box-G1"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="box box-G2">
+      <div class="box-header">Group 2 Winners</div>
+      <div id="box-G2"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="box box-G3">
+      <div class="box-header">Group 3 Winners</div>
+      <div id="box-G3"><div class="loading">Loading...</div></div>
+    </div>
+    <div class="box box-LR">
+      <div class="box-header">Listed Winners</div>
+      <div id="box-LR"><div class="loading">Loading...</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+
+const GRADE_LABELS = { G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed" };
+
+const params = new URLSearchParams(window.location.search);
+const raceName = params.get("race");
+const raceDate = params.get("date");
+
+if(!raceName || !raceDate){
+  document.getElementById("title").textContent = "No race selected";
+  throw new Error("Missing race or date parameter");
+}
+
+function parseCSV(text){
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.trim().replace(/\r/g,"").split("\n");
+  const headers = lines[0].split(",").map(h=>h.trim());
+  return lines.slice(1).map(line=>{
+    const values = line.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/);
+    let obj = {};
+    headers.forEach((h,i)=>{ obj[h] = (values[i]||"").replace(/^"|"$/g,"").trim(); });
+    return obj;
+  });
+}
+
+function dateToSortable(d){
+  const [day, month, year] = d.split("/").map(Number);
+  return year * 10000 + month * 100 + day;
+}
+
+function horseLink(name){
+  if(!name) return "";
+  return `<a class="horse-link" href="australia-stakes-horse.html?horse=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function groupByHorse(wins){
+  const groups = new Map();
+  wins.forEach(w => {
+    if(!groups.has(w.Horse)){
+      groups.set(w.Horse, { horse: w.Horse, count: 0 });
+    }
+    groups.get(w.Horse).count++;
+  });
+  return [...groups.values()].sort((a,b) => b.count - a.count);
+}
+
+function renderBox(wins, elementId){
+  const container = document.getElementById(elementId);
+  container.innerHTML = "";
+  if(wins.length === 0){
+    container.innerHTML = '<div class="loading">None on record.</div>';
+    return;
+  }
+  const grouped = groupByHorse(wins);
+  grouped.forEach(g => {
+    const div = document.createElement("div");
+    div.className = "winner-row";
+    const label = g.count > 1 ? `${g.horse} x ${g.count}` : g.horse;
+    div.innerHTML = `<a class="horse-link" href="australia-stakes-horse.html?horse=${encodeURIComponent(g.horse)}">${label}</a>`;
+    div.onclick = () => {
+      window.location.href = `australia-stakes-horse.html?horse=${encodeURIComponent(g.horse)}`;
+    };
+    container.appendChild(div);
+  });
+}
+
+fetch("/data/australia-stakes.csv")
+  .then(res => res.text())
+  .then(text => {
+    const allData = parseCSV(text);
+
+    // This exact running: same race name AND same date.
+    const thisRunning = allData.filter(r => r["Race Name"] === raceName && r.Date === raceDate);
+
+    if(thisRunning.length === 0){
+      document.getElementById("title").textContent = "Race not found";
+      document.getElementById("results").innerHTML = '<tr><td colspan="7" class="loading">No result found for this race/date.</td></tr>';
+      ["G1","G2","G3","LR"].forEach(g => {
+        document.getElementById("box-"+g).innerHTML = '<div class="loading">Race not found.</div>';
+      });
+      return;
+    }
+
+    const track = thisRunning[0].Track;
+    const grade = thisRunning[0].GRADE;
+    const gradeLabel = GRADE_LABELS[grade] || grade;
+    const starters = thisRunning[0].Starters;
+
+    document.getElementById("title").textContent = `${raceName} — ${raceDate}`;
+    document.getElementById("race-meta").textContent = `${track} — ${gradeLabel} — ${starters} runners`;
+
+    // Full field, sorted by finishing position (non-numeric finishes
+    // like DQ/F/FF/LP/LR/BD sort to the end).
+    const sorted = [...thisRunning].sort((a,b) => {
+      const an = parseInt(a.Position, 10);
+      const bn = parseInt(b.Position, 10);
+      const aVal = isNaN(an) ? 999 : an;
+      const bVal = isNaN(bn) ? 999 : bn;
+      return aVal - bVal;
+    });
+
+    const tbody = document.getElementById("results");
+    tbody.innerHTML = "";
+    sorted.forEach(r => {
+      const tr = document.createElement("tr");
+      if(r.Position === "1") tr.classList.add("win");
+      tr.innerHTML = `
+        <td>${r.Position}</td>
+        <td>${horseLink(r.Horse)}</td>
+        <td>${r.Weight}</td>
+        <td>${r.MARG}</td>
+        <td>${r.SP}</td>
+        <td>${r.Jockey}</td>
+        <td>${r.Trainer}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // For every horse that RAN in this field (not just the winner), check
+    // their complete win record across every stakes race, and bucket every
+    // win dated AFTER this running by grade. Subsequent only - no prior box.
+    const thisSortable = dateToSortable(raceDate);
+    const fieldHorses = [...new Set(thisRunning.map(r => r.Horse))];
+
+    const subsequentByGrade = { G1: [], G2: [], G3: [], LR: [] };
+
+    fieldHorses.forEach(horse => {
+      const thisHorsesWins = allData.filter(r => r.Horse === horse && r.Position === "1");
+      thisHorsesWins.forEach(w => {
+        if(w["Race Name"] === raceName && w.Date === raceDate) return;
+        const wSortable = dateToSortable(w.Date);
+        if(wSortable > thisSortable){
+          const g = w.GRADE;
+          if(subsequentByGrade[g]) subsequentByGrade[g].push(w);
+        }
+      });
+    });
+
+    renderBox(subsequentByGrade.G1, "box-G1");
+    renderBox(subsequentByGrade.G2, "box-G2");
+    renderBox(subsequentByGrade.G3, "box-G3");
+    renderBox(subsequentByGrade.LR, "box-LR");
+
+    // Every running of this race across every year, used only for the
+    // prev/next RUNNING navigation.
+    const uniqueDates = [...new Set(
+      allData.filter(r => r["Race Name"] === raceName).map(r => r.Date)
+    )].sort((a,b) => dateToSortable(a) - dateToSortable(b));
+
+    const currentIdx = uniqueDates.indexOf(raceDate);
+
+    if(currentIdx > 0){
+      const p = uniqueDates[currentIdx - 1];
+      const prevEl = document.getElementById("prev");
+      prevEl.textContent = "← " + p;
+      prevEl.href = `australia-stakes-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(p)}`;
+    }
+    if(currentIdx >= 0 && currentIdx < uniqueDates.length - 1){
+      const n = uniqueDates[currentIdx + 1];
+      const nextEl = document.getElementById("next");
+      nextEl.textContent = n + " →";
+      nextEl.href = `australia-stakes-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(n)}`;
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    document.getElementById("title").textContent = "Error loading race data";
+    document.getElementById("results").innerHTML = '<tr><td colspan="7" class="loading">Could not load data.</td></tr>';
+    ["G1","G2","G3","LR"].forEach(g => {
+      document.getElementById("box-"+g).innerHTML = '<div class="loading">Could not load data.</div>';
+    });
+  });
+
+/* LOAD NAV BAR */
+fetch("g1-archive.html")
+  .then(res => res.text())
+  .then(html => {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const nav = doc.querySelector("nav");
+    if(nav){ document.getElementById("global-nav").innerHTML = nav.outerHTML; }
+  });
+
+</script>
+
+</body>
+</html>
