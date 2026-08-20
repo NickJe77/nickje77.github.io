@@ -108,7 +108,7 @@ body{ font-size:15px; font-family:var(--body); background:var(--bg); color:var(-
 <div id="global-nav"></div>
 
 <div class="page-hero">
-  <div class="hero-text">AUSTRALIAN STAKES WINNERS 2010 - CURRENT DAY</div>
+  <div class="hero-text">AUSTRALIAN STAKES WINNERS 1982 - CURRENT DAY</div>
 </div>
 
 <div style="text-align:center;margin-top:18px;">
@@ -206,17 +206,14 @@ function parseCSV(text){
   });
 }
 
-// Same CSV the full-field pages use - filtered to winners only below.
 fetch("/data/australia-stakes.csv")
   .then(res => res.text())
   .then(text => {
-    const parsed = parseCSV(text);
-    allData = parsed.filter(r => r.Position === "1");
+    allData = parseCSV(text);
 
     allData.forEach(r=>{
       if(r.Date && r.Date.includes("/")){
-        const parts = r.Date.split("/");
-        r.Year = parts[2];
+        r.Year = r.Date.split("/")[2];
       } else {
         r.Year = "";
       }
@@ -244,8 +241,8 @@ function populateFilters(data){
   data.forEach(r=>{
     if(r.Year) years.add(r.Year);
     if(r.Track) tracks.add(r.Track);
-    if(r["Race Name"]) races.add(r["Race Name"]);
-    if(r.Horse) horses.add(r.Horse);
+    if(r.Race) races.add(r.Race);
+    if(r.Winner) horses.add(r.Winner);
     if(r.Jockey) jockeys.add(r.Jockey);
     if(r.Trainer) trainers.add(r.Trainer);
   });
@@ -283,9 +280,9 @@ function applyFilters(){
     return (
       (!y || row.Year === y) &&
       (!trk || row.Track === trk) &&
-      (!g || row.GRADE === g) &&
-      (!r || (row["Race Name"]||"").toLowerCase().includes(r)) &&
-      (!h || (row.Horse||"").toLowerCase().includes(h)) &&
+      (!g || row["Race Grade"] === g) &&
+      (!r || (row.Race||"").toLowerCase().includes(r)) &&
+      (!h || (row.Winner||"").toLowerCase().includes(h)) &&
       (!j || (row.Jockey||"").toLowerCase().includes(j)) &&
       (!t || (row.Trainer||"").toLowerCase().includes(t))
     );
@@ -304,16 +301,16 @@ function renderTable(data){
 
   data.forEach(r=>{
     const tr=document.createElement("tr");
-    const grade = r.GRADE || "";
+    const grade = r["Race Grade"] || "";
     const gradeLabel = GRADE_LABELS[grade] || grade;
 
     tr.innerHTML=`
       <td>${r.Date||""}</td>
-      <td>${r["Race Name"]||""}</td>
+      <td>${r.Race||""}</td>
       <td>${r.Track||""}</td>
       <td><span class="grade-pill grade-${grade}">${gradeLabel}</span></td>
-      <td>${horseLink(r.Horse)}</td>
-      <td>${r.MARG||""}</td>
+      <td>${horseLink(r.Winner)}</td>
+      <td>${r.Margin||""}</td>
       <td>${r.SP||""}</td>
       <td>${r.Jockey||""}</td>
       <td>${r.Trainer||""}</td>
@@ -321,7 +318,7 @@ function renderTable(data){
     tr.style.cursor = "pointer";
     tr.onclick = (e) => {
       if(e.target.tagName !== "A"){
-        window.location.href = `australia-stakes-winners-race.html?race=${encodeURIComponent(r["Race Name"])}&date=${encodeURIComponent(r.Date)}`;
+        window.location.href = `australia-stakes-winners-race.html?race=${encodeURIComponent(r.Race)}&date=${encodeURIComponent(r.Date)}`;
       }
     };
     tableBody.appendChild(tr);
