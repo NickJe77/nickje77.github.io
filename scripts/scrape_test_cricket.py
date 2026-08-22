@@ -24,6 +24,18 @@ Install:
 
 Run:
   python3 scrape_test_cricket.py --year 2026
+
+Chrome/ChromeDriver version note:
+  make_driver() reads a CHROME_VERSION env var (major.minor.build.patch,
+  e.g. "151.0.7922.137") and pins undetected_chromedriver's version_main
+  to its major version. In CI this is set from the browser-actions/
+  setup-chrome step's output, so the driver undetected_chromedriver
+  downloads always matches whatever Chrome build actually got installed
+  that run -- letting uc auto-detect on its own can grab a ChromeDriver
+  built for a slightly newer Chrome than what's on the runner, which
+  raises selenium.common.exceptions.SessionNotCreatedException. If
+  CHROME_VERSION isn't set (e.g. running locally), it falls back to
+  uc's normal auto-detection.
 """
 
 import argparse
@@ -62,11 +74,18 @@ def make_driver():
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-features=Translate")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    # No version_main pin -- let undetected_chromedriver auto-detect
-    # whatever Chrome version is actually installed on the runner
-    # (browser-actions/setup-chrome installs "stable", which won't
-    # reliably be any specific version we hardcode here).
-    driver = uc.Chrome(use_subprocess=True, options=options)
+
+    # Pin version_main to whatever Chrome the workflow actually installed
+    # this run (passed in via CHROME_VERSION env var, set from
+    # browser-actions/setup-chrome's output). uc's own auto-detection can
+    # grab a ChromeDriver build slightly ahead of what "stable" resolves
+    # to on the runner, which raises SessionNotCreatedException. Reading
+    # the real installed version here keeps driver and browser in sync
+    # without hardcoding a version number that would go stale.
+    chrome_version = os.environ.get("CHROME_VERSION")
+    version_main = int(chrome_version.split(".")[0]) if chrome_version else None
+
+    driver = uc.Chrome(use_subprocess=True, options=options, version_main=version_main)
     driver.set_page_load_timeout(120)
     return driver
 
