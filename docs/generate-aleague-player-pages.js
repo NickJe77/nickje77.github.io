@@ -19,8 +19,37 @@ function slugify(str) {
   return String(str).toLowerCase().replace(/'/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
+// The source match data has a known corruption: finals matches sometimes
+// have round text stuck onto the end of the team name, e.g.
+// "Western Sydney WanderersFinals Week 3,". This strips that off, which
+// also means a player's finals appearances stop showing up as if they
+// were a separate club. The underlying data itself isn't touched.
+function cleanTeamName(name) {
+  return String(name ?? "").replace(/finals\s*week\s*\d+,?\s*$/i, "").trim();
+}
+
+// Once team names are cleaned, some players end up with two season_stats
+// rows for what's really the same season + team (one from regular season,
+// one from a mislabelled finals match). This merges those back together.
+function mergeSeasonStats(seasonStats) {
+  const merged = {};
+  seasonStats.forEach(s => {
+    const team = cleanTeamName(s.team);
+    const key = `${s.season}__${team}`;
+    if (!merged[key]) {
+      merged[key] = { season: s.season, team, goals: 0, penalties: 0, own_goals: 0, yellow_cards: 0, red_cards: 0 };
+    }
+    merged[key].goals += s.goals || 0;
+    merged[key].penalties += s.penalties || 0;
+    merged[key].own_goals += s.own_goals || 0;
+    merged[key].yellow_cards += s.yellow_cards || 0;
+    merged[key].red_cards += s.red_cards || 0;
+  });
+  return Object.values(merged).sort((a, b) => a.season.localeCompare(b.season));
+}
+
 function renderSeasonRows(seasonStats) {
-  return seasonStats.map(s => `
+  return mergeSeasonStats(seasonStats).map(s => `
       <tr>
         <td>${escapeHtml(s.season)}</td>
         <td class="left">${escapeHtml(s.team)}</td>
@@ -33,8 +62,9 @@ function renderSeasonRows(seasonStats) {
 }
 
 function buildPage(player, slug) {
+  const cleanTeams = [...new Set(player.teams.map(cleanTeamName))];
   const title = `${player.name} — A-League Career Stats | The Sporting Almanac`;
-  const description = `${player.name}: A-League career record for ${player.teams.join(", ")} (${player.seasons[0]}–${player.seasons[player.seasons.length - 1]}). ${player.goals} goals, ${player.yellow_cards} yellow cards, ${player.red_cards} red cards.`;
+  const description = `${player.name}: A-League career record for ${cleanTeams.join(", ")} (${player.seasons[0]}–${player.seasons[player.seasons.length - 1]}). ${player.goals} goals, ${player.yellow_cards} yellow cards, ${player.red_cards} red cards.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -82,7 +112,7 @@ td.left{text-align:left;font-weight:700;}
 <div class="hero">
   <div class="eyebrow">A-League Player</div>
   <h1>${escapeHtml(player.name)}</h1>
-  <p>${escapeHtml(player.teams.join(", "))} &middot; ${escapeHtml(player.seasons[0])}&ndash;${escapeHtml(player.seasons[player.seasons.length - 1])}</p>
+  <p>${escapeHtml(cleanTeams.join(", "))} &middot; ${escapeHtml(player.seasons[0])}&ndash;${escapeHtml(player.seasons[player.seasons.length - 1])}</p>
 </div>
 
 <div class="card">

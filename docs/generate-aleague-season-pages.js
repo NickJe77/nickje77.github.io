@@ -17,6 +17,14 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
+// The source match data has a known corruption: finals matches sometimes
+// have round text stuck onto the end of the team name, e.g.
+// "Perth GloryFinals Week 1,". This strips that off wherever a team
+// name is displayed. The underlying data itself isn't touched.
+function cleanTeamName(name) {
+  return String(name ?? "").replace(/finals\s*week\s*\d+,?\s*$/i, "").trim();
+}
+
 const teamStats = JSON.parse(fs.readFileSync(TEAM_STATS_PATH, "utf8"));
 
 function renderLadder(seasonId) {
@@ -31,7 +39,7 @@ function renderLadder(seasonId) {
 
   let html = "<table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>";
   rows.forEach((t, i) => {
-    html += `<tr><td>${i + 1}</td><td class="left">${escapeHtml(t.team)}</td><td>${t.played}</td><td>${t.wins}</td><td>${t.draws}</td><td>${t.losses}</td><td>${t.goals_for}</td><td>${t.goals_against}</td><td>${t.goal_difference}</td><td><strong>${t.points}</strong></td></tr>`;
+    html += `<tr><td>${i + 1}</td><td class="left">${escapeHtml(cleanTeamName(t.team))}</td><td>${t.played}</td><td>${t.wins}</td><td>${t.draws}</td><td>${t.losses}</td><td>${t.goals_for}</td><td>${t.goals_against}</td><td>${t.goal_difference}</td><td><strong>${t.points}</strong></td></tr>`;
   });
   html += "</tbody></table>";
   return html;
@@ -39,7 +47,7 @@ function renderLadder(seasonId) {
 
 function renderMatches(games) {
   return games.map(g => {
-    const home = g.home || "TBC", away = g.away || "TBC";
+    const home = cleanTeamName(g.home) || "TBC", away = cleanTeamName(g.away) || "TBC";
     const hs = g.score_home, as = g.score_away;
     const known = hs !== undefined && hs !== null && as !== undefined && as !== null;
     const line = known
