@@ -9,6 +9,13 @@ Source: ESPN Cricinfo's Statsguru "team match results" index
 to class=2 for ODIs and class=3 for T20Is), plus each match's full
 scorecard page.
 
+Note: match_number extraction was dropped -- the regex that pulled a
+"Test #" from the scorecard page was matching the wrong number on every
+match (it returned "18" across the board, and misfired onto the date
+field on some pages), so it's been removed rather than shipped broken.
+Re-add it later once there's a real scorecard page to check the actual
+Test-number markup against.
+
 FIRST-DRAFT WARNING: unlike the football scrapers in this project, this
 was built without being able to load a single real Cricinfo page (no
 network access to espncricinfo.com from the environment this was written
@@ -227,24 +234,6 @@ def get_year_matches(year):
 
 # ── Full scorecard parsing ──────────────────────────────────────────────
 
-def extract_match_number(soup, page_text):
-    """Cricinfo scorecards typically show something like 'Test No. 2616'
-    or '2616th Test' near the top of the page. Verified against the real
-    title format already present in the existing data ('Scorecard - ...
-    - Test No. #2616') -- an earlier version of this pattern only handled
-    'No.' OR '#' separately and missed the real 'No. #' combined form."""
-    m = re.search(
-        r"Test\s*No\.?\s*#?\s*(\d+)|#\s*(\d+)|(\d+)(?:st|nd|rd|th)\s+Test\b",
-        page_text,
-        re.I,
-    )
-    if m:
-        for g in m.groups():
-            if g:
-                return int(g)
-    return None
-
-
 def extract_match_info(soup):
     """Grabs the key/value strip Cricinfo shows above a scorecard
     (Toss, Series, Player of the Match, Match days, etc). This is
@@ -406,9 +395,6 @@ def parse_fall_of_wickets(soup, innings_index):
 
 
 def parse_scorecard(soup, match_meta):
-    page_text = clean_text(soup.get_text(" "))
-
-    match_number = extract_match_number(soup, page_text)
     match_info = extract_match_info(soup)
 
     title_tag = soup.find("title")
@@ -436,12 +422,11 @@ def parse_scorecard(soup, match_meta):
 
     return {
         "match_type": "Test",
-        "match_number": match_number,
         "url": match_meta.get("scorecard_url") or "",
         "title": title,
         "match_info": match_info,
         "innings": innings,
-    }, match_number
+    }
 
 # ── Build one year ───────────────────────────────────────────────────
 
@@ -463,7 +448,7 @@ def build_year(year):
             continue
 
         soup = get_soup(m["scorecard_url"])
-        scorecard, match_number = parse_scorecard(soup, m)
+        scorecard = parse_scorecard(soup, m)
 
         results.append({
             "year": str(year),
@@ -471,14 +456,12 @@ def build_year(year):
             "teams": f"{m['team1']} v {m['team2']}",
             "ground": m["ground"],
             "result": m["result"],
-            "match_number": match_number,
             "scorecard": scorecard,
         })
 
         n_innings = len(scorecard["innings"])
         n_bat = sum(len(inn["batting"]) for inn in scorecard["innings"])
-        print(f"    -> {n_innings} innings parsed, {n_bat} batting entries, "
-              f"match_number={match_number}")
+        print(f"    -> {n_innings} innings parsed, {n_bat} batting entries")
 
         time.sleep(random.uniform(MIN_SLEEP, MAX_SLEEP))
 
