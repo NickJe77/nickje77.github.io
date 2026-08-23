@@ -54,7 +54,7 @@ function renderMatches(games) {
       ? `${escapeHtml(home)} ${hs} - ${as} ${escapeHtml(away)}`
       : `${escapeHtml(home)} vs ${escapeHtml(away)}`;
     return `
-    <div class="match" onclick="location.href='aleague-match.html?season=${encodeURIComponent(g.season || "")}&matchId=${encodeURIComponent(g.match_id)}'">
+    <div class="match" onclick="location.href='aleague-match.html?season=${encodeURIComponent(g.season || "")}&match=${encodeURIComponent(g.match_id)}'">
       <div class="line1">${line}</div>
       ${g.date ? `<div class="meta">${escapeHtml(g.date)}</div>` : ""}
     </div>`;
