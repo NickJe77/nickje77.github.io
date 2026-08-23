@@ -1,0 +1,86 @@
+name: Fix A-League Data (Matches + Seasons)
+on:
+  workflow_dispatch:
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Remove broken nested folder
+        run: |
+          rm -rf docs/data/aleague/aleague
+
+      - name: Extract A-League zip -> creates the matches folder
+        run: |
+          rm -rf /tmp/aleague_extract
+          unzip -o docs/data/aleague/aleague.zip -d /tmp/aleague_extract
+          mkdir -p docs/data/aleague/matches
+          cp -r /tmp/aleague_extract/a_league/matches/. docs/data/aleague/matches/
+          rm -rf /tmp/aleague_extract
+
+      - name: Generate season summary files -> creates the seasons folder
+        run: |
+          mkdir -p docs/data/aleague/seasons
+          python3 - <<'PYEOF'
+          import json
+          from pathlib import Path
+
+          MATCHES_DIR = Path("docs/data/aleague/matches")
+          SEASONS_DIR = Path("docs/data/aleague/seasons")
+          SEASONS_DIR.mkdir(parents=True, exist_ok=True)
+
+          season_folders = sorted(p for p in MATCHES_DIR.iterdir() if p.is_dir())
+          print(f"Found {len(season_folders)} season folders")
+
+          for season_dir in season_folders:
+              season_id = season_dir.name
+              games = []
+              for mf in sorted(season_dir.glob("*.json")):
+                  try:
+                      with open(mf, encoding="utf-8") as f:
+                          match = json.load(f)
+                  except Exception as e:
+                      print(f"  Skipping {mf}: {e}")
+                      continue
+                  match_id = match.get("match_id")
+                  if match_id:
+                      games.append({"match_id": match_id})
+
+              out_path = SEASONS_DIR / f"{season_id}.json"
+              with open(out_path, "w", encoding="utf-8") as f:
+                  json.dump({"season": season_id, "games": games}, f, indent=2, ensure_ascii=False)
+              print(f"  {season_id}: {len(games)} games -> {out_path.name}")
+
+          print("Season files created.")
+          PYEOF
+
+      - name: Run full A-League build script -> fills in team names, scores, players
+        run: |
+          python3 scripts/build_aleague_data.py
+
+      - name: Verify structure
+        run: |
+          echo "----- A-LEAGUE ROOT -----"
+          ls docs/data/aleague
+          echo "----- MATCHES (sample) -----"
+          find docs/data/aleague/matches -maxdepth 1 | head
+          echo "----- SEASONS (sample) -----"
+          find docs/data/aleague/seasons -maxdepth 1 | head
+
+      - name: Commit and push everything
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/aleague/
+          git commit -m "Fix A-League: extract matches, build seasons, rebuild players/teams/stats" || echo "No changes"
+          git pull --rebase origin main
+          git push
