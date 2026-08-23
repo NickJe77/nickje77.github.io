@@ -4,25 +4,36 @@ on:
 jobs:
   extract:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Remove broken nested folder
         run: |
           rm -rf docs/data/aleague/aleague
+
       - name: Extract A-League zip correctly
         run: |
-          unzip -o docs/data/aleague/aleague.zip -d docs/data/
+          rm -rf /tmp/aleague_extract
+          unzip -o docs/data/aleague/aleague.zip -d /tmp/aleague_extract
+          rsync -a /tmp/aleague_extract/a_league/matches/ docs/data/aleague/matches/
+          rsync -a /tmp/aleague_extract/a_league/seasons/ docs/data/aleague/seasons/
+          rm -rf /tmp/aleague_extract
+
       - name: Verify structure
         run: |
           echo "----- A-LEAGUE ROOT -----"
           ls docs/data/aleague
           echo "----- MATCHES -----"
           find docs/data/aleague/matches | head
+
       - name: Commit extracted files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data/aleague/
           git commit -m "Fix A-League extraction" || echo "No changes"
+          git pull --rebase origin main
           git push
