@@ -204,7 +204,27 @@ def get_year_matches(year):
             ground = clean_text(cells[4].get_text())
             date   = clean_text(cells[5].get_text())
 
-            scorecard_link = row.find("a", href=True)
+            # The row's first link is usually a team-name link (e.g.
+            # .../team/2.html), NOT the scorecard -- confirmed via a real
+            # captured page, which showed the scraper hitting a defunct
+            # team page and getting "Access Denied" instead of a match
+            # scorecard. Prefer a link that actually looks like a
+            # scorecard URL, and explicitly skip team-page links.
+            all_links = row.find_all("a", href=True)
+            scorecard_link = None
+            for link in all_links:
+                href = link["href"]
+                if "/team/" in href:
+                    continue
+                if re.search(r"/(engine/match|series|match)/.*\.html", href) or "scorecard" in href.lower():
+                    scorecard_link = link
+                    break
+            if scorecard_link is None and all_links:
+                # Fall back to the last non-team link in the row (the
+                # scorecard link/icon is typically the final cell).
+                non_team_links = [l for l in all_links if "/team/" not in l["href"]]
+                scorecard_link = non_team_links[-1] if non_team_links else None
+
             scorecard_url = (
                 BASE + scorecard_link["href"]
                 if scorecard_link and scorecard_link["href"].startswith("/")
