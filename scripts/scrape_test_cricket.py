@@ -101,10 +101,32 @@ def get_html(url):
             html = DRIVER.page_source
             if not html.strip():
                 raise Exception("blank html")
-            if "verify you are human" in html.lower() or "attention required" in html.lower():
+
+            # Cloudflare's JS-challenge interstitial ("Just a moment...")
+            # doesn't contain either of the phrases below -- it slipped
+            # through this check entirely on a real run and got treated
+            # as if it were the actual page (confirmed via a real
+            # workflow log showing "Page title: 'Just a moment...'").
+            # The challenge normally clears itself client-side after a
+            # few seconds, so give it one extra wait-and-recheck before
+            # falling back to a full driver restart.
+            lower_html = html.lower()
+            is_blocked = "verify you are human" in lower_html or "attention required" in lower_html
+            is_cf_challenge = "just a moment" in lower_html or "checking your browser" in lower_html
+
+            if is_cf_challenge:
+                print("⚠️ Cloudflare challenge page — waiting 20s for it to clear")
+                time.sleep(20)
+                html = DRIVER.page_source
+                lower_html = html.lower()
+                is_blocked = "verify you are human" in lower_html or "attention required" in lower_html
+                is_cf_challenge = "just a moment" in lower_html or "checking your browser" in lower_html
+
+            if is_blocked or is_cf_challenge:
                 print("⚠️ BLOCKED — waiting 60s")
                 time.sleep(60)
                 continue
+
             return html
         except Exception as e:
             print("⚠️ DRIVER RESTART:", e)
