@@ -74,9 +74,17 @@ def make_driver():
     options.add_argument("--disable-backgrounding-occluded-windows")
     options.add_argument("--disable-features=Translate")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    # No version_main pin -- let undetected_chromedriver auto-detect
-    # whatever Chrome version is actually installed on the runner.
-    driver = uc.Chrome(use_subprocess=True, options=options)
+
+    # Pin version_main to whatever Chrome the workflow actually installed
+    # this run (passed in via CHROME_VERSION env var, set from
+    # browser-actions/setup-chrome's output). Letting undetected_
+    # chromedriver auto-detect can grab a ChromeDriver build ahead of
+    # what's actually on the runner (e.g. driver for 152 vs installed
+    # Chrome 151), which raises SessionNotCreatedException.
+    chrome_version = os.environ.get("CHROME_VERSION")
+    version_main = int(chrome_version.split(".")[0]) if chrome_version else None
+
+    driver = uc.Chrome(use_subprocess=True, options=options, version_main=version_main)
     driver.set_page_load_timeout(120)
     return driver
 
