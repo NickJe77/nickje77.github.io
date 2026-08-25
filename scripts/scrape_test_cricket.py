@@ -92,9 +92,11 @@ def make_driver():
 DRIVER = make_driver()
 
 
-def get_html(url):
+def get_html(url, max_attempts=4):
     global DRIVER
-    while True:
+    attempt = 0
+    while attempt < max_attempts:
+        attempt += 1
         try:
             DRIVER.get(url)
             time.sleep(random.uniform(MIN_SLEEP, MAX_SLEEP))
@@ -123,19 +125,24 @@ def get_html(url):
                 is_cf_challenge = "just a moment" in lower_html or "checking your browser" in lower_html
 
             if is_blocked or is_cf_challenge:
-                print("⚠️ BLOCKED — waiting 60s")
-                time.sleep(60)
+                print(f"⚠️ BLOCKED (attempt {attempt}/{max_attempts}) — waiting 30s")
+                time.sleep(30)
                 continue
 
             return html
         except Exception as e:
-            print("⚠️ DRIVER RESTART:", e)
+            print(f"⚠️ DRIVER RESTART (attempt {attempt}/{max_attempts}):", e)
             try:
                 DRIVER.quit()
             except Exception:
                 pass
             time.sleep(5)
             DRIVER = make_driver()
+
+    # Exhausted all attempts -- fail loudly instead of hanging or
+    # silently returning nothing (confirmed via a real run that got
+    # stuck 26+ minutes retrying forever against a persistent block).
+    raise Exception(f"Gave up after {max_attempts} attempts (persistent block or error) on {url}")
 
 
 def get_soup(url):
@@ -467,8 +474,12 @@ def build_year(year):
             print("    -> no scorecard link, skipping")
             continue
 
-        soup = get_soup(m["scorecard_url"])
-        scorecard, match_number = parse_scorecard(soup, m)
+        try:
+            soup = get_soup(m["scorecard_url"])
+            scorecard, match_number = parse_scorecard(soup, m)
+        except Exception as e:
+            print(f"    -> FAILED, skipping this match: {e}")
+            continue
 
         results.append({
             "year": str(year),
