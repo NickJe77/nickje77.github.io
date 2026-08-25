@@ -448,6 +448,21 @@ def build_year(year):
             continue
 
         soup = get_soup(m["scorecard_url"])
+
+        # TEMP DEBUG: dump the raw HTML of the first real scorecard page
+        # we fetch so the actual markup can be inspected (via the repo,
+        # since this environment has no direct network access to
+        # espncricinfo.com). This file is picked up automatically by the
+        # existing `git add docs/data/test_cricket/` commit step.
+        # Safe to delete this block and the debug file once the real
+        # selectors in parse_scorecard/parse_innings_table/
+        # extract_match_info have been fixed against real markup.
+        if i == 1:
+            debug_path = f"{DATA_DIR}/_debug_scorecard_sample.html"
+            with open(debug_path, "w", encoding="utf-8") as dbg:
+                dbg.write(soup.prettify())
+            print(f"    -> wrote debug HTML sample to {debug_path}")
+
         scorecard = parse_scorecard(soup, m)
 
         results.append({
