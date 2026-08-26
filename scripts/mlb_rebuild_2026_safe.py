@@ -8,6 +8,18 @@ skip-if-already-uploaded logic -- the original re-fetched and rewrote
 EVERY completed game from MLB's API on every single run, even games
 finished weeks ago; this only fetches games not already in R2.
 
+Hardening added on top of that:
+  - All HTTP calls go through a shared requests.Session with a real
+    User-Agent (statsapi.mlb.com has been observed deprioritizing/
+    blocking default python-requests UAs, especially from CI IP ranges
+    like GitHub Actions runners).
+  - Every request has an explicit timeout, retries with backoff, and
+    raise_for_status() so a 403/429/5xx or malformed body is a loud,
+    logged failure instead of silently becoming an empty dict.
+  - Schedule fetches that fail after retries are recorded and reported
+    at the end (not just skipped, which used to look identical to "no
+    games that day").
+
 Needs the same R2 secrets already configured in this repo:
   R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 """
@@ -28,6 +40,10 @@ R2_PREFIX = "baseball"
 SEASON_KEY = f"{R2_PREFIX}/seasons/{SEASON}.json"
 BOXSCORE_PREFIX = f"{R2_PREFIX}/boxscores/{SEASON}/"
 
+REQUEST_TIMEOUT = 15
+MAX_RETRIES = 3
+RETRY_BACKOFF_SECONDS = 1.5
+
 TEAM_ID_MAP = {
     109: "ARI", 144: "ATL", 110: "BAL", 111: "BOS", 112: "CHC",
     145: "CHW", 113: "CIN", 114: "CLE", 115: "COL", 116: "DET",
@@ -36,6 +52,48 @@ TEAM_ID_MAP = {
     143: "PHI", 134: "PIT", 135: "SD", 136: "SEA", 137: "SF",
     138: "STL", 139: "TB", 140: "TEX", 141: "TOR", 120: "WSH"
 }
+
+SESSION = requests.Session()
+SESSION.headers.update({
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json",
+})
+
+
+def fetch_json(url, retries=MAX_RETRIES):
+    """GET a URL and parse JSON, with retries/backoff and loud failures.
+
+    Returns (data, ok). ok=False means every attempt failed -- caller
+    decides what to do (skip vs abort), but the failure is always
+    printed so it shows up in the workflow log.
+    """
+    last_error = None
+    for attempt in range(1, retries + 1):
+        try:
+            resp = SESSION.get(url, timeout=REQUEST_TIMEOUT)
+            resp.raise_for_status()
+            return resp.json(), True
+        except requests.HTTPError as e:
+            last_error = e
+            status = e.response.status_code if e.response is not None else "?"
+            print(f"    [attempt {attempt}/{retries}] HTTP {status} for {url}")
+        except requests.RequestException as e:
+            last_error = e
+            print(f"    [attempt {attempt}/{retries}] request error for {url}: {e}")
+        except ValueError as e:
+            # response.json() failed to parse -- likely an HTML error/CAPTCHA page
+            last_error = e
+            snippet = resp.text[:200].replace("\n", " ") if "resp" in locals() else ""
+            print(f"    [attempt {attempt}/{retries}] bad JSON from {url}: {e} | body starts: {snippet!r}")
+
+        if attempt < retries:
+            time.sleep(RETRY_BACKOFF_SECONDS * attempt)
+
+    print(f"  GIVING UP on {url} after {retries} attempts: {last_error}")
+    return {}, False
 
 
 def get_client():
@@ -94,21 +152,30 @@ def main():
     ]
 
     all_dates = {}
+    schedule_fetch_failures = []
     for start, end in month_ranges:
         url = (f"https://statsapi.mlb.com/api/v1/schedule?"
                f"sportId=1&season={SEASON}&gameType=R&startDate={start}&endDate={end}")
-        data = requests.get(url).json()
+        data, ok = fetch_json(url)
+        if not ok:
+            schedule_fetch_failures.append((start, end))
+            print(f"  {start} to {end}: FAILED to fetch -- 0 dates recorded (see errors above)")
+            continue
         for date_block in data.get("dates", []):
             all_dates[date_block["date"]] = date_block
         print(f"  {start} to {end}: {len(data.get('dates', []))} dates")
 
     print(f"Total date blocks: {len(all_dates)}")
+    if schedule_fetch_failures:
+        print(f"WARNING: {len(schedule_fetch_failures)} month range(s) failed to fetch entirely "
+              f"and are NOT reflected in this run: {schedule_fetch_failures}")
 
     season_games = []
     saved = 0
     skipped_not_final = 0
     skipped_already_have = 0
     failed = 0
+    live_fetch_failures = []
 
     for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
         game_date = date_block.get("date")
@@ -167,11 +234,17 @@ def main():
                     continue
 
                 live_url = f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live"
-                live_data = requests.get(live_url).json()
+                live_data, ok = fetch_json(live_url)
                 time.sleep(0.2)
 
+                if not ok:
+                    print(f"  FAILED to fetch live feed for game {game_pk} (see errors above)")
+                    live_fetch_failures.append(game_pk)
+                    failed += 1
+                    continue
+
                 if not isinstance(live_data, dict) or "liveData" not in live_data:
-                    print(f"  Unexpected live_data for {game_pk}")
+                    print(f"  Unexpected live_data shape for {game_pk}: keys={list(live_data)[:10] if isinstance(live_data, dict) else type(live_data)}")
                     failed += 1
                     continue
 
@@ -216,11 +289,22 @@ def main():
 
     print("")
     print("DONE")
-    print(f"  Saved (new):          {saved}")
-    print(f"  Already had:          {skipped_already_have}")
-    print(f"  Not final yet:        {skipped_not_final}")
-    print(f"  Failed:               {failed}")
-    print(f"  Total in season file: {len(season_games)}")
+    print(f"  Saved (new):             {saved}")
+    print(f"  Already had:             {skipped_already_have}")
+    print(f"  Not final yet:           {skipped_not_final}")
+    print(f"  Failed (live feed etc):  {failed}")
+    print(f"  Total in season file:    {len(season_games)}")
+    if schedule_fetch_failures:
+        print(f"  Schedule ranges FAILED:  {schedule_fetch_failures}")
+    if live_fetch_failures:
+        print(f"  Live feed game IDs FAILED: {live_fetch_failures}")
+
+    # Make the failure visible to the Actions run status rather than
+    # only in logs -- a completely failed schedule fetch means this
+    # run produced garbage/incomplete data.
+    if schedule_fetch_failures and not all_dates:
+        print("FATAL: could not fetch ANY schedule data this run.")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
