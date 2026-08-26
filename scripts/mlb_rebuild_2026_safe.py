@@ -20,6 +20,28 @@ Hardening added on top of that:
     at the end (not just skipped, which used to look identical to "no
     games that day").
 
+Doubleheader fix (found via diagnostics -- 23 confirmed collisions):
+  The old filename was "{date}_{away}_{home}.json" with no game
+  identifier, so a doubleheader (two different gamePks, same date,
+  same matchup) collided on the same R2 key. Because existing_keys is
+  a snapshot taken before the run starts, BOTH games of a doubleheader
+  would pass the "already have" check as new, get fetched, and the
+  second one silently overwrote the first's box score in R2 --
+  permanent, silent data loss for one game of every doubleheader.
+
+  Fix: filenames now include gamePk, so every game gets a guaranteed-
+  unique key. To avoid re-fetching all ~2000 already-saved games (which
+  were saved under the OLD filename format and won't match the new
+  key), this script also recognizes old-format keys as "already have"
+  UNLESS that date+matchup is one of the known-ambiguous doubleheader
+  cases (multiple gamePks sharing the same old-style id) -- those are
+  deliberately treated as new so both games of the doubleheader get
+  correctly fetched and saved separately, one time, under the new
+  collision-proof key format. Old-format files for those corrected
+  games become orphaned/unused in R2; they're harmless but you can
+  clean them up manually later if you want (their keys are logged
+  below).
+
 Needs the same R2 secrets already configured in this repo:
   R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY
 """
@@ -29,6 +51,7 @@ import json
 import os
 import sys
 import time
+from collections import defaultdict
 
 import boto3
 import requests
@@ -131,6 +154,26 @@ def get_existing_boxscore_keys(client):
     return existing
 
 
+def split_legacy_key(key):
+    """Given an R2 key under BOXSCORE_PREFIX, return (old_style_id, is_old_format).
+
+    Old format:  {date}_{away}_{home}.json           -> 3 underscore parts
+    New format:  {date}_{away}_{home}_{gamePk}.json  -> 4 underscore parts
+    old_style_id is always "{date}_{away}_{home}" so both formats are
+    comparable against a freshly-computed old_style_id.
+    """
+    fname = key[len(BOXSCORE_PREFIX):]
+    if not fname.endswith(".json"):
+        return None, False
+    core = fname[:-5]
+    parts = core.split("_")
+    if len(parts) == 3:
+        return core, True
+    if len(parts) == 4:
+        return "_".join(parts[:3]), False
+    return None, False
+
+
 def put_json(client, key, data):
     body = json.dumps(data, ensure_ascii=False, indent=2).encode("utf-8")
     client.put_object(Bucket=BUCKET_NAME, Key=key, Body=body, ContentType="application/json")
@@ -142,6 +185,14 @@ def main():
     print("Checking R2 for games already uploaded...")
     existing_keys = get_existing_boxscore_keys(client)
     print(f"{len(existing_keys)} game(s) already in R2 for {SEASON}.")
+
+    # Build a lookup of old-style ids -> actual R2 key, for legacy-key
+    # migration matching (see module docstring).
+    old_style_to_key = {}
+    for key in existing_keys:
+        old_style_id, is_old_format = split_legacy_key(key)
+        if old_style_id and is_old_format:
+            old_style_to_key[old_style_id] = key
 
     print("Downloading MLB 2026 schedule...")
     month_ranges = [
@@ -170,21 +221,59 @@ def main():
         print(f"WARNING: {len(schedule_fetch_failures)} month range(s) failed to fetch entirely "
               f"and are NOT reflected in this run: {schedule_fetch_failures}")
 
+    # Pre-pass (no network calls): figure out which old-style ids are
+    # ambiguous -- i.e. correspond to more than one gamePk in the
+    # schedule data (doubleheaders). For those, we deliberately do NOT
+    # trust a legacy-key match, since the single old file could only
+    # ever have belonged to one of the two games and we can't tell
+    # which. Both games get treated as new and saved separately under
+    # the new gamePk-qualified key.
+    old_style_gamepks = defaultdict(set)
+    for date_block in all_dates.values():
+        game_date = date_block.get("date")
+        for game in date_block.get("games", []):
+            if not isinstance(game, dict):
+                continue
+            if game.get("status", {}).get("abstractGameState", "") != "Final":
+                continue
+            try:
+                home = game["teams"]["home"]
+                away = game["teams"]["away"]
+                home_id = home.get("team", {}).get("id")
+                away_id = away.get("team", {}).get("id")
+                if not home_id or not away_id:
+                    continue
+                home_code = TEAM_ID_MAP.get(home_id, "UNK")
+                away_code = TEAM_ID_MAP.get(away_id, "UNK")
+                old_style_id = f"{game_date}_{away_code}_{home_code}"
+                old_style_gamepks[old_style_id].add(game.get("gamePk"))
+            except (KeyError, TypeError):
+                continue
+
+    ambiguous_old_style_ids = {k for k, v in old_style_gamepks.items() if len(v) > 1}
+    if ambiguous_old_style_ids:
+        print(f"Doubleheader dates detected this run (ambiguous legacy keys, "
+              f"will be freshly fetched/split): {len(ambiguous_old_style_ids)}")
+        for oid in sorted(ambiguous_old_style_ids):
+            print(f"    {oid} -- gamePks {sorted(old_style_gamepks[oid])}")
+
     season_games = []
     saved = 0
     skipped_not_final = 0
     skipped_already_have = 0
     failed = 0
     live_fetch_failures = []
+    migrated_legacy_matches = 0
+    doubleheader_splits_fetched = 0
 
-    # Diagnostics: track every r2_key this run actually produces/sees
-    # (regardless of final/not-final), and every game_pk we see per
-    # r2_key, so we can catch (a) R2 keys that exist but were never
-    # touched this run, and (b) filename collisions from doubleheaders
-    # or team-code changes silently overwriting each other.
+    # Diagnostics: track every NEW-format r2_key this run actually
+    # matches to a Final game, and detect any lingering filename
+    # collisions (should be ~zero now that gamePk is in the key).
     seen_keys_this_run = set()
+    matched_legacy_keys = set()
     game_pk_by_key = {}
     collisions = []
+    orphaned_legacy_keys_used_for_fix = []
 
     for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
         game_date = date_block.get("date")
@@ -216,13 +305,17 @@ def main():
                 status = game.get("status", {}).get("detailedState", "")
                 abstract_state = game.get("status", {}).get("abstractGameState", "")
 
-                filename = f"{game_date}_{away_code}_{home_code}.json"
+                old_style_id = f"{game_date}_{away_code}_{home_code}"
+
+                # gamePk included so doubleheaders never collide (see
+                # module docstring for the historical bug this fixes).
+                filename = f"{game_date}_{away_code}_{home_code}_{game_pk}.json"
                 r2_key = f"{BOXSCORE_PREFIX}{filename}"
 
-                # Diagnostic: does another gamePk already claim this
-                # exact filename? (doubleheader collision, or a stale
-                # team-code mapping producing the same key for two
-                # different real games)
+                # Sanity check -- should never fire now that gamePk is
+                # part of the key. If it does, gamePk itself is missing
+                # or duplicated in the API response, which is a
+                # different and more serious problem worth investigating.
                 if r2_key in game_pk_by_key and game_pk_by_key[r2_key] != game_pk:
                     collisions.append((r2_key, game_pk_by_key[r2_key], game_pk))
                 game_pk_by_key[r2_key] = game_pk
@@ -233,14 +326,35 @@ def main():
 
                 seen_keys_this_run.add(r2_key)
 
-                # Games already uploaded to R2 don't need re-fetching --
-                # this is the key change from the original, which redid
-                # every completed game every single day.
+                # Decide "already have" status:
+                #   1. New-format key already in R2 -> definitely have it.
+                #   2. Old-format legacy key exists AND this old_style_id
+                #      is unambiguous (not a doubleheader collision) ->
+                #      treat as already have, use the REAL legacy filename
+                #      so the season index still points at a file that
+                #      actually exists.
+                #   3. Otherwise (including ambiguous doubleheader ids) ->
+                #      not already have; fetch and save fresh under the
+                #      new key.
+                already_have = False
+                effective_filename = filename
+
                 if r2_key in existing_keys:
+                    already_have = True
+                elif (old_style_id in old_style_to_key
+                        and old_style_id not in ambiguous_old_style_ids):
+                    already_have = True
+                    legacy_key = old_style_to_key[old_style_id]
+                    matched_legacy_keys.add(legacy_key)
+                    effective_filename = legacy_key[len(BOXSCORE_PREFIX):]
+                    migrated_legacy_matches += 1
+                elif old_style_id in ambiguous_old_style_ids:
+                    doubleheader_splits_fetched += 1
+                    if old_style_id in old_style_to_key:
+                        orphaned_legacy_keys_used_for_fix.append(old_style_to_key[old_style_id])
+
+                if already_have:
                     skipped_already_have += 1
-                    # Still add to season_games so the season summary
-                    # file stays complete, using the previously-known
-                    # scores from the schedule response.
                     home_score = home.get("score", 0) or 0
                     away_score = away.get("score", 0) or 0
                     season_games.append({
@@ -248,7 +362,7 @@ def main():
                         "home_team": home_team, "away_team": away_team,
                         "home_code": home_code, "away_code": away_code,
                         "home_score": home_score, "away_score": away_score,
-                        "venue": venue, "status": status, "game_file": filename
+                        "venue": venue, "status": status, "game_file": effective_filename
                     })
                     continue
 
@@ -263,7 +377,8 @@ def main():
                     continue
 
                 if not isinstance(live_data, dict) or "liveData" not in live_data:
-                    print(f"  Unexpected live_data shape for {game_pk}: keys={list(live_data)[:10] if isinstance(live_data, dict) else type(live_data)}")
+                    print(f"  Unexpected live_data shape for {game_pk}: "
+                          f"keys={list(live_data)[:10] if isinstance(live_data, dict) else type(live_data)}")
                     failed += 1
                     continue
 
@@ -308,23 +423,33 @@ def main():
 
     print("")
     print("DONE")
-    print(f"  Saved (new):             {saved}")
-    print(f"  Already had:             {skipped_already_have}")
-    print(f"  Not final yet:           {skipped_not_final}")
-    print(f"  Failed (live feed etc):  {failed}")
-    print(f"  Total in season file:    {len(season_games)}")
+    print(f"  Saved (new):               {saved}")
+    print(f"    of which doubleheader-split fetches: {doubleheader_splits_fetched}")
+    print(f"  Already had:               {skipped_already_have}")
+    print(f"    of which matched via legacy (old-format) key: {migrated_legacy_matches}")
+    print(f"  Not final yet:             {skipped_not_final}")
+    print(f"  Failed (live feed etc):    {failed}")
+    print(f"  Total in season file:      {len(season_games)}")
     if schedule_fetch_failures:
-        print(f"  Schedule ranges FAILED:  {schedule_fetch_failures}")
+        print(f"  Schedule ranges FAILED:    {schedule_fetch_failures}")
     if live_fetch_failures:
         print(f"  Live feed game IDs FAILED: {live_fetch_failures}")
+    if orphaned_legacy_keys_used_for_fix:
+        print(f"  Old-format files now orphaned by doubleheader fix "
+              f"(safe to delete manually, data was re-saved under new keys):")
+        for k in orphaned_legacy_keys_used_for_fix:
+            print(f"    {k}")
 
-    # Diagnostic: keys that exist in R2 (from past runs) but were never
-    # matched to a "Final" game in this run's schedule data at all.
-    # These are the games silently dropping out of the season index.
-    orphaned_keys = existing_keys - seen_keys_this_run
+    # Diagnostic: keys that exist in R2 (old or new format) but were
+    # never matched to a Final game this run at all -- e.g. Spring
+    # Training games from before your schedule range starts. Expected
+    # to be non-empty and roughly stable run to run; a growing count
+    # over time would indicate a real problem.
+    accounted_for = seen_keys_this_run | matched_legacy_keys
+    orphaned_keys = existing_keys - accounted_for
     print("")
-    print(f"DIAGNOSTIC: {len(existing_keys)} keys in R2 vs {len(seen_keys_this_run)} "
-          f"Final keys matched this run -- {len(orphaned_keys)} orphaned (in R2, not seen this run)")
+    print(f"DIAGNOSTIC: {len(existing_keys)} keys in R2 vs {len(accounted_for)} "
+          f"accounted for this run -- {len(orphaned_keys)} orphaned (in R2, not matched)")
     if orphaned_keys:
         sample = sorted(orphaned_keys)[:25]
         print(f"  Sample of orphaned keys (up to 25 of {len(orphaned_keys)}):")
@@ -334,12 +459,10 @@ def main():
             print(f"    ...and {len(orphaned_keys) - 25} more")
 
     if collisions:
-        print(f"DIAGNOSTIC: {len(collisions)} filename collision(s) detected "
-              f"(same r2_key, different gamePk -- e.g. doubleheaders or stale team codes):")
+        print(f"DIAGNOSTIC: {len(collisions)} filename collision(s) on NEW-format keys "
+              f"(should be 0 -- indicates gamePk itself is missing/duplicated in the API):")
         for r2_key, first_pk, second_pk in collisions[:25]:
-            print(f"    {r2_key}: gamePk {first_pk} then {second_pk} (second overwrote/was skipped)")
-        if len(collisions) > 25:
-            print(f"    ...and {len(collisions) - 25} more")
+            print(f"    {r2_key}: gamePk {first_pk} then {second_pk}")
 
     # Make the failure visible to the Actions run status rather than
     # only in logs -- a completely failed schedule fetch means this
