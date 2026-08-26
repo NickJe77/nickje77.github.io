@@ -63,14 +63,15 @@ R2_PREFIX = "baseball"
 SEASON_KEY = f"{R2_PREFIX}/seasons/{SEASON}.json"
 BOXSCORE_PREFIX = f"{R2_PREFIX}/boxscores/{SEASON}/"
 
-# TEMPORARY: forces every game on/after this date to be freshly re-fetched
-# and overwritten this run, bypassing the "already have" skip logic
-# entirely, to guarantee correct data lands in R2 regardless of root
-# cause. Remove this (set back to None) after confirming the backfill
-# worked -- leaving it in place means every daily run will keep
-# re-fetching this whole window forever, growing more expensive every
-# day and defeating the skip-cache optimization.
-FORCE_REFRESH_SINCE = "2026-07-27"
+# TEMPORARY (now disabled): forces every game on/after a given date to
+# be freshly re-fetched and overwritten, bypassing the "already have"
+# skip logic entirely. Was set to "2026-07-27" for a one-time backfill
+# on 2026-08-27 to fix a reporting gap; that backfill is done, so this
+# is back to None for normal efficient runs. Only set this to a real
+# date (e.g. "2026-08-01") again if you need to force a fresh re-pull
+# of a specific window -- remember to set it back to None afterward, or
+# every future daily run will keep re-fetching that whole window.
+FORCE_REFRESH_SINCE = None
 
 REQUEST_TIMEOUT = 15
 MAX_RETRIES = 3
