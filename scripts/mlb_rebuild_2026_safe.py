@@ -177,6 +177,15 @@ def main():
     failed = 0
     live_fetch_failures = []
 
+    # Diagnostics: track every r2_key this run actually produces/sees
+    # (regardless of final/not-final), and every game_pk we see per
+    # r2_key, so we can catch (a) R2 keys that exist but were never
+    # touched this run, and (b) filename collisions from doubleheaders
+    # or team-code changes silently overwriting each other.
+    seen_keys_this_run = set()
+    game_pk_by_key = {}
+    collisions = []
+
     for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
         game_date = date_block.get("date")
 
@@ -210,9 +219,19 @@ def main():
                 filename = f"{game_date}_{away_code}_{home_code}.json"
                 r2_key = f"{BOXSCORE_PREFIX}{filename}"
 
+                # Diagnostic: does another gamePk already claim this
+                # exact filename? (doubleheader collision, or a stale
+                # team-code mapping producing the same key for two
+                # different real games)
+                if r2_key in game_pk_by_key and game_pk_by_key[r2_key] != game_pk:
+                    collisions.append((r2_key, game_pk_by_key[r2_key], game_pk))
+                game_pk_by_key[r2_key] = game_pk
+
                 if abstract_state != "Final":
                     skipped_not_final += 1
                     continue
+
+                seen_keys_this_run.add(r2_key)
 
                 # Games already uploaded to R2 don't need re-fetching --
                 # this is the key change from the original, which redid
@@ -298,6 +317,29 @@ def main():
         print(f"  Schedule ranges FAILED:  {schedule_fetch_failures}")
     if live_fetch_failures:
         print(f"  Live feed game IDs FAILED: {live_fetch_failures}")
+
+    # Diagnostic: keys that exist in R2 (from past runs) but were never
+    # matched to a "Final" game in this run's schedule data at all.
+    # These are the games silently dropping out of the season index.
+    orphaned_keys = existing_keys - seen_keys_this_run
+    print("")
+    print(f"DIAGNOSTIC: {len(existing_keys)} keys in R2 vs {len(seen_keys_this_run)} "
+          f"Final keys matched this run -- {len(orphaned_keys)} orphaned (in R2, not seen this run)")
+    if orphaned_keys:
+        sample = sorted(orphaned_keys)[:25]
+        print(f"  Sample of orphaned keys (up to 25 of {len(orphaned_keys)}):")
+        for k in sample:
+            print(f"    {k}")
+        if len(orphaned_keys) > 25:
+            print(f"    ...and {len(orphaned_keys) - 25} more")
+
+    if collisions:
+        print(f"DIAGNOSTIC: {len(collisions)} filename collision(s) detected "
+              f"(same r2_key, different gamePk -- e.g. doubleheaders or stale team codes):")
+        for r2_key, first_pk, second_pk in collisions[:25]:
+            print(f"    {r2_key}: gamePk {first_pk} then {second_pk} (second overwrote/was skipped)")
+        if len(collisions) > 25:
+            print(f"    ...and {len(collisions) - 25} more")
 
     # Make the failure visible to the Actions run status rather than
     # only in logs -- a completely failed schedule fetch means this
