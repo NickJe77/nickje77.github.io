@@ -63,6 +63,15 @@ R2_PREFIX = "baseball"
 SEASON_KEY = f"{R2_PREFIX}/seasons/{SEASON}.json"
 BOXSCORE_PREFIX = f"{R2_PREFIX}/boxscores/{SEASON}/"
 
+# TEMPORARY: forces every game on/after this date to be freshly re-fetched
+# and overwritten this run, bypassing the "already have" skip logic
+# entirely, to guarantee correct data lands in R2 regardless of root
+# cause. Remove this (set back to None) after confirming the backfill
+# worked -- leaving it in place means every daily run will keep
+# re-fetching this whole window forever, growing more expensive every
+# day and defeating the skip-cache optimization.
+FORCE_REFRESH_SINCE = "2026-07-27"
+
 REQUEST_TIMEOUT = 15
 MAX_RETRIES = 3
 RETRY_BACKOFF_SECONDS = 1.5
@@ -185,6 +194,9 @@ def main():
     print("Checking R2 for games already uploaded...")
     existing_keys = get_existing_boxscore_keys(client)
     print(f"{len(existing_keys)} game(s) already in R2 for {SEASON}.")
+    if FORCE_REFRESH_SINCE:
+        print(f"FORCE REFRESH ACTIVE: every Final game on/after {FORCE_REFRESH_SINCE} "
+              f"will be freshly re-fetched and overwritten this run, ignoring skip-cache.")
 
     # Build a lookup of old-style ids -> actual R2 key, for legacy-key
     # migration matching (see module docstring).
@@ -273,7 +285,7 @@ def main():
     matched_legacy_keys = set()
     game_pk_by_key = {}
     collisions = []
-    orphaned_legacy_keys_used_for_fix = []
+    orphaned_legacy_keys_used_for_fix = set()
 
     for date_block in sorted(all_dates.values(), key=lambda x: x["date"]):
         game_date = date_block.get("date")
@@ -338,20 +350,22 @@ def main():
                 #      new key.
                 already_have = False
                 effective_filename = filename
+                force_refresh = bool(FORCE_REFRESH_SINCE) and game_date >= FORCE_REFRESH_SINCE
 
-                if r2_key in existing_keys:
-                    already_have = True
-                elif (old_style_id in old_style_to_key
-                        and old_style_id not in ambiguous_old_style_ids):
-                    already_have = True
-                    legacy_key = old_style_to_key[old_style_id]
-                    matched_legacy_keys.add(legacy_key)
-                    effective_filename = legacy_key[len(BOXSCORE_PREFIX):]
-                    migrated_legacy_matches += 1
-                elif old_style_id in ambiguous_old_style_ids:
-                    doubleheader_splits_fetched += 1
-                    if old_style_id in old_style_to_key:
-                        orphaned_legacy_keys_used_for_fix.append(old_style_to_key[old_style_id])
+                if not force_refresh:
+                    if r2_key in existing_keys:
+                        already_have = True
+                    elif (old_style_id in old_style_to_key
+                            and old_style_id not in ambiguous_old_style_ids):
+                        already_have = True
+                        legacy_key = old_style_to_key[old_style_id]
+                        matched_legacy_keys.add(legacy_key)
+                        effective_filename = legacy_key[len(BOXSCORE_PREFIX):]
+                        migrated_legacy_matches += 1
+                    elif old_style_id in ambiguous_old_style_ids:
+                        doubleheader_splits_fetched += 1
+                        if old_style_id in old_style_to_key:
+                            orphaned_legacy_keys_used_for_fix.add(old_style_to_key[old_style_id])
 
                 if already_have:
                     skipped_already_have += 1
@@ -437,7 +451,7 @@ def main():
     if orphaned_legacy_keys_used_for_fix:
         print(f"  Old-format files now orphaned by doubleheader fix "
               f"(safe to delete manually, data was re-saved under new keys):")
-        for k in orphaned_legacy_keys_used_for_fix:
+        for k in sorted(orphaned_legacy_keys_used_for_fix):
             print(f"    {k}")
 
     # Diagnostic: keys that exist in R2 (old or new format) but were
