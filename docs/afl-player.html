@@ -495,10 +495,27 @@ async function loadAllYears() {
   for (let y = startYear; y <= endYear; y++) years.push(y);
   const allYearGames = [];
   const batchSize = 5;
+  // Debug mode (add &debug=1 to the URL): tracks exactly what happened
+  // for each year's fetch -- HTTP status, row count, or error -- and
+  // prints it directly on the page. No DevTools needed. This exists
+  // because .catch(()=>[]) below silently swallows fetch failures,
+  // which would otherwise look identical to "this year had zero games".
+  const debugMode = params.get('debug') === '1';
+  const debugLog = [];
   for (let i = 0; i < years.length; i += batchSize) {
     const batch = years.slice(i, i + batchSize);
     const results = await Promise.all(
-      batch.map(y => fetch('/data/afl/afl_'+y+'.json?v='+DATA_VERSION).then(r=>r.ok?r.json():[]).catch(()=>[]))
+      batch.map(y =>
+        fetch('/data/afl/afl_'+y+'.json?v='+DATA_VERSION)
+          .then(r => {
+            if (!r.ok) { debugLog.push(y + ': HTTP ' + r.status); return []; }
+            return r.json().then(d => {
+              debugLog.push(y + ': OK, ' + (Array.isArray(d) ? d.length : '?') + ' rows');
+              return d;
+            });
+          })
+          .catch(e => { debugLog.push(y + ': FETCH FAILED - ' + e.message); return []; })
+      )
     );
     results.forEach(d => {
       d.forEach(g => {
@@ -512,6 +529,16 @@ async function loadAllYears() {
   buildTop8Lookup(allYearGames);
   buildGameMaps(allYearGames);
   loadingMsg.textContent = "";
+  if (debugMode) {
+    const failed = debugLog.filter(l => !l.includes(': OK,'));
+    const pre = document.createElement('pre');
+    pre.style.cssText = 'background:#111;color:#0f0;padding:16px;border-radius:8px;font-size:12px;overflow:auto;max-height:400px;white-space:pre-wrap;';
+    pre.textContent =
+      'DEBUG: ' + debugLog.length + ' year(s) checked, ' + failed.length + ' failed/non-OK.\n\n' +
+      (failed.length ? 'FAILED/NON-OK YEARS:\n' + failed.join('\n') + '\n\n' : 'All years returned OK.\n\n') +
+      'FULL LOG:\n' + debugLog.sort((a,b) => parseInt(a) - parseInt(b)).join('\n');
+    document.getElementById('summary').prepend(pre);
+  }
   buildDatalist();
   if (playerName) findAndShowPlayer();
   // Dev tool: append ?finddupes=1 to the URL to scan the loaded data for
