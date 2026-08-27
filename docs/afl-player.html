@@ -383,23 +383,30 @@ function normalizeGame(g) {
 // an orphaned duplicate of that match, not a second game. A blank-round
 // row with no labeled sibling is left alone (better to show an
 // unlabeled game than silently delete real data).
+// FIX 3 (the previous fix used team score -- home_points/home_score --
+// as the fingerprint for "is this the same match". That's unreliable:
+// those fields are inconsistently populated across historical data (see
+// the AFL scraper investigation), so two rows for the literal same match
+// can carry different or missing team-score values and fail to match,
+// letting the duplicate through exactly as seen in the follow-up report.
+// The PLAYER's own stat line (D/G/B/BR/K/HB) is always present -- it's
+// the reason the row exists -- and is what's actually duplicated in
+// these cases, so it's used as the fingerprint instead.
 function dedupeGames(games) {
-  const scoreKeyOf = g => {
-    const hs = g.home_points != null ? g.home_points : g.home_score;
-    const as = g.away_points != null ? g.away_points : g.away_score;
-    return g.season + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
-  };
+  const statFingerprint = g =>
+    (g.D||0)+'_'+(g.G||0)+'_'+(g.B||0)+'_'+(g.BR||0)+'_'+(g.K||0)+'_'+(g.HB||0);
+  const matchKeyOf = g =>
+    g.season + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
+
   const hasLabeledRound = new Set();
-  games.forEach(g => { if (g.round) hasLabeledRound.add(scoreKeyOf(g)); });
+  games.forEach(g => { if (g.round) hasLabeledRound.add(matchKeyOf(g)); });
 
   const seen = new Set();
   const out = [];
   games.forEach(g => {
-    if (!g.round && hasLabeledRound.has(scoreKeyOf(g))) return;
+    if (!g.round && hasLabeledRound.has(matchKeyOf(g))) return;
 
-    const hs = g.home_points != null ? g.home_points : g.home_score;
-    const as = g.away_points != null ? g.away_points : g.away_score;
-    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
+    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(g);

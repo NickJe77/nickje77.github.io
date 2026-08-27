@@ -171,22 +171,25 @@ function normalizeGame(g) {
 // season/round/teams, aren't wrongly collapsed into one), and separately
 // drops a blank-round row when a properly-labeled sibling of the same
 // match exists (an orphaned duplicate, not a second game).
+// FIX 3: the previous fix used team score (home_points/home_score) as
+// the fingerprint for "is this the same match" -- unreliable, since
+// those fields are inconsistently populated across historical data. The
+// PLAYER's own stat line (D/G/B/BR/K/HB) is always present and is what's
+// actually duplicated in these cases, so it's used as the fingerprint.
 function dedupeGames(games) {
-  const scoreKeyOf = g => {
-    const hs = g.home_points != null ? g.home_points : g.home_score;
-    const as = g.away_points != null ? g.away_points : g.away_score;
-    return g.season + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
-  };
+  const statFingerprint = g =>
+    (g.D||0)+'_'+(g.G||0)+'_'+(g.B||0)+'_'+(g.BR||0)+'_'+(g.K||0)+'_'+(g.HB||0);
+  const matchKeyOf = g =>
+    g.season + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
+
   const hasLabeledRound = new Set();
-  games.forEach(g => { if (g.round) hasLabeledRound.add(scoreKeyOf(g)); });
+  games.forEach(g => { if (g.round) hasLabeledRound.add(matchKeyOf(g)); });
 
   const seen = new Set();
   const out = [];
   games.forEach(g => {
-    if (!g.round && hasLabeledRound.has(scoreKeyOf(g))) return;
-    const hs = g.home_points != null ? g.home_points : g.home_score;
-    const as = g.away_points != null ? g.away_points : g.away_score;
-    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
+    if (!g.round && hasLabeledRound.has(matchKeyOf(g))) return;
+    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(g);
