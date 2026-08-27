@@ -109,6 +109,91 @@ const teamColours={
 "Sydney":"#e1251b,#ffffff","West Coast":"#003087,#f2a900","Western Bulldogs":"#003087,#c8102e,#ffffff"
 };
 
+// ---------------------------------------------------------------------
+// Normalization / dedup -- ported from afl-player.html so this page's
+// totals match the player page's totals instead of being computed from
+// raw, un-deduplicated, un-normalized records. This page previously had
+// NONE of this: it counted every raw row as a "game" with no protection
+// against duplicate records, renamed clubs splitting a career in two,
+// or the same person appearing under two different name spellings.
+// ---------------------------------------------------------------------
+const PLAYER_NAME_ALIASES = {
+  "Luke D-Uniacke": "Luke Davies-Uniacke",
+  "Cooper D-Tytler": "Cooper Duff-Tytler",
+  "Bailey Williams": "Bailey J. Williams",
+};
+const TEAM_NAME_CANONICAL = {
+  'footscray': 'Western Bulldogs',
+  'south melbourne': 'Sydney',
+  'brisbane bears': 'Brisbane',
+  'kangaroos': 'North Melbourne',
+};
+const ROUND_NAME_CANONICAL = {
+  'ef': 'Elimination Final', 'round ef': 'Elimination Final', 'elimination final': 'Elimination Final',
+  'sf': 'Semi Final',        'round sf': 'Semi Final',        'semi final': 'Semi Final',
+  'qf': 'Qualifying Final',  'round qf': 'Qualifying Final',  'qualifying final': 'Qualifying Final',
+  'pf': 'Preliminary Final', 'round pf': 'Preliminary Final', 'preliminary final': 'Preliminary Final',
+  'gf': 'Grand Final',       'round gf': 'Grand Final',       'grand final': 'Grand Final',
+};
+function normalizeDashes(str) {
+  return str ? str.replace(/[\u2013\u2014]/g, '-') : str;
+}
+function normalizeTeam(t) {
+  if (!t) return t;
+  const dashed = normalizeDashes(t).trim();
+  return TEAM_NAME_CANONICAL[dashed.toLowerCase()] || dashed;
+}
+function normalizeName(str) {
+  if (!str) return str;
+  str = normalizeDashes(str);
+  str = str.replace(/\u2019/g, "'");
+  str = str.replace(/\bO([A-Z][a-z])/g, "O'$1");
+  return str;
+}
+function normalizeRound(r) {
+  if (!r) return r;
+  const key = r.trim().toLowerCase();
+  return ROUND_NAME_CANONICAL[key] || r.trim();
+}
+function normalizeGame(g) {
+  if (g.player)         g.player         = normalizeName(g.player);
+  if (g.played_for)     g.played_for     = normalizeTeam(g.played_for);
+  if (g.played_against) g.played_against = normalizeTeam(g.played_against);
+  if (g.home_team)      g.home_team      = normalizeTeam(g.home_team);
+  if (g.away_team)      g.away_team      = normalizeTeam(g.away_team);
+  if (g.round)           g.round          = normalizeRound(g.round);
+  if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
+  if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
+  return g;
+}
+// Same dedup logic as afl-player.html: matches on season+round+teams+score
+// (score included so drawn-Grand-Final-then-replay pairs, which share a
+// season/round/teams, aren't wrongly collapsed into one), and separately
+// drops a blank-round row when a properly-labeled sibling of the same
+// match exists (an orphaned duplicate, not a second game).
+function dedupeGames(games) {
+  const scoreKeyOf = g => {
+    const hs = g.home_points != null ? g.home_points : g.home_score;
+    const as = g.away_points != null ? g.away_points : g.away_score;
+    return g.season + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
+  };
+  const hasLabeledRound = new Set();
+  games.forEach(g => { if (g.round) hasLabeledRound.add(scoreKeyOf(g)); });
+
+  const seen = new Set();
+  const out = [];
+  games.forEach(g => {
+    if (!g.round && hasLabeledRound.has(scoreKeyOf(g))) return;
+    const hs = g.home_points != null ? g.home_points : g.home_score;
+    const as = g.away_points != null ? g.away_points : g.away_score;
+    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(g);
+  });
+  return out;
+}
+
 const input1=document.getElementById("player1");
 const input2=document.getElementById("player2");
 const list=document.getElementById("playerList");
@@ -121,7 +206,7 @@ for(let y=1965;y<=new Date().getFullYear();y++) years.push(y);
 Promise.all(
   years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
-  allGames=data.flat();
+  allGames=data.flat().map(normalizeGame);
   const players=[...new Set(allGames.map(p=>p.player))].sort();
   players.forEach(p=>{const o=document.createElement("option");o.value=p;list.appendChild(o);});
 });
@@ -164,8 +249,8 @@ function stats(g){
 }
 
 function headToHead(p1,p2){
-  const g1=allGames.filter(g=>g.player===p1&&g.played_against===p2);
-  const g2=allGames.filter(g=>g.player===p2&&g.played_against===p1);
+  const g1=dedupeGames(allGames.filter(g=>g.player===p1&&g.played_against===p2));
+  const g2=dedupeGames(allGames.filter(g=>g.player===p2&&g.played_against===p1));
   if(!g1.length||!g2.length) return null;
   return{
     games:g1.length,
@@ -177,10 +262,10 @@ function headToHead(p1,p2){
 }
 
 function compare(){
-  const p1=input1.value, p2=input2.value;
+  const p1=normalizeName(input1.value), p2=normalizeName(input2.value);
   if(!p1||!p2) return;
-  const g1=allGames.filter(g=>g.player===p1);
-  const g2=allGames.filter(g=>g.player===p2);
+  const g1=dedupeGames(allGames.filter(g=>g.player===p1));
+  const g2=dedupeGames(allGames.filter(g=>g.player===p2));
   if(!g1.length||!g2.length){result.innerHTML="<p>Player not found</p>";return;}
   const s1=stats(g1), s2=stats(g2);
   const team1=getTeam(g1), team2=getTeam(g2);
