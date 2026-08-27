@@ -359,11 +359,47 @@ function normalizeGame(g) {
 // season+round+played_for+played_against — a true duplicate of the same
 // match. This collapses those down to one record so stats aren't double
 // counted, keeping the first occurrence seen.
+//
+// FIX: the key now also includes the final score. A genuine duplicate
+// record (the same match logged twice under two round spellings) always
+// has an identical score, so this doesn't change that behaviour. But a
+// DRAWN GRAND FINAL FOLLOWED BY A REPLAY (1977, 2010) shares the same
+// season/round label/teams as the draw -- without the score in the key,
+// the replay was being wrongly treated as a duplicate of the draw and
+// silently dropped, undercounting every player who played in both games
+// by exactly one game and losing their replay stats entirely. Since the
+// draw and replay always have different final scores, keying on score too
+// tells them apart correctly while still collapsing true duplicates.
+// FIX 2 (added after the "untitled game" report): some historical
+// records have a blank/missing round field for a match that ALSO has a
+// properly-labeled record elsewhere in the data (same season, teams,
+// score) -- e.g. "2016 Semi Final Hawthorn v Western Bulldogs" appearing
+// correctly once, and a second time with round left empty. Because the
+// round string differs ("Semi Final" vs ""), these never matched on the
+// key above and both survived, showing up as a phantom "untitled" extra
+// game with no round label. This does a first pass to find which
+// (season, team, opponent, score) combos have at least one row with a
+// real round label, then drops any blank-round row that has one -- it's
+// an orphaned duplicate of that match, not a second game. A blank-round
+// row with no labeled sibling is left alone (better to show an
+// unlabeled game than silently delete real data).
 function dedupeGames(games) {
+  const scoreKeyOf = g => {
+    const hs = g.home_points != null ? g.home_points : g.home_score;
+    const as = g.away_points != null ? g.away_points : g.away_score;
+    return g.season + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
+  };
+  const hasLabeledRound = new Set();
+  games.forEach(g => { if (g.round) hasLabeledRound.add(scoreKeyOf(g)); });
+
   const seen = new Set();
   const out = [];
   games.forEach(g => {
-    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against;
+    if (!g.round && hasLabeledRound.has(scoreKeyOf(g))) return;
+
+    const hs = g.home_points != null ? g.home_points : g.home_score;
+    const as = g.away_points != null ? g.away_points : g.away_score;
+    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + hs + '__' + as;
     if (seen.has(key)) return;
     seen.add(key);
     out.push(g);
