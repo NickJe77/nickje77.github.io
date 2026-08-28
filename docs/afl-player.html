@@ -239,6 +239,13 @@ const DISAMBIG_GROUPS = {
   "Will Hayes": [["Western Bulldogs","Carlton"],["Collingwood"]],
   "Josh Kennedy": [["West Coast","Carlton"],["Sydney","Hawthorn"]],
   "Tom Lynch": [["St Kilda","Adelaide"],["Gold Coast","Richmond"]],
+  // Added after a full-dataset audit found head-to-head matches proving
+  // these are two different real players sharing a name, not one person
+  // (e.g. Scott Thompson: North Melbourne and Adelaide appear against
+  // EACH OTHER in nearly every round from 2008-2017 -- a decade of two
+  // concurrent careers, not a data error).
+  "Mitchell Brown": [["West Coast"],["Geelong","Essendon"]],
+  "Scott Thompson": [["Melbourne","Adelaide"],["North Melbourne"]],
 };
 // Confirmed same-player aliases: data-source variant name -> canonical name.
 // Everything on the left gets folded into the name on the right wherever
@@ -248,7 +255,13 @@ const DISAMBIG_GROUPS = {
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
   "Cooper D-Tytler": "Cooper Duff-Tytler",
-  "Bailey Williams": "Bailey J. Williams",
+  // "Bailey Williams": "Bailey J. Williams" REMOVED as a flat alias --
+  // confirmed via audit these are two different real players (Western
+  // Bulldogs vs West Coast). Raw data is inconsistent though: the West
+  // Coast player is labeled "Bailey Williams" in every season except
+  // 2026, where it switches to "Bailey J. Williams" -- so this needs a
+  // team-conditional rename (see normalizeGame below), not a flat alias
+  // or just deleting the entry outright.
 };
 const teamColours = {
   "Adelaide":"#002b5c,#e21937,#ffb81c","Brisbane":"#7c0a02,#003087,#fdb827","Carlton":"#031a29,#ffffff",
@@ -351,8 +364,20 @@ function normalizeGame(g) {
   if (g.away_team)      g.away_team      = normalizeTeam(g.away_team);
   if (g.round)           g.round          = normalizeRound(g.round);
   if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
+  if (g.player === 'Bailey Williams' && g.played_for === 'West Coast') g.player = 'Bailey J. Williams';
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
+}
+// A numbered round above 24 is structurally invalid for a real AFL
+// premiership season (even the modern expanded format with Opening
+// Round tops out around 24 total rounds) and shouldn't count toward
+// any tally. NOTE: "Round 0" was previously excluded here too, but
+// that was wrong -- Round 0 (Opening Round) is a real part of the AFL
+// season, not a pre-season trial. Corrected after being told directly.
+function isSpuriousRound(g) {
+  const m = g.round && g.round.match(/^Round (\d+)$/);
+  if (m && parseInt(m[1]) > 24) return true;
+  return false;
 }
 // After round-name canonicalization, two records that only differed by
 // round spelling ("Round EF" vs "Elimination Final") now have identical
@@ -520,6 +545,7 @@ async function loadAllYears() {
     results.forEach(d => {
       d.forEach(g => {
         normalizeGame(g);
+        if (isSpuriousRound(g)) return;
         allYearGames.push(g);
         allGames.push(g);
       });

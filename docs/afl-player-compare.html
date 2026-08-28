@@ -120,7 +120,9 @@ const teamColours={
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
   "Cooper D-Tytler": "Cooper Duff-Tytler",
-  "Bailey Williams": "Bailey J. Williams",
+  // "Bailey Williams": "Bailey J. Williams" REMOVED -- confirmed to be
+  // two different real players (Western Bulldogs vs West Coast), not
+  // one person. See afl-player.html for the full audit evidence.
 };
 const TEAM_NAME_CANONICAL = {
   'footscray': 'Western Bulldogs',
@@ -163,8 +165,18 @@ function normalizeGame(g) {
   if (g.away_team)      g.away_team      = normalizeTeam(g.away_team);
   if (g.round)           g.round          = normalizeRound(g.round);
   if (g.player === 'Gary Ablett' && g.season >= 2000) g.player = 'Gary Ablett Jnr';
+  if (g.player === 'Bailey Williams' && g.played_for === 'West Coast') g.player = 'Bailey J. Williams';
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
+}
+// A numbered round above 24 is structurally invalid for a real AFL
+// premiership season and shouldn't count toward any tally. NOTE:
+// "Round 0" was previously excluded here too, but that was wrong --
+// Round 0 (Opening Round) is a real part of the AFL season.
+function isSpuriousRound(g) {
+  const m = g.round && g.round.match(/^Round (\d+)$/);
+  if (m && parseInt(m[1]) > 24) return true;
+  return false;
 }
 // Same dedup logic as afl-player.html: matches on season+round+teams+score
 // (score included so drawn-Grand-Final-then-replay pairs, which share a
@@ -209,7 +221,7 @@ for(let y=1965;y<=new Date().getFullYear();y++) years.push(y);
 Promise.all(
   years.map(y=>fetch(`/data/afl/afl_${y}.json`).then(r=>r.json()).catch(()=>[]))
 ).then(data=>{
-  allGames=data.flat().map(normalizeGame);
+  allGames=data.flat().map(normalizeGame).filter(g=>!isSpuriousRound(g));
   const players=[...new Set(allGames.map(p=>p.player))].sort();
   players.forEach(p=>{const o=document.createElement("option");o.value=p;list.appendChild(o);});
 });
