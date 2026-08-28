@@ -94,21 +94,71 @@ function normaliseGame(g) {
 // the player's own stat line (always present, unlike team score) as the
 // fingerprint for "is this the same match", and drop a blank-round row
 // when a labeled sibling with the same fingerprint exists.
+function roundOrder(r) {
+  if (!r) return 999;
+  if (/^R(\d+)$/i.test(r)) return parseInt(r.slice(1));
+  const nm = r.match(/\d+/); if (nm) return parseInt(nm[0]);
+  const finals = ["EF","SF","QF","PF","GF","Elimination Final","Semi Final","Qualifying Final","Preliminary Final","Grand Final"];
+  const fi = finals.findIndex(f => r.toLowerCase().includes(f.toLowerCase()));
+  return fi >= 0 ? 100 + fi : 999;
+}
+// FIX: round is no longer part of a match's identity at all -- found via
+// a real game list showing the same match recorded twice under two
+// different populated round labels (e.g. Round 2 and Round 3 vs Sydney,
+// 2026, with identical D/G/B/K/HB). A player's own full stat line
+// matching exactly against the same opponent in the same season is the
+// identity; round is only kept for display, preferring the lower one.
+// FIX (revised again -- see afl-player.html for full explanation): round
+// is only ignored for two DIFFERENT NUMBERED rounds (never finals
+// labels) that are close together (within 2) with an identical stat
+// line. Same-round and blank-round-vs-labeled-sibling duplicates are
+// still caught as before.
+function isNumberedRound(r) { return !!(r && /^Round \d+$/.test(r)); }
+
 function dedupeGames(games) {
   const statFingerprint = g =>
     (g.D||0)+"_"+(g.G||0)+"_"+(g.B||0)+"_"+(g.BR||0)+"_"+(g.K||0)+"_"+(g.HB||0);
-  const matchKeyOf = g =>
+  const coreId = g =>
     g.season + "__" + g.played_for + "__" + g.played_against + "__" + statFingerprint(g);
 
   const hasLabeledRound = new Set();
-  games.forEach(g => { if (g.round) hasLabeledRound.add(matchKeyOf(g)); });
+  games.forEach(g => { if (g.round) hasLabeledRound.add(coreId(g)); });
+
+  const numberedByCoreId = {};
+  games.forEach(g => {
+    if (isNumberedRound(g.round)) {
+      const c = coreId(g);
+      (numberedByCoreId[c] = numberedByCoreId[c] || []).push(g);
+    }
+  });
 
   const seen = new Set(), out = [];
+  const processedCoreForNumbered = new Set();
+
   games.forEach(g => {
-    if (!g.round && hasLabeledRound.has(matchKeyOf(g))) return;
-    const key = g.season + "__" + g.round + "__" + g.played_for + "__" + g.played_against + "__" + statFingerprint(g);
-    if (seen.has(key)) return;
-    seen.add(key);
+    if (!g.round && hasLabeledRound.has(coreId(g))) return;
+
+    const exactKey = g.season + "__" + g.round + "__" + g.played_for + "__" + g.played_against + "__" + statFingerprint(g);
+
+    if (isNumberedRound(g.round)) {
+      const c = coreId(g);
+      if (processedCoreForNumbered.has(c)) return;
+      const group = numberedByCoreId[c];
+      if (group.length > 1) {
+        const nums = group.map(x => parseInt(x.round.match(/\d+/)[0]));
+        const spread = Math.max(...nums) - Math.min(...nums);
+        if (spread <= 2) {
+          processedCoreForNumbered.add(c);
+          const best = group.reduce((a, b) =>
+            parseInt(a.round.match(/\d+/)[0]) < parseInt(b.round.match(/\d+/)[0]) ? a : b);
+          out.push(best);
+          return;
+        }
+      }
+    }
+
+    if (seen.has(exactKey)) return;
+    seen.add(exactKey);
     out.push(g);
   });
   return out;

@@ -368,17 +368,13 @@ function normalizeGame(g) {
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
 }
-// A numbered round above 24 is structurally invalid for a real AFL
-// premiership season (even the modern expanded format with Opening
-// Round tops out around 24 total rounds) and shouldn't count toward
-// any tally. NOTE: "Round 0" was previously excluded here too, but
-// that was wrong -- Round 0 (Opening Round) is a real part of the AFL
-// season, not a pre-season trial. Corrected after being told directly.
-function isSpuriousRound(g) {
-  const m = g.round && g.round.match(/^Round (\d+)$/);
-  if (m && parseInt(m[1]) > 24) return true;
-  return false;
-}
+// NOTE: an earlier version of this file had an isSpuriousRound() check
+// that excluded any numbered round above 24. That was removed entirely:
+// it was an unverified guess (the same category of mistake as wrongly
+// excluding Round 0 before it), it was never confirmed correct against
+// an authoritative source, and it was inconsistent with the static page
+// generator, which never had it. Do not reintroduce round-number-based
+// filtering without concrete proof from real data, not pattern-matching.
 // After round-name canonicalization, two records that only differed by
 // round spelling ("Round EF" vs "Elimination Final") now have identical
 // season+round+played_for+played_against — a true duplicate of the same
@@ -417,23 +413,83 @@ function isSpuriousRound(g) {
 // The PLAYER's own stat line (D/G/B/BR/K/HB) is always present -- it's
 // the reason the row exists -- and is what's actually duplicated in
 // these cases, so it's used as the fingerprint instead.
+// FIX (found via a pasted real game list showing Round 2 vs Sydney and
+// Round 3 vs Sydney with pixel-identical D/G/B/K/HB stats, same for
+// Round 5/6 vs Western Bulldogs, Round 9/10 vs Fremantle, Round 12/13
+// vs St Kilda -- all in the still-in-progress 2026 season): round can
+// no longer be trusted as part of a match's identity at all. It's
+// already proven unreliable twice -- sometimes blank, and now proven to
+// sometimes hold TWO DIFFERENT real-looking values for the exact same
+// game. A player's own full stat line (D/G/B/BR/K/HB) matching exactly
+// against the same opponent in the same season is extremely strong
+// evidence it's the same real match -- a real player essentially never
+// posts an identical disposal/goal/behind/kick/handball count in two
+// genuinely different games against the same team. Round is now only
+// carried along for display (picking the lower-numbered one when two
+// duplicate rows disagree), never part of the identity key.
+// FIX (revised again after testing found this was too aggressive): round
+// being different does NOT by itself mean "same match" -- the earlier
+// version of this function ignored round entirely once two rows shared a
+// full stat line, which caused real, different games to wrongly merge
+// whenever a player's stats coincidentally matched (confirmed: e.g. a
+// 1966 Semi Final and Grand Final with identical stats got merged into
+// one, and a 1969 Round 7 vs Round 18 pair with identical stats did too
+// -- both are real, separate games). Round-agnostic merging is now only
+// applied narrowly: two DIFFERENT NUMBERED rounds (never finals labels,
+// since a team can legitimately play several different finals against
+// the same opponent) that are close together (within 2) with an
+// identical stat line -- this is what actually happens in the confirmed
+// bug (e.g. Round 2 and Round 3 vs Sydney, 2026, pixel-identical stats).
+// Same-round duplicates (including round-spelling variants already
+// canonicalized to the same string) and blank-round-vs-labeled-sibling
+// duplicates are still caught as before.
+function isNumberedRound(r) { return !!(r && /^Round \d+$/.test(r)); }
+
 function dedupeGames(games) {
   const statFingerprint = g =>
     (g.D||0)+'_'+(g.G||0)+'_'+(g.B||0)+'_'+(g.BR||0)+'_'+(g.K||0)+'_'+(g.HB||0);
-  const matchKeyOf = g =>
+  const coreId = g =>
     g.season + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
 
   const hasLabeledRound = new Set();
-  games.forEach(g => { if (g.round) hasLabeledRound.add(matchKeyOf(g)); });
+  games.forEach(g => { if (g.round) hasLabeledRound.add(coreId(g)); });
+
+  const numberedByCoreId = {};
+  games.forEach(g => {
+    if (isNumberedRound(g.round)) {
+      const c = coreId(g);
+      (numberedByCoreId[c] = numberedByCoreId[c] || []).push(g);
+    }
+  });
 
   const seen = new Set();
   const out = [];
-  games.forEach(g => {
-    if (!g.round && hasLabeledRound.has(matchKeyOf(g))) return;
+  const processedCoreForNumbered = new Set();
 
-    const key = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
-    if (seen.has(key)) return;
-    seen.add(key);
+  games.forEach(g => {
+    if (!g.round && hasLabeledRound.has(coreId(g))) return;
+
+    const exactKey = g.season + '__' + g.round + '__' + g.played_for + '__' + g.played_against + '__' + statFingerprint(g);
+
+    if (isNumberedRound(g.round)) {
+      const c = coreId(g);
+      if (processedCoreForNumbered.has(c)) return;
+      const group = numberedByCoreId[c];
+      if (group.length > 1) {
+        const nums = group.map(x => parseInt(x.round.match(/\d+/)[0]));
+        const spread = Math.max(...nums) - Math.min(...nums);
+        if (spread <= 2) {
+          processedCoreForNumbered.add(c);
+          const best = group.reduce((a, b) =>
+            parseInt(a.round.match(/\d+/)[0]) < parseInt(b.round.match(/\d+/)[0]) ? a : b);
+          out.push(best);
+          return;
+        }
+      }
+    }
+
+    if (seen.has(exactKey)) return;
+    seen.add(exactKey);
     out.push(g);
   });
   return out;
@@ -545,7 +601,6 @@ async function loadAllYears() {
     results.forEach(d => {
       d.forEach(g => {
         normalizeGame(g);
-        if (isSpuriousRound(g)) return;
         allYearGames.push(g);
         allGames.push(g);
       });
