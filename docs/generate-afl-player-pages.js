@@ -20,11 +20,22 @@ const DISAMBIG_GROUPS = {
   "Will Hayes": [["Western Bulldogs", "Carlton"], ["Collingwood"]],
   "Josh Kennedy": [["West Coast", "Carlton"], ["Sydney", "Hawthorn"]],
   "Tom Lynch": [["St Kilda", "Adelaide"], ["Gold Coast", "Richmond"]],
+  // Added after a full-dataset audit found head-to-head matches proving
+  // these are two different real players sharing a name (e.g. Scott
+  // Thompson: North Melbourne and Adelaide appear against EACH OTHER in
+  // nearly every round from 2008-2017 -- a decade of two concurrent
+  // careers, not a data error).
+  "Mitchell Brown": [["West Coast"], ["Geelong", "Essendon"]],
+  "Scott Thompson": [["Melbourne", "Adelaide"], ["North Melbourne"]],
 };
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
   "Cooper D-Tytler": "Cooper Duff-Tytler",
-  "Bailey Williams": "Bailey J. Williams",
+  // "Bailey Williams": "Bailey J. Williams" REMOVED -- confirmed WRONG:
+  // two different real players (Western Bulldogs vs West Coast), proven
+  // by a head-to-head match between them on 2026-07-12 with different
+  // stat lines. This alias silently merged two separate careers into
+  // one static page since 2020.
 };
 const TEAM_NAME_CANONICAL = {
   "footscray": "Western Bulldogs",
@@ -66,13 +77,36 @@ function normaliseGame(g) {
   if (g.away_team) g.away_team = normaliseTeam(g.away_team);
   if (g.round) g.round = normaliseRound(g.round);
   if (g.player === "Gary Ablett" && g.season >= 2000) g.player = "Gary Ablett Jnr";
+  if (g.player === "Bailey Williams" && g.played_for === "West Coast") g.player = "Bailey J. Williams";
   if (g.player && PLAYER_NAME_ALIASES[g.player]) g.player = PLAYER_NAME_ALIASES[g.player];
   return g;
 }
+// FIX (found after the static pages were reported as still wrong even
+// after the live afl-player.html and season data were fixed): this
+// generator had its own copy of dedupeGames, made once on 2026-08-23 and
+// never updated since -- it never received any of the later fixes. It
+// only matched on season+round+played_for+played_against, with no score
+// or stat check, so it didn't correctly separate a drawn Grand Final from
+// its replay, and (more importantly) didn't recognize a blank-round
+// "Season Player Rankings" junk row as a duplicate of an already-labeled
+// game, letting it survive as a permanent phantom row baked into the
+// static HTML. This is the same corrected logic now used live: match on
+// the player's own stat line (always present, unlike team score) as the
+// fingerprint for "is this the same match", and drop a blank-round row
+// when a labeled sibling with the same fingerprint exists.
 function dedupeGames(games) {
+  const statFingerprint = g =>
+    (g.D||0)+"_"+(g.G||0)+"_"+(g.B||0)+"_"+(g.BR||0)+"_"+(g.K||0)+"_"+(g.HB||0);
+  const matchKeyOf = g =>
+    g.season + "__" + g.played_for + "__" + g.played_against + "__" + statFingerprint(g);
+
+  const hasLabeledRound = new Set();
+  games.forEach(g => { if (g.round) hasLabeledRound.add(matchKeyOf(g)); });
+
   const seen = new Set(), out = [];
   games.forEach(g => {
-    const key = g.season + "__" + g.round + "__" + g.played_for + "__" + g.played_against;
+    if (!g.round && hasLabeledRound.has(matchKeyOf(g))) return;
+    const key = g.season + "__" + g.round + "__" + g.played_for + "__" + g.played_against + "__" + statFingerprint(g);
     if (seen.has(key)) return;
     seen.add(key);
     out.push(g);
