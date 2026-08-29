@@ -103,11 +103,7 @@ tbody tr:hover td{ background:#f9fbfd; }
 
   <div class="hero">
     <div class="eyebrow">Australian Stakes Races</div>
-    <div class="nav-header">
-      <a id="prev"></a>
-      <h1 id="title">Loading...</h1>
-      <a id="next"></a>
-    </div>
+    <h1 id="title">Loading...</h1>
     <div class="race-meta" id="race-meta"></div>
   </div>
 
@@ -115,6 +111,9 @@ tbody tr:hover td{ background:#f9fbfd; }
   <table>
     <thead>
       <tr>
+        <th>Date</th>
+        <th>Track</th>
+        <th>Grade</th>
         <th>Winner</th>
         <th>Margin</th>
         <th>SP</th>
@@ -123,29 +122,9 @@ tbody tr:hover td{ background:#f9fbfd; }
       </tr>
     </thead>
     <tbody id="results">
-      <tr><td colspan="5" class="loading">Loading...</td></tr>
+      <tr><td colspan="8" class="loading">Loading...</td></tr>
     </tbody>
   </table>
-  </div>
-
-  <div class="section-title">Subsequent Winners from this Race</div>
-  <div class="boxes-grid">
-    <div class="box box-G1">
-      <div class="box-header">Group 1 Winners</div>
-      <div id="box-G1"><div class="loading">Loading...</div></div>
-    </div>
-    <div class="box box-G2">
-      <div class="box-header">Group 2 Winners</div>
-      <div id="box-G2"><div class="loading">Loading...</div></div>
-    </div>
-    <div class="box box-G3">
-      <div class="box-header">Group 3 Winners</div>
-      <div id="box-G3"><div class="loading">Loading...</div></div>
-    </div>
-    <div class="box box-LR">
-      <div class="box-header">Listed Winners</div>
-      <div id="box-LR"><div class="loading">Loading...</div></div>
-    </div>
   </div>
 
 </div>
@@ -156,11 +135,10 @@ const GRADE_LABELS = { G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed"
 
 const params = new URLSearchParams(window.location.search);
 const raceName = params.get("race");
-const raceDate = params.get("date");
 
-if(!raceName || !raceDate){
+if(!raceName){
   document.getElementById("title").textContent = "No race selected";
-  throw new Error("Missing race or date parameter");
+  throw new Error("Missing race parameter");
 }
 
 function parseCSV(text){
@@ -185,140 +163,51 @@ function horseLink(name){
   return `<a class="horse-link" href="australia-stakes-winners-horse.html?horse=${encodeURIComponent(name)}">${name}</a>`;
 }
 
-function groupByHorse(wins){
-  const groups = new Map();
-  wins.forEach(w => {
-    if(!groups.has(w.Horse)){
-      groups.set(w.Horse, { horse: w.Horse, count: 0, races: [] });
-    }
-    const g = groups.get(w.Horse);
-    g.count++;
-    g.races.push(w["Race Name"]);
-  });
-  return [...groups.values()].sort((a,b) => b.count - a.count);
-}
-
-function renderBox(wins, elementId){
-  const container = document.getElementById(elementId);
-  container.innerHTML = "";
-  if(wins.length === 0){
-    container.innerHTML = '<div class="loading">None on record.</div>';
-    return;
-  }
-  const grouped = groupByHorse(wins);
-  grouped.forEach(g => {
-    const div = document.createElement("div");
-    div.className = "winner-row";
-    const label = g.count > 1 ? `${g.horse} x ${g.count}` : g.horse;
-    const raceList = g.races.join(", ");
-    div.innerHTML = `
-      <a class="horse-link" href="australia-stakes-winners-horse.html?horse=${encodeURIComponent(g.horse)}">${label}</a>
-      <div class="race-names">${raceList}</div>
-    `;
-    div.onclick = (e) => {
-      if(e.target.tagName !== "A"){
-        window.location.href = `australia-stakes-winners-horse.html?horse=${encodeURIComponent(g.horse)}`;
-      }
-    };
-    container.appendChild(div);
-  });
-}
-
-// Same CSV the full-field pages use - filtered to winners only below.
+// Every row in this CSV is already a race winner -- there's no separate
+// "Position" field, since this data only ever records who won, not a
+// full field of placings. The page shows every winner of the named race
+// across every year it's been run, most recent first.
 fetch("/data/australia-stakes.csv")
   .then(res => res.text())
   .then(text => {
-    const parsed = parseCSV(text);
-    const allData = parsed.filter(r => r.Position === "1");
+    const allData = parseCSV(text);
+    const runnings = allData.filter(r => r["Race"] === raceName);
 
-    // This exact running: same race name AND same date (handles dead
-    // heats and split divisions, which both show multiple winner rows
-    // for the same race+date).
-    const thisRunning = allData.filter(r => r["Race Name"] === raceName && r.Date === raceDate);
-
-    if(thisRunning.length === 0){
+    if(runnings.length === 0){
       document.getElementById("title").textContent = "Race not found";
-      document.getElementById("results").innerHTML = '<tr><td colspan="5" class="loading">No result found for this race/date.</td></tr>';
-      ["G1","G2","G3","LR"].forEach(g => {
-        document.getElementById("box-"+g).innerHTML = '<div class="loading">Race not found.</div>';
-      });
+      document.getElementById("results").innerHTML = '<tr><td colspan="8" class="loading">No results found for this race.</td></tr>';
       return;
     }
 
-    const track = thisRunning[0].Track;
-    const grade = thisRunning[0].GRADE;
-    const gradeLabel = GRADE_LABELS[grade] || grade;
+    runnings.sort((a,b) => dateToSortable(b.Date) - dateToSortable(a.Date));
 
-    document.getElementById("title").textContent = `${raceName} — ${raceDate}`;
-    document.getElementById("race-meta").textContent = `${track} — ${gradeLabel}`;
+    document.getElementById("title").textContent = raceName;
+    document.getElementById("race-meta").textContent =
+      `${runnings.length} running${runnings.length !== 1 ? "s" : ""} on record — ${runnings[runnings.length-1].Date} to ${runnings[0].Date}`;
 
     const tbody = document.getElementById("results");
     tbody.innerHTML = "";
-    thisRunning.forEach(r => {
+    runnings.forEach(r => {
+      const grade = r["Race Grade"];
+      const gradeLabel = GRADE_LABELS[grade] || grade;
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${horseLink(r.Horse)}</td>
-        <td>${r.MARG}</td>
+        <td>${r.Date}</td>
+        <td>${r.Track}</td>
+        <td><span class="grade-pill grade-${grade}">${gradeLabel}</span></td>
+        <td>${horseLink(r.Winner)}</td>
+        <td>${r.Margin}</td>
         <td>${r.SP}</td>
         <td>${r.Jockey}</td>
         <td>${r.Trainer}</td>
       `;
       tbody.appendChild(tr);
     });
-
-    // For every horse that won THIS running, check their complete wins
-    // record across every stakes race, and bucket every win dated AFTER
-    // this running by grade. Only subsequent wins are shown.
-    const thisSortable = dateToSortable(raceDate);
-    const fieldHorses = [...new Set(thisRunning.map(r => r.Horse))];
-
-    const subsequentByGrade = { G1: [], G2: [], G3: [], LR: [] };
-
-    fieldHorses.forEach(horse => {
-      const thisHorsesWins = allData.filter(r => r.Horse === horse);
-      thisHorsesWins.forEach(w => {
-        if(w["Race Name"] === raceName && w.Date === raceDate) return;
-        const wSortable = dateToSortable(w.Date);
-        if(wSortable > thisSortable){
-          const g = w.GRADE;
-          if(subsequentByGrade[g]) subsequentByGrade[g].push(w);
-        }
-      });
-    });
-
-    renderBox(subsequentByGrade.G1, "box-G1");
-    renderBox(subsequentByGrade.G2, "box-G2");
-    renderBox(subsequentByGrade.G3, "box-G3");
-    renderBox(subsequentByGrade.LR, "box-LR");
-
-    // Every winner of this race across every year, used only for the
-    // prev/next RUNNING navigation.
-    const uniqueDates = [...new Set(
-      allData.filter(r => r["Race Name"] === raceName).map(r => r.Date)
-    )].sort((a,b) => dateToSortable(a) - dateToSortable(b));
-
-    const currentIdx = uniqueDates.indexOf(raceDate);
-
-    if(currentIdx > 0){
-      const p = uniqueDates[currentIdx - 1];
-      const prevEl = document.getElementById("prev");
-      prevEl.textContent = "← " + p;
-      prevEl.href = `australia-stakes-winners-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(p)}`;
-    }
-    if(currentIdx >= 0 && currentIdx < uniqueDates.length - 1){
-      const n = uniqueDates[currentIdx + 1];
-      const nextEl = document.getElementById("next");
-      nextEl.textContent = n + " →";
-      nextEl.href = `australia-stakes-winners-race.html?race=${encodeURIComponent(raceName)}&date=${encodeURIComponent(n)}`;
-    }
   })
   .catch(err => {
     console.error(err);
     document.getElementById("title").textContent = "Error loading race data";
-    document.getElementById("results").innerHTML = '<tr><td colspan="5" class="loading">Could not load data.</td></tr>';
-    ["G1","G2","G3","LR"].forEach(g => {
-      document.getElementById("box-"+g).innerHTML = '<div class="loading">Could not load data.</div>';
-    });
+    document.getElementById("results").innerHTML = '<tr><td colspan="8" class="loading">Could not load data.</td></tr>';
   });
 
 /* LOAD NAV BAR */
