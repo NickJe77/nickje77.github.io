@@ -1,0 +1,80 @@
+name: Cleanup Baseball Bulk Data
+
+# This removes docs/data/baseball/games and docs/data/baseball/boxscores
+# from the repo (300,000+ small files between them) along with some
+# stray leftover download fragments sitting loose in docs/data/baseball/.
+#
+# Why: GitHub Pages deploys the whole docs/ folder as one artifact. With
+# 524,000+ files in docs/, the "Deploy to GitHub Pages" step fails with
+# a generic "artifact could not be deployed" error -- this is a known
+# practical limit tied to file COUNT, separate from the documented 10GB
+# byte-size cap. It breaks the deploy for every sport on the site, UFC
+# included, not just baseball.
+#
+# Why it's safe: the full contents of docs/data/baseball/ were already
+# uploaded to Cloudflare R2 (see upload-baseball-to-r2.yml), and
+# baseball-player.html / baseball-game.html / baseball-season.html
+# already fetch from R2, not from these GitHub paths. The one page that
+# still read directly from GitHub (baseball-seasons.html, which listed
+# the boxscores/ folder just to get the list of years) has been
+# switched to read the much smaller seasons/ folder instead, which this
+# workflow does NOT delete.
+#
+# What stays in the repo: docs/data/baseball/players/, seasons/,
+# season_leaders/, team_seasons/, opponents/, postseason-games/, and
+# the top-level json index files -- none of those are large enough to
+# be part of the problem.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES to actually delete games/, boxscores/, and the stray junk files'
+        required: true
+        default: 'NO'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Abort unless confirmed
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
+            echo "Confirmation input was not 'YES' -- doing nothing. Re-run and type YES to proceed."
+            exit 1
+          fi
+
+      - name: Show what will be removed
+        run: |
+          echo "--- Sizes before ---"
+          du -sh docs/data/baseball/games 2>/dev/null || echo "games/ not found"
+          du -sh docs/data/baseball/boxscores 2>/dev/null || echo "boxscores/ not found"
+          find docs/data/baseball -maxdepth 1 -name "boxes.zip.part*" -o -maxdepth 1 -name "biofile*.csv"
+
+      - name: Remove bulk folders and stray files
+        run: |
+          rm -rf docs/data/baseball/games
+          rm -rf docs/data/baseball/boxscores
+          rm -f docs/data/baseball/boxes.zip.partaa
+          rm -f docs/data/baseball/boxes.zip.partab
+          rm -f docs/data/baseball/boxes.zip.partac
+          rm -f docs/data/baseball/boxes.zip.partad
+          rm -f docs/data/baseball/biofile.csv
+          rm -f docs/data/baseball/biofile0.csv
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add -A docs/data/baseball
+          git diff --cached --quiet || git commit -m "Remove baseball games/boxscores + stray files from GitHub (now on R2, was breaking Pages deploy)"
+          git pull origin main --no-rebase --no-edit
+          git push
+
+      - name: Show sizes after
+        run: |
+          echo "--- File count under docs/ after cleanup ---"
+          find docs -type f | wc -l
