@@ -1,87 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <script src="/js/analytics.js"></script>
 <meta charset="UTF-8">
 <title>MLB Seasons | The Sporting Almanac</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 :root{
-  --bg:#eceff3;
-  --surface:#ffffff;
-  --ink:#0f141a;
-  --muted:#69727c;
-  --faint:#9aa3ad;
-  --line:#e3e8ee;
-  --board:#0a0a0a;
-  --board-2:#1a1a1a;
-  --accent:#c8102e;
-  --accent-soft:rgba(200,16,46,.12);
-  --display:'Oswald',system-ui,sans-serif;
-  --body:'Inter',system-ui,sans-serif;
-  --radius:16px;
+  --bg:#f7f5f0;
+  --surface:#fff;
+  --ink:#1a1a1a;
+  --muted:#6b6b6b;
+  --line:#e3ded4;
+  --accent:#8a1f2d;
+  --accent-soft:#f6e6e8;
+  --display:'Georgia',serif;
+  --body:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
 }
 *{box-sizing:border-box;}
 body{
-  font-family:var(--body);
   margin:0;
   background:var(--bg);
   color:var(--ink);
-  -webkit-font-smoothing:antialiased;
+  font-family:var(--body);
 }
 .navbar{
   display:flex;
-  justify-content:center;
-  gap:22px;
-  padding:15px;
-  background:var(--surface);
+  gap:20px;
+  padding:16px 24px;
   border-bottom:1px solid var(--line);
-  font-weight:600;
-  font-size:13.5px;
+  background:var(--surface);
 }
 .navbar a{
-  text-decoration:none;
   color:var(--ink);
-  opacity:.7;
-  transition:opacity .15s,color .15s;
+  text-decoration:none;
+  font-weight:600;
+  font-size:14px;
 }
-.navbar a:hover,.navbar a[aria-current="page"]{
-  opacity:1;
+.navbar a[aria-current="page"]{
   color:var(--accent);
 }
 .page{
-  max-width:1200px;
+  max-width:900px;
   margin:0 auto;
-  padding:26px 20px 70px;
+  padding:32px 24px 64px;
 }
 .hero{
-  position:relative;
-  background:linear-gradient(160deg,var(--board-2),var(--board));
-  color:#fff;
-  padding:32px 34px;
-  border-radius:var(--radius);
-  margin-bottom:22px;
-  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:28px;
 }
-.hero .eyebrow{
-  font-family:var(--body);
-  font-size:11.5px;
-  font-weight:600;
-  letter-spacing:.16em;
-  text-transform:uppercase;
+.eyebrow{
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.08em;
   color:var(--accent);
-  margin-bottom:10px;
-}
-.hero h1{
-  margin:0;
-  font-family:var(--display);
-  font-weight:600;
-  font-size:clamp(28px,5vw,40px);
-  letter-spacing:.01em;
   text-transform:uppercase;
+}
+h1{
+  font-family:var(--display);
+  font-size:32px;
+  margin:4px 0 0;
 }
 .grid{
   display:grid;
@@ -137,22 +113,32 @@ body{
 const owner="nickje77";
 const repo="nickje77.github.io";
 const branch="main";
+
+// CHANGED: this used to list docs/data/baseball/boxscores, a folder
+// with 150,000+ per-game files that (a) makes this one API call slow
+// for no reason, since only the top-level year folder names are
+// needed, and (b) was one of the two folders removed from the repo
+// because their sheer file count was breaking the GitHub Pages
+// deploy (the per-game data now lives on R2 instead). docs/data/
+// baseball/seasons/ has the exact same set of years, one small json
+// file per year, so it's a safe drop-in replacement that keeps this
+// page working after boxscores/ is gone.
 async function loadSeasons(){
 const api=
-`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/boxscores?ref=${branch}`;
+`https://api.github.com/repos/${owner}/${repo}/contents/docs/data/baseball/seasons?ref=${branch}`;
 const res=await fetch(api);
 if(!res.ok){
 document.getElementById("grid").textContent="Failed to load seasons";
 return;
 }
-const folders=await res.json();
+const files=await res.json();
 const grid=document.getElementById("grid");
 grid.innerHTML="";
-folders
-.filter(f=>f.type==="dir")
-.sort((a,b)=>b.name.localeCompare(a.name))
-.forEach(folder=>{
-const season=folder.name;
+files
+.filter(f=>f.type==="file" && f.name.endsWith(".json"))
+.map(f=>f.name.replace(/\.json$/,""))
+.sort((a,b)=>b.localeCompare(a))
+.forEach(season=>{
 const div=document.createElement("div");
 div.className="tile";
 div.textContent=season;
