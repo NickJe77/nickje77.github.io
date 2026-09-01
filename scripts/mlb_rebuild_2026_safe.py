@@ -411,7 +411,12 @@ def main():
 
                 if not force_refresh:
                     if r2_key in existing_keys:
-                        already_have = True
+                        if existing_boxscore_is_empty(client, r2_key):
+                            print(f"  New-format file {r2_key} exists but has no real "
+                                  f"player data -- re-fetching instead of trusting it.")
+                            stale_legacy_refetched.append(r2_key)
+                        else:
+                            already_have = True
                     elif (old_style_id in old_style_to_key
                             and old_style_id not in ambiguous_old_style_ids):
                         legacy_key = old_style_to_key[old_style_id]
@@ -511,7 +516,7 @@ def main():
     if live_fetch_failures:
         print(f"  Live feed game IDs FAILED: {live_fetch_failures}")
     if stale_legacy_refetched:
-        print(f"  Stale legacy files found empty and re-fetched fresh this run: "
+        print(f"  Stale files (new or legacy format) found empty and re-fetched fresh this run: "
               f"{len(stale_legacy_refetched)}")
         for k in stale_legacy_refetched:
             print(f"    {k}")
