@@ -56,6 +56,7 @@ from collections import defaultdict
 import boto3
 import requests
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 SEASON = "2026"
 BUCKET_NAME = "sporting-almanac-data"
@@ -189,6 +190,47 @@ def put_json(client, key, data):
     client.put_object(Bucket=BUCKET_NAME, Key=key, Body=body, ContentType="application/json")
 
 
+def existing_boxscore_is_empty(client, key):
+    """Checks whether an existing R2 box score file actually has real
+    player data, not just whether a file with that name exists.
+
+    Found via a real reported case: a game's stored file
+    (2026-08-26_COL_WSH.json -- note the OLD legacy filename, no gamePk
+    suffix) had liveData.boxscore present but with empty player dicts
+    for both teams and a 0-0 score, and was never refreshed because the
+    "already have" check only ever verified the file existed, never
+    that its content was actually usable. This targets exactly that:
+    only called for legacy-format matches (new-format files are written
+    by the current, working scraper and are far less likely to be
+    stale), so it doesn't add a GET-per-game cost to the common case.
+    """
+    try:
+        obj = client.get_object(Bucket=BUCKET_NAME, Key=key)
+        data = json.loads(obj["Body"].read())
+    except (ClientError, json.JSONDecodeError, KeyError):
+        # Can't read it at all -- treat as empty so it gets refetched
+        # rather than silently trusted.
+        return True
+
+    live = data.get("liveData", {})
+    box = live.get("boxscore", {}).get("teams", {})
+    home_players = box.get("home", {}).get("players", {})
+    away_players = box.get("away", {}).get("players", {})
+    if not home_players and not away_players:
+        return True
+
+    home_score = data.get("home_team", {})
+    away_score = data.get("away_team", {})
+    if isinstance(home_score, dict):
+        home_score = home_score.get("score", 0) or 0
+    if isinstance(away_score, dict):
+        away_score = away_score.get("score", 0) or 0
+    if home_score == 0 and away_score == 0 and not home_players and not away_players:
+        return True
+
+    return False
+
+
 def main():
     client = get_client()
 
@@ -278,6 +320,7 @@ def main():
     live_fetch_failures = []
     migrated_legacy_matches = 0
     doubleheader_splits_fetched = 0
+    stale_legacy_refetched = []
 
     # Diagnostics: track every NEW-format r2_key this run actually
     # matches to a Final game, and detect any lingering filename
@@ -358,11 +401,16 @@ def main():
                         already_have = True
                     elif (old_style_id in old_style_to_key
                             and old_style_id not in ambiguous_old_style_ids):
-                        already_have = True
                         legacy_key = old_style_to_key[old_style_id]
-                        matched_legacy_keys.add(legacy_key)
-                        effective_filename = legacy_key[len(BOXSCORE_PREFIX):]
-                        migrated_legacy_matches += 1
+                        if existing_boxscore_is_empty(client, legacy_key):
+                            print(f"  Legacy file {legacy_key} exists but has no real "
+                                  f"player data -- re-fetching instead of trusting it.")
+                            stale_legacy_refetched.append(legacy_key)
+                        else:
+                            already_have = True
+                            matched_legacy_keys.add(legacy_key)
+                            effective_filename = legacy_key[len(BOXSCORE_PREFIX):]
+                            migrated_legacy_matches += 1
                     elif old_style_id in ambiguous_old_style_ids:
                         doubleheader_splits_fetched += 1
                         if old_style_id in old_style_to_key:
@@ -449,6 +497,11 @@ def main():
         print(f"  Schedule ranges FAILED:    {schedule_fetch_failures}")
     if live_fetch_failures:
         print(f"  Live feed game IDs FAILED: {live_fetch_failures}")
+    if stale_legacy_refetched:
+        print(f"  Stale legacy files found empty and re-fetched fresh this run: "
+              f"{len(stale_legacy_refetched)}")
+        for k in stale_legacy_refetched:
+            print(f"    {k}")
     if orphaned_legacy_keys_used_for_fix:
         print(f"  Old-format files now orphaned by doubleheader fix "
               f"(safe to delete manually, data was re-saved under new keys):")
