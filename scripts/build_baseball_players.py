@@ -1,4 +1,5 @@
 import os
+import re
 import csv
 import json
 import glob
@@ -6,6 +7,7 @@ import shutil
 import subprocess
 import requests
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 BASE = "docs/data/baseball"
 BOX_DIR = f"{BASE}/boxscores"
@@ -25,11 +27,13 @@ EVENTS_DIR = f"{BASE}/events"
 # fetch -- no R2 credentials needed, same public URL the game page uses.
 R2_PUBLIC = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev"
 R2_SEASON_RANGE = range(2015, 2028)  # generously covers any season the scraper might have run for
+R2_SESSION = requests.Session()  # connection reuse -- a fresh connection per request for
+                                  # thousands of small files was a large chunk of the slowness
 
 
 def fetch_r2_json(path):
     try:
-        r = requests.get(f"{R2_PUBLIC}/{path}", timeout=15)
+        r = R2_SESSION.get(f"{R2_PUBLIC}/{path}", timeout=15)
         if r.status_code != 200:
             return None
         return r.json()
@@ -342,21 +346,46 @@ for file in json_files:
 # scraper writes straight to R2, never to the local git path above)
 # ======================================================
 
+# Only seasons NOT already covered by local git files need R2 at all --
+# historical seasons were bulk-imported once and never touched by the
+# R2-writing scraper, so re-fetching them from R2 too would just be
+# redundant duplicate work. This alone should skip most of the season
+# range (only 2026-onward is actually R2-only in practice).
+local_seasons_covered = set()
+for file in json_files:
+    m = re.search(r"[\\/](\d{4})[\\/]", file)
+    if m:
+        local_seasons_covered.add(int(m.group(1)))
+
+seasons_to_try = [s for s in R2_SEASON_RANGE if s not in local_seasons_covered]
+print(f"Seasons already covered locally, skipped for R2: "
+      f"{sorted(local_seasons_covered & set(R2_SEASON_RANGE))}")
+print(f"Seasons to check via R2: {seasons_to_try}")
+
 r2_game_count = 0
-for season_try in R2_SEASON_RANGE:
+for season_try in seasons_to_try:
     index = fetch_r2_json(f"baseball/seasons/{season_try}.json")
     if not index:
         continue
-    print(f"R2: season {season_try} index has {len(index)} game(s) listed")
-    for entry in index:
-        game_file = entry.get("game_file")
-        if not game_file:
-            continue
-        game = fetch_r2_json(f"baseball/boxscores/{season_try}/{game_file}")
-        if not game:
-            continue
-        process_boxscore_game(game, source_label=f"R2:{season_try}/{game_file}")
-        r2_game_count += 1
+    game_files = [e.get("game_file") for e in index if e.get("game_file")]
+    print(f"R2: season {season_try} index has {len(index)} game(s) listed, "
+          f"fetching {len(game_files)} box score(s) concurrently...")
+
+    # Fetching thousands of small files one at a time, serially, was the
+    # actual cause of a 57+ minute run -- this fans the requests out
+    # across a thread pool instead. 16 workers is a reasonable balance
+    # between speed and not hammering the R2 bucket too hard.
+    def _fetch_one(gf):
+        return gf, fetch_r2_json(f"baseball/boxscores/{season_try}/{gf}")
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        futures = [pool.submit(_fetch_one, gf) for gf in game_files]
+        for future in as_completed(futures):
+            game_file, game = future.result()
+            if not game:
+                continue
+            process_boxscore_game(game, source_label=f"R2:{season_try}/{game_file}")
+            r2_game_count += 1
 
 print(f"FOUND {r2_game_count} JSON BOXSCORES (R2)")
 
