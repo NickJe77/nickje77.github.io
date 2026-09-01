@@ -21,18 +21,57 @@ jobs:
         run: |
           python3 - << 'PYEOF'
           import json, os
+
+          # CHANGED: added dedup_match_players() below. Whatever process
+          # generates all_seasons.json.zip (outside this repo) has been
+          # producing matches where the same player appears more than
+          # once in a single match's "players" array - identical rows,
+          # same player_id, duplicated 2x-4x for some 2026 matches. That
+          # inflated career game counts on the site (e.g. Jai Arrow
+          # showing 101 games for South Sydney Rabbitohs instead of the
+          # real 99), since nrl-player.html counts one "game" per player
+          # row found with no dedup of its own. This can't be fixed at
+          # the true source since that generator isn't in this repo, so
+          # it's defended against here instead: for each match, only the
+          # first row per player_id is kept. Runs every time the zip is
+          # split, so it stays safe even if the upstream duplication
+          # keeps happening on future re-uploads.
+
+          def dedup_match_players(match):
+              seen = set()
+              deduped = []
+              for p in match.get("players") or []:
+                  key = p.get("player_id") or (p.get("player"), p.get("played_for"))
+                  if key in seen:
+                      continue
+                  seen.add(key)
+                  deduped.append(p)
+              match["players"] = deduped
+              return match
+
           os.makedirs("docs/data/nrl/seasons", exist_ok=True)
           with open("docs/data/nrl/all_seasons.json", encoding="utf-8") as f:
               all_matches = json.load(f)
+
+          total_dupe_rows_removed = 0
           by_season = {}
           for match in all_matches:
+              before = len(match.get("players") or [])
+              match = dedup_match_players(match)
+              total_dupe_rows_removed += before - len(match["players"])
+
               season = str(match.get("season") or match.get("year") or "unknown")
               by_season.setdefault(season, []).append(match)
+
+          if total_dupe_rows_removed:
+              print("Removed %d duplicate player rows across all matches" % total_dupe_rows_removed)
+
           for season, matches in sorted(by_season.items()):
               path = "docs/data/nrl/seasons/%s.json" % season
               with open(path, "w", encoding="utf-8") as f:
                   json.dump(matches, f)
               print("%s: %d matches" % (season, len(matches)))
+
           # Write index.json
           seasons = sorted(by_season.keys())
           with open("docs/data/nrl/index.json", "w", encoding="utf-8") as f:

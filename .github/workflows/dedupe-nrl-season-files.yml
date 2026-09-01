@@ -1,0 +1,90 @@
+name: Dedupe NRL Season Files
+
+# One-off fix for duplicate player rows already committed to
+# docs/data/nrl/seasons/*.json - specifically 2026.json, where every
+# one of its 196 matches had the same player appearing 2x-4x in the
+# "players" array. This inflated on-site career game counts (e.g.
+# Jai Arrow showing 101 games for South Sydney Rabbitohs instead of
+# the real 99), since nrl-player.html counts one game per player row
+# with no dedup of its own.
+#
+# This is separate from the fix already made to
+# extract-nrl-zip.yml / split_nrl_seasons.py, which stops NEW
+# duplicates from being introduced next time all_seasons.json.zip is
+# re-uploaded. This workflow cleans up what's already sitting in the
+# repo from before that fix existed.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES to dedupe all NRL season files on GitHub'
+        required: true
+        default: 'NO'
+
+jobs:
+  dedupe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Abort unless confirmed
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "YES" ]; then
+            echo "Confirmation input was not 'YES' -- doing nothing. Re-run and type YES to proceed."
+            exit 1
+          fi
+
+      - name: Dedupe player rows in every season file
+        run: |
+          python3 - << 'PYEOF'
+          import json, glob
+
+          total_files = 0
+          total_matches_fixed = 0
+          total_rows_removed = 0
+
+          for path in sorted(glob.glob("docs/data/nrl/seasons/*.json")):
+              total_files += 1
+              with open(path, encoding="utf-8") as f:
+                  matches = json.load(f)
+
+              file_changed = False
+
+              for match in matches:
+                  seen = set()
+                  deduped = []
+                  removed_here = 0
+                  for p in match.get("players") or []:
+                      key = p.get("player_id") or (p.get("player"), p.get("played_for"))
+                      if key in seen:
+                          removed_here += 1
+                          continue
+                      seen.add(key)
+                      deduped.append(p)
+                  if removed_here:
+                      match["players"] = deduped
+                      total_matches_fixed += 1
+                      total_rows_removed += removed_here
+                      file_changed = True
+
+              if file_changed:
+                  with open(path, "w", encoding="utf-8") as f:
+                      json.dump(matches, f)
+                  print("Fixed:", path)
+
+          print()
+          print("Season files scanned:", total_files)
+          print("Matches with duplicates removed:", total_matches_fixed)
+          print("Total duplicate player rows removed:", total_rows_removed)
+          PYEOF
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/nrl/seasons
+          git diff --cached --quiet || git commit -m "Dedupe duplicate player rows in NRL season files (fixes inflated career game counts)"
+          git pull origin main --no-rebase --no-edit
+          git push
