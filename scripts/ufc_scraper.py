@@ -20,6 +20,7 @@ import json
 import time
 import sys
 from pathlib import Path
+from datetime import date, timedelta
 
 BASE      = "https://sports.core.api.espn.com/v2/sports/mma/leagues/ufc"
 SITE_BASE = "https://site.api.espn.com/apis/site/v2/sports/mma/ufc"
@@ -34,6 +35,22 @@ FIGHTERS_INDEX = Path("docs/data/ufc/fighters.json")
 
 START_YEAR = int(sys.argv[1]) if len(sys.argv) > 1 else 1993
 END_YEAR   = int(sys.argv[2]) if len(sys.argv) > 2 else 2026
+
+# CHANGED: events within this many days of "now" are always re-fetched
+# even if a file already exists for them, instead of being skipped
+# outright. The scraper used to treat "the file exists" as "this
+# event is fully scraped", but that's only true once ESPN has posted
+# final results - if a run happens to catch an event mid-card (or
+# right before it starts, with zero fights marked completed yet), it
+# would write a near-empty or empty fights list ONE TIME and then
+# never look at that event again, permanently. That's exactly what
+# happened to two recent events: one scraped with 2 of ~12 fights
+# recorded, another scraped with 0 fights recorded despite the event
+# having already happened by the time anyone looked at the site. This
+# window gives events time to get their final results posted (and
+# picked up on a subsequent weekly run) before the scraper trusts the
+# cached file and stops re-checking them.
+RECENT_WINDOW_DAYS = 21
 
 # Load existing data
 events_index   = {}
@@ -195,9 +212,29 @@ for i, eref in enumerate(all_event_refs):
     year = eref["year"]
 
     out_file = EVENTS_DIR / f"{eid}.json"
-    if out_file.exists():
+
+    # CHANGED: see RECENT_WINDOW_DAYS above. Only skip re-fetching if
+    # the file exists AND (we have no cached date for it, meaning it
+    # predates this change and its actual age is unknown so it's left
+    # alone, OR) the event is old enough that its results are safely
+    # final. Anything within the recent window gets re-fetched every
+    # run regardless of whether a file already exists, so an event
+    # caught mid-card or pre-results on one run gets corrected on a
+    # later one instead of staying wrong forever.
+    cached_date = events_index.get(eid, {}).get("date", "")
+    is_recent = False
+    if cached_date:
+        try:
+            event_dt = date.fromisoformat(cached_date[:10])
+            is_recent = event_dt >= (date.today() - timedelta(days=RECENT_WINDOW_DAYS))
+        except ValueError:
+            is_recent = False
+
+    if out_file.exists() and not is_recent:
         print(f"  SKIP {eid} (already saved)")
         continue
+    elif out_file.exists() and is_recent:
+        print(f"  RE-FETCH {eid} (recent event, checking for updated results)")
 
     # Fetch event metadata
     meta = get(f"{BASE}/events/{eid}?lang=en&region=us")
