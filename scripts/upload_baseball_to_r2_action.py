@@ -81,14 +81,40 @@ def main():
 
     print(f"Found {len(all_files)} file(s) under {LOCAL_ROOT}.")
 
+    # ROOT CAUSE FIX: this script previously skipped ANY file whose R2 key
+    # already existed, unconditionally, forever -- fine for the bulk of
+    # this tree (historical box scores that never change once written),
+    # but wrong for the derived aggregate outputs build_baseball_players.py
+    # produces: players/*.json, players.json, and season_leaders/*.json
+    # get fully rebuilt from scratch every time that script runs, but this
+    # upload step would silently refuse to ever push the updated versions
+    # up to R2 once a same-named file existed there once -- meaning a
+    # player's page could stay stuck on stale data forever even after the
+    # underlying build was correctly fixed and re-run. Those specific
+    # paths are always re-uploaded now; everything else keeps the
+    # skip-if-exists optimization (the historical archive is large and
+    # genuinely static, so re-uploading all of it every run would be slow
+    # and pointless).
+    def is_always_fresh(rel_path):
+        rel = rel_path.replace(os.sep, "/")
+        return (rel.startswith("players/") or rel == "players.json"
+                or rel.startswith("season_leaders/"))
+
     todo = []
+    always_fresh_count = 0
     for local_path in all_files:
         rel_path = os.path.relpath(local_path, LOCAL_ROOT)
         r2_key = f"{R2_PREFIX}/{rel_path}".replace(os.sep, "/")
-        if r2_key not in existing_keys:
+        if is_always_fresh(rel_path):
+            always_fresh_count += 1
+            todo.append((local_path, rel_path, r2_key))
+        elif r2_key not in existing_keys:
             todo.append((local_path, rel_path, r2_key))
 
-    print(f"{len(all_files) - len(todo)} already uploaded, {len(todo)} remaining this run.")
+    print(f"{always_fresh_count} derived aggregate file(s) (players/season_leaders) "
+          f"always re-uploaded regardless of R2 state.")
+    print(f"{len(all_files) - len(todo)} other file(s) already uploaded and skipped, "
+          f"{len(todo)} remaining this run.")
 
     if not todo:
         print("Nothing left to do.")
