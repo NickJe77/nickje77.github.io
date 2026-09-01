@@ -1,0 +1,50 @@
+name: NFL Scrape Season
+
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: "Season year (e.g. 2026)"
+        required: true
+        default: "2026"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests beautifulsoup4
+
+      - name: Scrape season (schedule + any available boxscores)
+        run: python3 scripts/nfl_scrape_season.py ${{ github.event.inputs.season }}
+
+      - name: Rebuild players.json / index.json
+        run: python3 scripts/build_nfl_players.py
+
+      - name: Show output
+        run: |
+          echo "=== season file ==="
+          ls -la docs/data/nfl/seasons/${{ github.event.inputs.season }}.json
+          echo "=== boxscore count ==="
+          find docs/data/nfl/boxscores/${{ github.event.inputs.season }} -name "*.json" 2>/dev/null | wc -l
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/nfl/
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "NFL scrape: season ${{ github.event.inputs.season }}"
+          git pull --rebase origin main
+          git push origin HEAD
