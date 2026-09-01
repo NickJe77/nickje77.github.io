@@ -251,6 +251,37 @@ fetch("data/nrl/index.json")
           (match.players||[]).forEach(p=>{
             allPlayers.add(p.player);
             if(p.player === player){
+
+              // CHANGED: docs/data/nrl/seasons/2021.json contains one
+              // row that never actually happened - Jai Arrow listed
+              // for South Sydney in a "Round 25" 2021 match
+              // (match_id 113552506) that doesn't exist in his real
+              // career log; he was named in the squad (jersey 18) but
+              // never took the field. That single row was inflating
+              // his career game count by one (101 with an earlier
+              // duplicate-row bug already fixed elsewhere, then 100
+              // even after that fix, when it should be 99).
+              //
+              // An earlier version of this filter tried to catch this
+              // generally (any row with jersey > 17 and every stat at
+              // zero), on the theory that jersey 18+ means an unused
+              // extended-squad player. That turned out to be wrong: a
+              // verified real game - his 2026 Round 26 appearance,
+              // jersey 23, also all-zero stats, but confirmed as
+              // career game #179 in his official log - has exactly
+              // the same shape and would have been wrongly excluded
+              // too. So this is a specific, evidence-checked
+              // exclusion for the one row confirmed to be wrong, not
+              // a general rule - the same "jersey 18+/all-zero"
+              // pattern elsewhere on the site has NOT been verified
+              // and should not be assumed to be a phantom row without
+              // checking it the same way this one was checked.
+              const KNOWN_BAD_ROWS = new Set([
+                "113552506|991249", // Jai Arrow, 2021 "Round 25" - never happened, not in his real career log
+              ]);
+              const rowKey = (match.match_id||"") + "|" + (p.player_id||"");
+              if(KNOWN_BAD_ROWS.has(rowKey)) return;
+
               const isHome = p.played_for === match.home_team;
               games.push({
                 season:   match.season || y,
