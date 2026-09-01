@@ -248,7 +248,32 @@ fetch("data/nrl/index.json")
       .then(r=>r.json())
       .then(matches=>{
         matches.forEach(match=>{
-          (match.players||[]).forEach(p=>{
+
+          // CHANGED: whatever process uploads season JSON (the old
+          // zip pipeline, or season files uploaded directly, as
+          // 2026.json has been since) has repeatedly produced matches
+          // where the same player_id appears more than once in
+          // "players" - identical duplicate rows, not different
+          // players. This inflates every stat and the game count for
+          // anyone affected, and it's happened more than once with
+          // different upload methods, so rather than relying on a fix
+          // living in one particular upload pipeline, it's deduped
+          // right here at load time - safe regardless of how the data
+          // arrives. This only removes EXACT duplicate rows for the
+          // same player_id within the same match; it does not try to
+          // guess which rows are "real" games (see the KNOWN_BAD_ROWS
+          // exclusion below for that - a different, evidence-checked
+          // problem, not a duplicate-row one).
+          const seenIds = new Set();
+          const dedupedPlayers = [];
+          for(const p of (match.players||[])){
+            const idKey = p.player_id || (p.player+"|"+p.played_for);
+            if(seenIds.has(idKey)) continue;
+            seenIds.add(idKey);
+            dedupedPlayers.push(p);
+          }
+
+          dedupedPlayers.forEach(p=>{
             allPlayers.add(p.player);
             if(p.player === player){
 
