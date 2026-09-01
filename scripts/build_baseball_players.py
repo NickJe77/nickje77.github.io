@@ -4,12 +4,37 @@ import json
 import glob
 import shutil
 import subprocess
+import requests
 from collections import defaultdict
 
 BASE = "docs/data/baseball"
 BOX_DIR = f"{BASE}/boxscores"
 PLAYERS_DIR = f"{BASE}/players"
 EVENTS_DIR = f"{BASE}/events"
+
+# ROOT CAUSE FIX: the scraper (mlb_rebuild_2026_safe.py) writes box scores
+# straight to R2, not to this git-local BOX_DIR at all -- see that script's
+# own docstring ("writes straight to R2 instead of docs/data/baseball/ in
+# git"). This script previously only ever globbed BOX_DIR, so any season
+# scraped after that change (2026 onward) was invisible to it: individual
+# game pages (baseball-game.html) fetch straight from R2 and worked fine,
+# but this aggregation script never saw those games at all, so player
+# stats were silently missing while scores kept working. Fixed by also
+# pulling box scores directly from the same public R2 bucket, using each
+# season's index file (which lists every game's filename) to know what to
+# fetch -- no R2 credentials needed, same public URL the game page uses.
+R2_PUBLIC = "https://pub-68c8b4322a9d4d7f9b875047b45ac7c6.r2.dev"
+R2_SEASON_RANGE = range(2015, 2028)  # generously covers any season the scraper might have run for
+
+
+def fetch_r2_json(path):
+    try:
+        r = requests.get(f"{R2_PUBLIC}/{path}", timeout=15)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except (requests.RequestException, ValueError):
+        return None
 
 # Clean and recreate players dir
 if os.path.exists(PLAYERS_DIR):
@@ -233,20 +258,7 @@ for ef in event_files:
     except Exception as e:
         print(f"FAILED EVENT FILE {ef}: {e}")
 
-# ======================================================
-# PARSE JSON BOXSCORES
-# ======================================================
-
-json_files = glob.glob(f"{BOX_DIR}/**/*.json", recursive=True)
-print(f"FOUND {len(json_files)} JSON BOXSCORES")
-
-for file in json_files:
-    try:
-        with open(file, "r", encoding="utf-8") as f:
-            game = json.load(f)
-    except Exception:
-        continue
-
+def process_boxscore_game(game, source_label=""):
     season = str(game.get("season", ""))
     date = game.get("date", "")
     raw_home = game.get("home_team", "") or game.get("home_code", "")
@@ -284,7 +296,7 @@ for file in json_files:
                     "SO": stats.get("strikeOuts", 0)
                 })
         except Exception as e:
-            print(f"FAILED RAW {file}: {e}")
+            print(f"FAILED {source_label}: {e}")
 
     elif "home_batting" in game or "away_batting" in game:
         try:
@@ -307,7 +319,46 @@ for file in json_files:
                     "SO": p.get("SO", 0)
                 })
         except Exception:
+            pass
+
+
+# ======================================================
+# PARSE JSON BOXSCORES -- local git-committed files (historical seasons)
+# ======================================================
+
+json_files = glob.glob(f"{BOX_DIR}/**/*.json", recursive=True)
+print(f"FOUND {len(json_files)} JSON BOXSCORES (local git)")
+
+for file in json_files:
+    try:
+        with open(file, "r", encoding="utf-8") as f:
+            game = json.load(f)
+    except Exception:
+        continue
+    process_boxscore_game(game, source_label=file)
+
+# ======================================================
+# PARSE JSON BOXSCORES -- direct from R2 (current/recent seasons the
+# scraper writes straight to R2, never to the local git path above)
+# ======================================================
+
+r2_game_count = 0
+for season_try in R2_SEASON_RANGE:
+    index = fetch_r2_json(f"baseball/seasons/{season_try}.json")
+    if not index:
+        continue
+    print(f"R2: season {season_try} index has {len(index)} game(s) listed")
+    for entry in index:
+        game_file = entry.get("game_file")
+        if not game_file:
             continue
+        game = fetch_r2_json(f"baseball/boxscores/{season_try}/{game_file}")
+        if not game:
+            continue
+        process_boxscore_game(game, source_label=f"R2:{season_try}/{game_file}")
+        r2_game_count += 1
+
+print(f"FOUND {r2_game_count} JSON BOXSCORES (R2)")
 
 # ======================================================
 # BUILD PLAYER FILES
