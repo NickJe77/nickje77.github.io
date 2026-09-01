@@ -191,18 +191,22 @@ def put_json(client, key, data):
 
 
 def existing_boxscore_is_empty(client, key):
-    """Checks whether an existing R2 box score file actually has real
-    player data, not just whether a file with that name exists.
+    """Checks whether an existing R2 box score file actually has real,
+    DISPLAYABLE player data -- not just whether the file exists, and not
+    just whether the players dict is technically non-empty.
 
-    Found via a real reported case: a game's stored file
-    (2026-08-26_COL_WSH.json -- note the OLD legacy filename, no gamePk
-    suffix) had liveData.boxscore present but with empty player dicts
-    for both teams and a 0-0 score, and was never refreshed because the
-    "already have" check only ever verified the file existed, never
-    that its content was actually usable. This targets exactly that:
-    only called for legacy-format matches (new-format files are written
-    by the current, working scraper and are far less likely to be
-    stale), so it doesn't add a GET-per-game cost to the common case.
+    Found via a real reported case (2026-08-26_COL_WSH.json) where the
+    first version of this check still missed it: the players dict had
+    real entries (a lineup), but every player had all-zero batting
+    stats -- e.g. captured before anyone had actually batted. The site's
+    own rendering (renderBatting in baseball-game.html) explicitly skips
+    any player with zero atBats/walks/hitByPitch/sacFlies, so the page
+    showed empty tables even though `players` wasn't an empty dict by
+    itself. This mirrors that same "would this actually display
+    anything" check instead of just checking dict presence. A 0-0 final
+    score is also checked on its own, since a real completed MLB game
+    essentially never ends 0-0 -- that alone is a strong enough signal
+    regardless of what the players data looks like.
     """
     try:
         obj = client.get_object(Bucket=BUCKET_NAME, Key=key)
@@ -212,20 +216,29 @@ def existing_boxscore_is_empty(client, key):
         # rather than silently trusted.
         return True
 
-    live = data.get("liveData", {})
-    box = live.get("boxscore", {}).get("teams", {})
-    home_players = box.get("home", {}).get("players", {})
-    away_players = box.get("away", {}).get("players", {})
-    if not home_players and not away_players:
-        return True
-
     home_score = data.get("home_team", {})
     away_score = data.get("away_team", {})
     if isinstance(home_score, dict):
         home_score = home_score.get("score", 0) or 0
     if isinstance(away_score, dict):
         away_score = away_score.get("score", 0) or 0
-    if home_score == 0 and away_score == 0 and not home_players and not away_players:
+    if home_score == 0 and away_score == 0:
+        return True
+
+    live = data.get("liveData", {})
+    box = live.get("boxscore", {}).get("teams", {})
+    home_players = box.get("home", {}).get("players", {})
+    away_players = box.get("away", {}).get("players", {})
+
+    def has_displayable_batter(players):
+        for pdata in players.values():
+            b = (pdata.get("stats") or {}).get("batting") or {}
+            if (b.get("atBats") or 0) or (b.get("walks") or 0) or \
+               (b.get("hitByPitch") or 0) or (b.get("sacFlies") or 0):
+                return True
+        return False
+
+    if not has_displayable_batter(home_players) and not has_displayable_batter(away_players):
         return True
 
     return False
