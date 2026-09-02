@@ -202,11 +202,6 @@ tr:last-child td{border-bottom:none;}
         </a>
     </div>
 
-    <h2 class="section-title">Records</h2>
-    <div id="recordsGrid" class="records-grid">
-        <div class="loading">Loading records...</div>
-    </div>
-
     <h2 class="section-title">Seasons</h2>
     <div id="seasonsContainer" class="tiles">
         <div class="loading">Loading Bundesliga seasons...</div>
@@ -217,13 +212,6 @@ tr:last-child td{border-bottom:none;}
 <div class="footer">© The Sporting Almanac</div>
 
 <script>
-
-const SEASONS = [
-    "2025-26","2024-25","2023-24","2022-23","2021-22","2020-21",
-    "2019-20","2018-19","2017-18","2016-17","2015-16","2014-15",
-    "2013-14","2012-13","2011-12","2010-11","2009-10","2008-09",
-    "2007-08","2006-07","2005-06","2004-05"
-];
 
 function slugify(name){
     return (name||'').toLowerCase().replace(/\./g,'').replace(/'/g,'').replace(/\u2019/g,'').replace(/"/g,'').replace(/\s+/g,'-');
@@ -256,108 +244,20 @@ function recordTable(rows, cols){
     return `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
-async function loadRecords(){
-    try{
-        const [playersRes, teamStatsRes, matchRecordsRes] = await Promise.all([
-            fetch('/data/bundesliga/players.json'),
-            fetch('/data/bundesliga/team-stats.json'),
-            fetch('/data/bundesliga/match-records.json'),
-        ]);
-        const players      = await playersRes.json();
-        const allTeamStats = await teamStatsRes.json();
-        const matchRecords = await matchRecordsRes.json();
-
-        const careerGoals = [...players].filter(p=>p.goals>0).sort((a,b)=>b.goals-a.goals).slice(0,10)
-            .map(p=>({rank:'',name:playerLink(p.name),goals:p.goals}));
-
-        const seasonGoals = [];
-        players.forEach(p=>{
-            (p.season_stats||[]).forEach(s=>{
-                if(s.goals>0) seasonGoals.push({name:playerLink(p.name),season:shortSeason(s.season),team:teamLink(s.team),goals:s.goals});
-            });
-        });
-        seasonGoals.sort((a,b)=>b.goals-a.goals);
-        const topSeasonGoals = seasonGoals.slice(0,10).map(r=>({rank:'',...r}));
-
-        const careerYellows = [...players].filter(p=>p.yellow_cards>0).sort((a,b)=>b.yellow_cards-a.yellow_cards).slice(0,10)
-            .map(p=>({rank:'',name:playerLink(p.name),yellow_cards:p.yellow_cards}));
-
-        const careerReds = [...players].filter(p=>p.red_cards>0).sort((a,b)=>b.red_cards-a.red_cards).slice(0,10)
-            .map(p=>({rank:'',name:playerLink(p.name),red_cards:p.red_cards}));
-
-        const teamTotals = {};
-        allTeamStats.forEach(s=>{
-            if(!teamTotals[s.team]) teamTotals[s.team]={team:s.team,played:0,wins:0,draws:0,losses:0,goals_for:0,goals_against:0,points:0,seasons:0,clean_sheets:0};
-            const t=teamTotals[s.team];
-            t.played+=s.played||0; t.wins+=s.wins||0; t.draws+=s.draws||0; t.losses+=s.losses||0;
-            t.goals_for+=s.goals_for||0; t.goals_against+=s.goals_against||0;
-            t.points+=s.points||0; t.clean_sheets+=s.clean_sheets||0; t.seasons++;
-        });
-        const teams = Object.values(teamTotals);
-
-        const mostWins = [...teams].sort((a,b)=>b.wins-a.wins).slice(0,10)
-            .map(t=>({rank:'',team:teamLink(t.team),wins:t.wins,played:t.played,seasons:t.seasons}));
-
-        const mostWinsSeason = [...allTeamStats].sort((a,b)=>b.wins-a.wins).slice(0,10)
-            .map(s=>({rank:'',team:teamLink(s.team),season:shortSeason(s.season),wins:s.wins,points:s.points}));
-
-        const mostGoalsSeason = [...allTeamStats].sort((a,b)=>b.goals_for-a.goals_for).slice(0,10)
-            .map(s=>({rank:'',team:teamLink(s.team),season:shortSeason(s.season),goals:s.goals_for}));
-
-        const mostGoalsAllTime = [...teams].sort((a,b)=>b.goals_for-a.goals_for).slice(0,10)
-            .map(t=>({rank:'',team:teamLink(t.team),goals:t.goals_for,seasons:t.seasons}));
-
-        const mostCleanSheetsSeason = [...allTeamStats].sort((a,b)=>b.clean_sheets-a.clean_sheets).slice(0,10)
-            .map(s=>({rank:'',team:teamLink(s.team),season:shortSeason(s.season),clean_sheets:s.clean_sheets}));
-
-        const mostCleanSheetsAllTime = [...teams].sort((a,b)=>b.clean_sheets-a.clean_sheets).slice(0,10)
-            .map(t=>({rank:'',team:teamLink(t.team),clean_sheets:t.clean_sheets,seasons:t.seasons}));
-
-        const biggestWins = (matchRecords.biggest_wins||[]).slice(0,10).map(g=>{
-            const diff=Math.abs(g.home_score-g.away_score);
-            const winner=g.home_score>g.away_score?g.home_team:g.away_team;
-            const loser=g.home_score>g.away_score?g.away_team:g.home_team;
-            return {rank:'',winner:teamLink(winner),loser:teamLink(loser),score:`${g.home_score}-${g.away_score}`,season:shortSeason(g.season),margin:diff};
-        });
-
-        const highestScoring = (matchRecords.highest_scoring||[]).slice(0,10).map(g=>({
-            rank:'',home:teamLink(g.home_team),away:teamLink(g.away_team),
-            score:`${g.home_score}-${g.away_score}`,season:shortSeason(g.season),
-            total:g.home_score+g.away_score
-        }));
-
-        const sections = [
-            {title:'⚽ Most Career Goals',table:recordTable(careerGoals,[{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'goals',label:'Goals'}])},
-            {title:'⚽ Most Goals in a Season',table:recordTable(topSeasonGoals,[{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'season',label:'Season'},{key:'team',label:'Club'},{key:'goals',label:'Goals'}])},
-            {title:'🟨 Most Career Yellow Cards',table:recordTable(careerYellows,[{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'}])},
-            {title:'🟥 Most Career Red Cards',table:recordTable(careerReds,[{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'}])},
-            {title:'🏆 Most All-Time Wins',table:recordTable(mostWins,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'seasons',label:'Seasons'}])},
-            {title:'🏆 Most Wins in a Season',table:recordTable(mostWinsSeason,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'wins',label:'Wins'},{key:'points',label:'Points'}])},
-            {title:'⚽ Most Goals in a Season (Team)',table:recordTable(mostGoalsSeason,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'goals',label:'Goals'}])},
-            {title:'⚽ Most All-Time Goals (Team)',table:recordTable(mostGoalsAllTime,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'goals',label:'Goals'},{key:'seasons',label:'Seasons'}])},
-            {title:'🧤 Most Clean Sheets in a Season',table:recordTable(mostCleanSheetsSeason,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'clean_sheets',label:'Clean Sheets'}])},
-            {title:'🧤 Most All-Time Clean Sheets',table:recordTable(mostCleanSheetsAllTime,[{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'clean_sheets',label:'Clean Sheets'},{key:'seasons',label:'Seasons'}])},
-            {title:'💥 Biggest Winning Margins',table:recordTable(biggestWins,[{key:'rank',label:'#'},{key:'winner',label:'Winner'},{key:'loser',label:'Loser'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'margin',label:'Margin'}])},
-            {title:'🔥 Highest Scoring Matches',table:recordTable(highestScoring,[{key:'rank',label:'#'},{key:'home',label:'Home'},{key:'away',label:'Away'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'total',label:'Total Goals'}])},
-        ];
-
-        document.getElementById('recordsGrid').innerHTML = sections.map(s=>`
-            <div class="record-section">
-                <h3>${s.title}</h3>
-                ${s.table}
-            </div>
-        `).join('');
-
-    }catch(err){
-        console.error(err);
-        document.getElementById('recordsGrid').innerHTML = '<div class="loading">Failed to load records</div>';
-    }
-}
-
 function loadSeasons(){
     const container = document.getElementById("seasonsContainer");
     container.innerHTML = "";
-    SEASONS.forEach(season=>{
+    // Was a hardcoded array of "2025-26"-style (2-digit) season strings --
+    // the real season files are named "2025-2026.json" (4-digit), so every
+    // link this generated 404'd. Confirmed live: 1988-89 is the earliest
+    // real season, so that's the floor here rather than a guess.
+    const currentYear = new Date().getFullYear();
+    const seasons = [];
+    for(let year=1988; year<=currentYear; year++){
+        seasons.push(`${year}-${year+1}`);
+    }
+    seasons.reverse();
+    seasons.forEach(season=>{
         const tile = document.createElement("a");
         tile.className = "tile";
         tile.href = `/bundesliga-season.html?season=${season}`;
@@ -399,7 +299,6 @@ document.getElementById("playerSearch").addEventListener("change", async (e)=>{
 
 loadSeasons();
 loadPlayers();
-loadRecords();
 
 </script>
 </body>
