@@ -222,6 +222,19 @@ function showNotFound(msg){
   content.innerHTML = "";
 }
 
+// Same canonicalization as build_ligue1_data.py -- this page reads the
+// raw match file directly, so team names here need their own
+// normalization pass. "Paris FC" is genuinely different and not mapped.
+const TEAM_NAME_CANONICAL = {
+    "psg": "Paris Saint-Germain",
+    "paris saint germain": "Paris Saint-Germain",
+    "paris sg": "Paris Saint-Germain",
+};
+function canonicalTeam(name){
+    if(!name) return name;
+    return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
 async function loadMatch(){
     try{
         const response = await fetch(`/data/ligue1/matches/${season}/${matchId}.json`);
@@ -229,6 +242,11 @@ async function loadMatch(){
             throw new Error("Match not found");
         }
         const match = await response.json();
+        if(match.home_team) match.home_team = canonicalTeam(match.home_team);
+        if(match.away_team) match.away_team = canonicalTeam(match.away_team);
+        (match.scorers||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
+        (match.yellow_cards||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
+        (match.red_cards||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
         renderMatch(match);
     }catch(err){
         console.error(err);

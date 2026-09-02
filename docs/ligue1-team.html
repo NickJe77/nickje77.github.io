@@ -193,8 +193,23 @@ function playerSlug(p){
   return firstTeam ? `${name}--${firstTeam}` : name;
 }
 
+// Same canonicalization as build_ligue1_data.py -- this page reads raw
+// season files directly for its match list, so both the team name from
+// the URL and the raw games' home/away fields need normalizing, or a
+// filter comparing them (canonical vs raw) would silently miss games.
+// "Paris FC" is genuinely different and not mapped.
+const TEAM_NAME_CANONICAL = {
+    "psg": "Paris Saint-Germain",
+    "paris saint germain": "Paris Saint-Germain",
+    "paris sg": "Paris Saint-Germain",
+};
+function canonicalTeam(name){
+    if(!name) return name;
+    return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
 const params   = new URLSearchParams(window.location.search);
-const teamName = params.get("team") || "";
+const teamName = canonicalTeam(params.get("team") || "");
 const page     = document.getElementById("page");
 
 async function loadTeam(){
@@ -226,6 +241,10 @@ async function loadTeam(){
         if(!r.ok) return [];
         const data = await r.json();
         const games = Array.isArray(data) ? data : (data.games || []);
+        games.forEach(g => {
+          if(g.home) g.home = canonicalTeam(g.home);
+          if(g.away) g.away = canonicalTeam(g.away);
+        });
         return games
           .filter(g => g.home === teamName || g.away === teamName)
           .map(g => ({ ...g, season: seasonId }));

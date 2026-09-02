@@ -149,11 +149,29 @@ async function loadSeason() {
   matchesContainer.innerHTML = '<div class="loading">Loading matches...</div>';
   teamFilter.innerHTML = '<option value="">All Teams</option>';
 
+// Same canonicalization as build_ligue1_data.py -- this page reads the
+// raw season file directly (not the build script's output), so team
+// names here need their own normalization pass. "Paris FC" is a
+// genuinely different real club and is deliberately not mapped.
+const TEAM_NAME_CANONICAL = {
+  "psg": "Paris Saint-Germain",
+  "paris saint germain": "Paris Saint-Germain",
+  "paris sg": "Paris Saint-Germain",
+};
+function canonicalTeam(name) {
+  if (!name) return name;
+  return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
   try {
     const response = await fetch(`/data/ligue1/seasons/${currentSeason}.json`);
     if (!response.ok) throw new Error("Season JSON not found");
     const data = await response.json();
-    allMatches = data.games || data;
+    allMatches = (data.games || data).map(m => {
+      if (m.home) m.home = canonicalTeam(m.home);
+      if (m.away) m.away = canonicalTeam(m.away);
+      return m;
+    });
     buildFilters();
     renderMatches();
   } catch (err) {
