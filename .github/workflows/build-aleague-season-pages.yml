@@ -1,0 +1,52 @@
+name: Build A-League Season Pages
+on:
+  workflow_run:
+    workflows: ["Build A-League Data"]
+    types: [completed]
+  workflow_dispatch:
+
+jobs:
+  build:
+    # Only run automatically if the data build actually succeeded --
+    # generating season pages from a failed/incomplete data build would
+    # bake in stale or broken team-stats.json content. workflow_dispatch
+    # (manual trigger) always runs regardless, since there's no preceding
+    # run to check the outcome of.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          # Ensures this checks out the same commit the data build just
+          # pushed, not a stale ref, so team-stats.json is current.
+          ref: main
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run season page generator
+        working-directory: docs
+        run: node generate-aleague-season-pages.js
+
+      - name: Move generated pages into docs/
+        working-directory: docs
+        run: |
+          mv out-aleague-seasons/*.html .
+          rmdir out-aleague-seasons
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/aleague-*-season.html
+          git diff --cached --quiet && echo "No changes to commit" && exit 0
+          git commit -m "Regenerate A-League season pages [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD
