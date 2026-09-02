@@ -162,6 +162,7 @@ def main():
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
+    match_summaries = []  # feeds match-records.json (biggest wins, highest scoring)
 
     for file_path in match_files:
         try:
@@ -179,6 +180,12 @@ def main():
 
         teams_set.add(home_team)
         teams_set.add(away_team)
+        if home_team and away_team:
+            match_summaries.append({
+                "home_team": home_team, "away_team": away_team,
+                "home_score": home_score, "away_score": away_score,
+                "season": season,
+            })
 
         # ── Team stats ────────────────────────────────────────────────────────
         for team, scored, conceded in [
@@ -287,11 +294,31 @@ def main():
         key=lambda s: (s["season"], s["team"])
     )
 
+    # ── Match records (biggest wins, highest scoring) ─────────────────────────
+    # Two pages (bundesliga.html, bundesliga-records.html) already expect this
+    # file and its exact shape -- it just never got generated, since this
+    # script previously only wrote players/teams/team-stats.
+    biggest_wins = sorted(
+        match_summaries,
+        key=lambda g: abs(g["home_score"] - g["away_score"]),
+        reverse=True,
+    )[:25]
+    highest_scoring = sorted(
+        match_summaries,
+        key=lambda g: g["home_score"] + g["away_score"],
+        reverse=True,
+    )[:25]
+    match_records = {
+        "biggest_wins": biggest_wins,
+        "highest_scoring": highest_scoring,
+    }
+
     # ── Write output files ────────────────────────────────────────────────────
     print()
-    write_json(OUT_DIR / "players.json",    players)
-    write_json(OUT_DIR / "teams.json",      teams)
-    write_json(OUT_DIR / "team-stats.json", team_stats)
+    write_json(OUT_DIR / "players.json",       players)
+    write_json(OUT_DIR / "teams.json",         teams)
+    write_json(OUT_DIR / "team-stats.json",    team_stats)
+    write_json(OUT_DIR / "match-records.json", match_records)
 
     print(f"\n🏆  Done! {len(match_files)} matches → {len(players)} players, {len(teams)} teams.")
 
