@@ -21,6 +21,27 @@ REPO_ROOT   = Path(__file__).parent.parent
 MATCHES_DIR = REPO_ROOT / "docs" / "data" / "ligue1" / "matches"
 OUT_DIR     = REPO_ROOT / "docs" / "data" / "ligue1"
 
+# ── Team name canonicalization ───────────────────────────────────────────────
+# Raw match data can use different names/abbreviations for the same real
+# club (e.g. "PSG" as shorthand for "Paris Saint-Germain"). Left unmapped,
+# that splits one real team into two separate identities across every page
+# that reads team names -- same failure mode already found and fixed for
+# AFL (Bailey Williams) and Bundesliga (team name variants). "Paris FC" is
+# a genuinely different, separate real club and is deliberately NOT mapped
+# here -- it must never be merged with Paris Saint-Germain.
+TEAM_NAME_CANONICAL = {
+    "psg": "Paris Saint-Germain",
+    "paris saint germain": "Paris Saint-Germain",
+    "paris sg": "Paris Saint-Germain",
+}
+
+
+def canonical_team(name):
+    name = (name or "").strip()
+    if not name:
+        return name
+    return TEAM_NAME_CANONICAL.get(name.lower(), name)
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -140,8 +161,8 @@ def main():
             continue
 
         season     = season_from_path(file_path)
-        home_team  = (match.get("home_team") or "").strip()
-        away_team  = (match.get("away_team") or "").strip()
+        home_team  = canonical_team(match.get("home_team"))
+        away_team  = canonical_team(match.get("away_team"))
         home_score = match.get("home_score") or 0
         away_score = match.get("away_score") or 0
 
@@ -170,7 +191,7 @@ def main():
                 s["clean_sheets"] += 1
 
         for card in match.get("yellow_cards") or []:
-            team = (card.get("team") or "").strip()
+            team = canonical_team(card.get("team"))
             name = (card.get("player") or "").strip()
 
             if team:
@@ -186,7 +207,7 @@ def main():
                 ps["yellow_cards"] += 1
 
         for card in match.get("red_cards") or []:
-            team = (card.get("team") or "").strip()
+            team = canonical_team(card.get("team"))
             name = (card.get("player") or "").strip()
 
             if team:
@@ -203,7 +224,7 @@ def main():
 
         for scorer in match.get("scorers") or []:
             name = (scorer.get("player") or "").strip()
-            team = (scorer.get("team") or "").strip()
+            team = canonical_team(scorer.get("team"))
             if not name:
                 continue
 
