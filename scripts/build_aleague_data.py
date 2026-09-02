@@ -138,6 +138,7 @@ def main():
     players_map    = {}
     teams_set      = set()
     team_stats_map = {}
+    match_summaries = []  # feeds match-records.json (biggest wins, highest scoring)
     match_data     = {}  # match_id -> {home, away, score_home, score_away, date}
     skipped        = 0
     duplicates     = 0
@@ -168,6 +169,12 @@ def main():
         if not home_team or not away_team:
             skipped += 1
             continue
+
+        match_summaries.append({
+            "home_team": home_team, "away_team": away_team,
+            "home_score": home_score, "away_score": away_score,
+            "season": season,
+        })
 
         # Store for season JSON rebuild
         match_data[match_id] = {
@@ -247,6 +254,28 @@ def main():
     team_stats = sorted(team_stats_map.values(), key=lambda s: (s["season"], s["team"]))
 
     print()
+    # ── Match records (biggest wins, highest scoring) ─────────────────────────
+    # aleague-records.html already expects this file and its exact shape --
+    # it just never got generated, since this script previously only wrote
+    # players/teams/team-stats. Missing this made the whole records page
+    # fail (a 404 response body isn't valid JSON, so the fetch's .json()
+    # call throws, which surfaces as "Failed to load records").
+    biggest_wins = sorted(
+        match_summaries,
+        key=lambda g: abs(g["home_score"] - g["away_score"]),
+        reverse=True,
+    )[:25]
+    highest_scoring = sorted(
+        match_summaries,
+        key=lambda g: g["home_score"] + g["away_score"],
+        reverse=True,
+    )[:25]
+    match_records = {
+        "biggest_wins": biggest_wins,
+        "highest_scoring": highest_scoring,
+    }
+    write_json(OUT_DIR / "match-records.json", match_records)
+
     write_json(OUT_DIR / "players.json",    players)
     write_json(OUT_DIR / "teams.json",      teams)
     write_json(OUT_DIR / "team-stats.json", team_stats)
