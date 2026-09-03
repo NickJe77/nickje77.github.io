@@ -20,6 +20,7 @@ Run from the root of your GitHub repo (nickje77.github.io/)
 """
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -59,12 +60,35 @@ def collect_json_files(directory: Path) -> list:
 
 
 def season_from_path(file_path: Path) -> str:
+    """Returns the single-year season identifier (e.g. "2024") used
+    throughout the site's output. The raw match folders on disk are
+    still split-year named ("2024-2025") -- that's the real, unchanged
+    upload structure -- but MLS runs a single-calendar-year season, so
+    everything derived from these files (players.json, teams.json,
+    team-stats.json, match-records.json) uses just the first year.
+    """
     parts = file_path.parts
     try:
         idx = list(parts).index("matches")
-        return parts[idx + 1]
+        folder_name = parts[idx + 1]
     except (ValueError, IndexError):
         return "unknown"
+
+    m = re.match(r"^(\d{4})-\d{4}$", folder_name)
+    if m:
+        return m.group(1)
+    return folder_name
+
+
+def split_year_folder(single_year: str) -> str:
+    """The inverse: given a single-year season identifier like "2024",
+    returns the actual split-year folder/file name on disk ("2024-2025").
+    Used only by scripts/pages that need to fetch the raw source files
+    directly, not the build script's own aggregate outputs.
+    """
+    if re.match(r"^\d{4}$", single_year):
+        return f"{single_year}-{int(single_year)+1}"
+    return single_year
 
 
 def write_json(file_path: Path, data):
