@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>MLS Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#c99a3d;
+  --league:#c99a3d;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+.page{max-width:1400px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Scorebug (matches EPL/NRL/AFL game pages) ───────────── */
+.scorebug{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;
+}
+.scorebug .eyebrow{
+  text-align:center;font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);
+  padding:18px 16px 0;
+}
+.bug-grid{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  gap:10px;padding:14px 30px 30px;
+}
+.bug-team{display:flex;align-items:center;gap:16px;min-width:0;}
+.bug-team.home{justify-content:flex-end;text-align:right;}
+.bug-team.away{justify-content:flex-start;text-align:left;}
+.bug-team a.tname{
+  font-family:var(--display);font-weight:600;font-size:clamp(16px,2.6vw,26px);
+  line-height:1.04;letter-spacing:.01em;text-transform:uppercase;color:#fff;text-decoration:none;
+}
+.bug-team a.tname:hover{color:var(--accent);}
+.crest{width:8px;align-self:stretch;min-height:54px;border-radius:6px;flex:0 0 auto;}
+.bug-score{
+  display:flex;align-items:center;gap:14px;font-family:var(--display);font-weight:600;
+  font-size:clamp(36px,7vw,64px);line-height:1;letter-spacing:.01em;
+}
+.bug-score .sc{font-variant-numeric:tabular-nums;}
+.bug-score .sc.lose{color:rgba(255,255,255,.42);font-weight:500;}
+.bug-score .dash{color:rgba(255,255,255,.3);font-weight:400;}
+.ft-badge{
+  position:absolute;top:16px;right:18px;font-family:var(--body);font-size:10.5px;
+  font-weight:700;letter-spacing:.12em;color:rgba(255,255,255,.85);
+  border:1px solid var(--board-line);border-radius:999px;padding:4px 10px;
+}
+
+@media(max-width:820px){
+  .bug-grid{grid-template-columns:1fr;gap:18px;padding:10px 18px 26px;}
+  .bug-team.home,.bug-team.away{justify-content:center;text-align:center;}
+  .crest{min-height:30px;}
+}
+
+/* ── Content ──────────────────────────────────────────── */
+.grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:18px;}
+@media(max-width:900px){.grid{grid-template-columns:1fr;}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;}
+.card h2{
+  margin-top:0;margin-bottom:18px;font-family:var(--display);font-weight:600;font-size:17px;
+  letter-spacing:.02em;text-transform:uppercase;color:var(--muted);
+}
+
+.event-list{display:flex;flex-direction:column;gap:10px;}
+.event{
+  display:flex;justify-content:space-between;align-items:center;background:#f7f9fb;
+  border:1px solid var(--line);padding:12px 14px;border-radius:12px;
+}
+.minute{font-family:var(--display);font-weight:600;color:var(--league);font-size:14px;}
+.player-link{color:var(--ink);text-decoration:none;font-weight:700;font-size:13.5px;}
+.player-link:hover{color:var(--accent);text-decoration:underline;}
+
+.loading{text-align:center;padding:50px;font-size:14px;color:var(--muted);}
+.empty{color:var(--muted);padding:12px 0;font-size:13px;}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/mls.html">MLS</a>
+  <a href="/mls-teams.html">Teams</a>
+  <a href="/mls-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="page">
+
+<div class="scorebug" id="scorebug">
+  <span class="ft-badge">FULL TIME</span>
+  <div class="eyebrow" id="eyebrowLine">Loading match…</div>
+  <div class="bug-grid">
+    <div class="bug-team home">
+      <a class="tname" id="homeTeamName" href="#"></a>
+      <div class="crest" id="homeCrest"></div>
+    </div>
+    <div class="bug-score">
+      <span class="sc" id="homeScore"></span>
+      <span class="dash">–</span>
+      <span class="sc" id="awayScore"></span>
+    </div>
+    <div class="bug-team away">
+      <div class="crest" id="awayCrest"></div>
+      <a class="tname" id="awayTeamName" href="#"></a>
+    </div>
+  </div>
+</div>
+
+<div id="content" class="loading">Loading match...</div>
+
+</div>
+
+<script>
+
+/* Flat club colours (same palette used on the MLS Head to Head page),
+   used here for the small crest bars in the scorebug. */
+// No verified real MLS club colors available -- every team uses
+// the neutral fallback gradient below rather than guessed hex codes.
+const TEAM_COLOURS = {};
+
+function crestColour(team){ return TEAM_COLOURS[team] || "#5a6472"; }
+
+const params     = new URLSearchParams(window.location.search);
+const matchId    = params.get("match");
+const season     = params.get("season");
+const matchDate  = params.get("date")  || '';
+const matchVenue = params.get("venue") || '';
+
+const content   = document.getElementById("content");
+
+function slugify(name){
+    return (name || '')
+        .toLowerCase()
+        .replace(/\./g,'')
+        .replace(/'/g,'')
+        .replace(/"/g,'')
+        .replace(/\s+/g,'-');
+}
+
+function showNotFound(msg){
+  document.getElementById("eyebrowLine").textContent = msg;
+  document.getElementById("scorebug").querySelector(".bug-grid").style.display = "none";
+  content.innerHTML = "";
+}
+
+// Same canonicalization as build_mls_data.py -- this page reads the
+// raw match file directly, so team names here need their own
+// normalization pass. "Paris FC" is genuinely different and not mapped.
+// No known MLS team-name collisions yet -- add entries here the
+// moment a real one is found (e.g. raw data using both "LAFC" and
+// "Los Angeles FC"), the same way it was done for Ligue 1's PSG case.
+const TEAM_NAME_CANONICAL = {};
+function canonicalTeam(name){
+    if(!name) return name;
+    return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
+// MLS runs single-calendar-year seasons ("2024"), but the raw match
+// files on disk are still split-year named (matches/2024-2025/*.json) --
+// that part of the upload structure is unchanged.
+function toSplitYearFile(singleYear){
+    const y = parseInt(singleYear, 10);
+    return `${y}-${y + 1}`;
+}
+
+async function loadMatch(){
+    try{
+        const response = await fetch(`/data/mls/matches/${toSplitYearFile(season)}/${matchId}.json`);
+        if(!response.ok){
+            throw new Error("Match not found");
+        }
+        const match = await response.json();
+        if(match.home_team) match.home_team = canonicalTeam(match.home_team);
+        if(match.away_team) match.away_team = canonicalTeam(match.away_team);
+        (match.scorers||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
+        (match.yellow_cards||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
+        (match.red_cards||[]).forEach(e => { if(e.team) e.team = canonicalTeam(e.team); });
+        renderMatch(match);
+    }catch(err){
+        console.error(err);
+        showNotFound("Failed to load match");
+    }
+}
+
+function renderEvents(events, label){
+    if(!events || !events.length){
+        return `<div class="empty">No ${label}</div>`;
+    }
+    return `
+        <div class="event-list">
+            ${events.map(event => `
+                <div class="event">
+                    <div>
+                        <a class="player-link"
+                           href="/mls-player.html?player=${slugify(event.player)}">
+                           ${event.player || ''}
+                        </a>
+                        ${event.penalty ? ' (P)' : ''}
+                        ${event.own_goal ? ' (OG)' : ''}
+                    </div>
+                    <div class="minute">${event.minute || ''}'</div>
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+function renderMatch(match){
+
+    document.title = `${match.home_team} vs ${match.away_team} | MLS Match`;
+
+    const date  = match.date  || matchDate;
+    const venue = match.venue || matchVenue;
+    document.getElementById("eyebrowLine").textContent = [date, venue].filter(Boolean).join(" · ");
+
+    const homeNameEl = document.getElementById("homeTeamName");
+    const awayNameEl = document.getElementById("awayTeamName");
+    homeNameEl.textContent = match.home_team;
+    homeNameEl.href = `/mls-team.html?team=${encodeURIComponent(match.home_team)}`;
+    awayNameEl.textContent = match.away_team;
+    awayNameEl.href = `/mls-team.html?team=${encodeURIComponent(match.away_team)}`;
+
+    document.getElementById("homeCrest").style.background = crestColour(match.home_team);
+    document.getElementById("awayCrest").style.background = crestColour(match.away_team);
+
+    const homeScore = match.home_score ?? null;
+    const awayScore = match.away_score ?? null;
+    const homeWin = homeScore != null && awayScore != null && homeScore > awayScore;
+    const awayWin = homeScore != null && awayScore != null && awayScore > homeScore;
+
+    const homeScoreEl = document.getElementById("homeScore");
+    const awayScoreEl = document.getElementById("awayScore");
+    homeScoreEl.textContent = homeScore ?? '-';
+    awayScoreEl.textContent = awayScore ?? '-';
+    homeScoreEl.classList.toggle("lose", awayWin);
+    awayScoreEl.classList.toggle("lose", homeWin);
+
+    content.innerHTML = `
+        <div class="grid">
+            <div class="card">
+                <h2>Goalscorers</h2>
+                ${renderEvents(match.scorers, 'goalscorers')}
+            </div>
+            <div class="card">
+                <h2>Yellow Cards</h2>
+                ${renderEvents(match.yellow_cards, 'yellow cards')}
+            </div>
+            <div class="card">
+                <h2>Red Cards</h2>
+                ${renderEvents(match.red_cards, 'red cards')}
+            </div>
+        </div>
+    `;
+}
+
+loadMatch();
+
+</script>
+
+</body>
+</html>
