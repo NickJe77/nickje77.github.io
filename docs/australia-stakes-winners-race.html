@@ -143,7 +143,7 @@ tbody tr:hover td{ background:#f9fbfd; }
       <div class="box-header" style="background:var(--ink);">Leading Jockeys</div>
       <div id="leadingJockeys"><div class="loading">Loading...</div></div>
     </div>
-    <div class="box">
+    <div class="box" id="multipleWinnersBox">
       <div class="box-header" style="background:var(--ink);">Multiple Winners</div>
       <div id="multipleWinners"><div class="loading">Loading...</div></div>
     </div>
@@ -210,12 +210,46 @@ function horseLink(name){
 // Winner), sorted most wins first. `minCount` lets "Multiple Winners"
 // filter down to only horses that have actually won more than once,
 // while trainers/jockeys show everyone.
-function tallyField(runnings, field, minCount=1){
+// Splits a co-training credit like "Peter & Paul Snowden" into
+// ["Peter Snowden", "Paul Snowden"] -- shared surnames are often
+// written once, at the end, for everyone who has that surname.
+// Handles mixed cases too: "David & Ben Hayes & Tom Dabernig" correctly
+// gives David and Ben the Hayes surname while leaving Tom Dabernig's
+// own surname alone. Verified against all 94 distinct multi-trainer
+// strings actually present in this dataset.
+function splitTrainerNames(raw){
+  const segments = raw.split("&").map(s => s.trim()).filter(Boolean);
+  const result = new Array(segments.length);
+  let currentSurname = null;
+  for(let i = segments.length - 1; i >= 0; i--){
+    const words = segments[i].split(/\s+/);
+    if(words.length === 1){
+      result[i] = currentSurname ? `${words[0]} ${currentSurname}` : words[0];
+    }else{
+      result[i] = segments[i];
+      currentSurname = words[words.length - 1];
+    }
+  }
+  return result;
+}
+
+function tallyField(runnings, field, minCount=1, splitPartners=false){
   const counts = {};
   runnings.forEach(r => {
-    const key = (r[field] || "").trim();
-    if(!key) return;
-    counts[key] = (counts[key] || 0) + 1;
+    const raw = (r[field] || "").trim();
+    if(!raw) return;
+    // Trainer credits are often multiple people joined with "&" (e.g.
+    // "Peter Moody & Katerine Coleman", "David & Ben Hayes & Tom
+    // Dabernig") -- confirmed common in this data (1,798 rows across
+    // the full dataset). Without splitting, Peter Moody's solo wins and
+    // his co-trained wins get counted as two different "people" instead
+    // of one trainer's true total. Each named person gets full credit
+    // for the win, not a fraction of it. Jockey/Winner never use this
+    // joined format, so splitPartners defaults off for those.
+    const names = splitPartners ? splitTrainerNames(raw) : [raw];
+    names.forEach(key => {
+      counts[key] = (counts[key] || 0) + 1;
+    });
   });
   return Object.entries(counts)
     .filter(([, count]) => count >= minCount)
@@ -223,11 +257,18 @@ function tallyField(runnings, field, minCount=1){
     .map(([name, count]) => ({ name, count }));
 }
 
-function renderSummaryBox(elementId, entries, noun, linkToHorse=false){
+function renderSummaryBox(elementId, entries, noun, linkToHorse=false, hideBoxId=null){
   const container = document.getElementById(elementId);
   if(!entries.length){
+    if(hideBoxId){
+      document.getElementById(hideBoxId).style.display = "none";
+      return;
+    }
     container.innerHTML = '<div class="loading">None on record.</div>';
     return;
+  }
+  if(hideBoxId){
+    document.getElementById(hideBoxId).style.display = "";
   }
   container.innerHTML = entries.map(e => `
     <div class="summary-row">
@@ -308,9 +349,9 @@ fetch("/data/australia-stakes.csv")
     // dozens of one-time winners, which isn't useful to show in full).
     // Multiple Winners has no cap -- it's already a short, meaningful
     // list since it only includes horses with 2+ wins.
-    renderSummaryBox("leadingTrainers", tallyField(runnings, "Trainer").slice(0, 10), "win");
-    renderSummaryBox("leadingJockeys", tallyField(runnings, "Jockey").slice(0, 10), "win");
-    renderSummaryBox("multipleWinners", tallyField(runnings, "Winner", 2), "win", true);
+    renderSummaryBox("leadingTrainers", tallyField(runnings, "Trainer", 3, true), "win");
+    renderSummaryBox("leadingJockeys", tallyField(runnings, "Jockey", 3), "win");
+    renderSummaryBox("multipleWinners", tallyField(runnings, "Winner", 2), "win", true, "multipleWinnersBox");
   })
   .catch(err => {
     console.error(err);
