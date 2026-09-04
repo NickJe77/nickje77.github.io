@@ -1,0 +1,43 @@
+name: Extract J-League Zip
+on:
+  workflow_dispatch:
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Remove broken nested folder
+        run: |
+          rm -rf docs/data/jleague/jleague
+      - name: Clear previous extraction
+        run: |
+          # Without this, files from an earlier zip upload that aren't in
+          # the CURRENT zip never get removed -- unzip -o only overwrites
+          # matching filenames, it doesn't delete anything. Confirmed real
+          # case on Ligue 1: removed seasons kept showing up in the live
+          # data because their old extracted files just sat there untouched
+          # across multiple re-extractions.
+          rm -rf docs/data/jleague/matches docs/data/jleague/seasons
+      - name: Extract J-League zip correctly
+        run: |
+          unzip -o docs/data/jleague/jleague.zip -d docs/data/
+      - name: Remove macOS junk files
+        run: |
+          find docs/data/jleague -name ".DS_Store" -delete
+          rm -rf docs/data/__MACOSX
+      - name: Verify structure
+        run: |
+          echo "----- JLEAGUE ROOT -----"
+          ls docs/data/jleague
+          echo "----- MATCHES -----"
+          find docs/data/jleague/matches -maxdepth 1
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/jleague/
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Extract J-League data"
+          git pull --rebase origin main
+          git push
