@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>J-League Season | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16);
+  --league:#c99a3d;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  color:#fff;padding:44px 20px;text-align:center;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+}
+.hero h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(26px,4.5vw,42px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+.hero p{margin-top:10px;font-size:14px;color:rgba(255,255,255,.65);}
+
+.container{max-width:1500px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Controls ─────────────────────────────────────────── */
+.controls{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px;}
+.controls select{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);font-size:13px;font-weight:600;
+  background:var(--surface);color:var(--ink);cursor:pointer;
+}
+.controls select:hover{border-color:var(--faint);}
+
+/* ── Card & table ─────────────────────────────────────── */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:24px;overflow:hidden;}
+.section-title{
+  margin-top:0;margin-bottom:20px;font-family:var(--display);font-weight:600;font-size:22px;
+  letter-spacing:.01em;text-transform:uppercase;color:var(--ink);
+}
+table{width:100%;border-collapse:collapse;}
+th{background:var(--league);color:#fff;padding:12px;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;text-align:center;}
+td{padding:12px;border-bottom:1px solid var(--line);text-align:center;font-size:13.5px;color:#27313c;}
+tr:last-child td{border-bottom:none;}
+.match-row{cursor:pointer;transition:.15s ease;}
+.match-row:hover td{background:#f0f6ff;}
+.team-link{color:var(--ink);text-decoration:none;font-weight:700;}
+.team-link:hover{color:var(--accent);text-decoration:underline;}
+.score{font-family:var(--display);font-size:17px;font-weight:600;color:var(--ink);}
+.loading{text-align:center;padding:40px;color:var(--muted);font-size:14px;}
+@media(max-width:900px){
+  th,td{padding:8px;font-size:11.5px;}
+  .score{font-size:14px;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/jleague.html">J-League</a>
+  <a href="/jleague-teams.html">Teams</a>
+  <a href="/jleague-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <div class="eyebrow">Football</div>
+  <h1 id="seasonTitle">Loading...</h1>
+  <p>J-League fixtures, scores and results</p>
+</div>
+
+<div class="container">
+
+  <div class="controls">
+    <select id="seasonSelect"></select>
+    <select id="teamFilter"><option value="">All Teams</option></select>
+  </div>
+
+  <div class="card">
+    <h2 class="section-title">Matches</h2>
+    <div id="matchesContainer" class="loading">Loading matches...</div>
+  </div>
+
+</div>
+
+<script>
+const START_YEAR = 1993;
+const END_YEAR   = new Date().getFullYear();
+
+function buildSeasonList() {
+  const seasons = [];
+  for (let y = END_YEAR; y >= START_YEAR; y--) {
+    seasons.push(`${y}`);
+  }
+  return seasons;
+}
+
+const params  = new URLSearchParams(window.location.search);
+const seasons = buildSeasonList();
+
+let currentSeason = params.get("season") || seasons[0];
+if (!seasons.includes(currentSeason)) currentSeason = seasons[0];
+
+const seasonSelect     = document.getElementById("seasonSelect");
+const teamFilter       = document.getElementById("teamFilter");
+const matchesContainer = document.getElementById("matchesContainer");
+
+seasons.forEach(s => {
+  const opt = document.createElement("option");
+  opt.value = s;
+  opt.textContent = s;
+  if (s === currentSeason) opt.selected = true;
+  seasonSelect.appendChild(opt);
+});
+
+let allMatches = [];
+
+async function loadSeason() {
+  document.getElementById("seasonTitle").textContent = `${currentSeason} J-League Season`;
+  matchesContainer.innerHTML = '<div class="loading">Loading matches...</div>';
+  teamFilter.innerHTML = '<option value="">All Teams</option>';
+
+// Same canonicalization as build_jleague_data.py -- this page reads the
+// raw season file directly (not the build script's output), so team
+// names here need their own normalization pass. "Paris FC" is a
+// genuinely different real club and is deliberately not mapped.
+// No known J-League team-name collisions yet -- add entries here the
+// moment a real one is found (e.g. raw data using both "LAFC" and
+// "Los Angeles FC"), the same way it was done for Ligue 1's PSG case.
+const TEAM_NAME_CANONICAL = {
+  "avispa fukuoka": "Avispa",
+  "cerezo osaka": "Cerezo",
+  "hokkaido consadole sapporo": "Consadole",
+  "kawasaki frontale": "Frontale",
+  "gamba osaka": "Gamba",
+  "jef united chiba": "JEF United",
+  "kyoto sanga fc": "Kyoto",
+  "fc machida zelvia": "Machida Zelvia",
+  "yokohama f. marinos": "Marinos",
+  "urawa red diamonds": "Red Diamonds",
+  "shimizu s-pulse": "S-Pulse",
+  "sagan tosu": "Sagan",
+  "sanfrecce hiroshima": "Sanfrecce",
+  "v-varen nagasaki": "V-Varen",
+  "ventforet kofu": "Ventforet",
+  "tokyo verdy": "Verdy",
+  "yokohama flügels": "Yokohama Flügel",
+};
+function canonicalTeam(name) {
+  if (!name) return name;
+  return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
+  try {
+    const response = await fetch(`/data/jleague/seasons/${currentSeason}.json`);
+    if (!response.ok) throw new Error("Season JSON not found");
+    const data = await response.json();
+    // J-League's season file uses home_team/away_team/home_score/
+    // away_score (confirmed against the real data) -- different field
+    // names than the home/away/score_home/score_away shape every other
+    // part of this page already expects. Remapped once, here, rather
+    // than renaming every usage throughout the file.
+    allMatches = (data.games || data).map(m => ({
+      ...m,
+      match_id: m.game_id || m.match_id,
+      home: canonicalTeam(m.home_team || m.home),
+      away: canonicalTeam(m.away_team || m.away),
+      score_home: m.home_score ?? m.score_home,
+      score_away: m.away_score ?? m.score_away,
+    }));
+    buildFilters();
+    renderMatches();
+  } catch (err) {
+    console.error(err);
+    matchesContainer.innerHTML = '<div class="loading">Failed to load season data</div>';
+  }
+}
+
+function buildFilters() {
+  const teams = new Set();
+  allMatches.forEach(m => {
+    if (m.home) teams.add(m.home);
+    if (m.away) teams.add(m.away);
+  });
+  [...teams].sort().forEach(team => {
+    const opt = document.createElement("option");
+    opt.value = team;
+    opt.textContent = team;
+    teamFilter.appendChild(opt);
+  });
+}
+
+function renderMatches() {
+  let filtered = [...allMatches];
+  const team = teamFilter.value;
+  if (team) {
+    filtered = filtered.filter(m => m.home === team || m.away === team);
+  }
+
+  if (filtered.length === 0) {
+    matchesContainer.innerHTML = '<div class="loading">No matches found</div>';
+    return;
+  }
+
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Home</th>
+          <th>Score</th>
+          <th>Away</th>
+          <th>Venue</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  filtered.forEach(match => {
+    const url = `/jleague-game.html?match=${encodeURIComponent(match.match_id)}&season=${encodeURIComponent(currentSeason)}&date=${encodeURIComponent(match.date || '')}&venue=${encodeURIComponent(match.venue || '')}`;
+    html += `
+      <tr class="match-row" onclick="window.location.href='${url}'">
+        <td>${match.date || ''}</td>
+        <td>
+          <a class="team-link"
+             href="/jleague-team.html?team=${encodeURIComponent(match.home)}"
+             onclick="event.stopPropagation()">
+            ${match.home || ''}
+          </a>
+        </td>
+        <td class="score">
+          ${match.score_home ?? '-'} - ${match.score_away ?? '-'}
+        </td>
+        <td>
+          <a class="team-link"
+             href="/jleague-team.html?team=${encodeURIComponent(match.away)}"
+             onclick="event.stopPropagation()">
+            ${match.away || ''}
+          </a>
+        </td>
+        <td>${match.venue || ''}</td>
+      </tr>
+    `;
+  });
+
+  html += `</tbody></table>`;
+  matchesContainer.innerHTML = html;
+}
+
+seasonSelect.addEventListener("change", () => {
+  currentSeason = seasonSelect.value;
+  const url = new URL(window.location);
+  url.searchParams.set("season", currentSeason);
+  window.history.pushState({}, "", url);
+  loadSeason();
+});
+
+teamFilter.addEventListener("change", renderMatches);
+
+loadSeason();
+</script>
+
+</body>
+</html>

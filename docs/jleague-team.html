@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>J-League Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+/* ── Hero (club-colour identity, kept per-team) ──────────── */
+.hero{position:relative;padding:44px 20px;text-align:center;color:#fff;box-shadow:0 18px 40px -18px rgba(10,16,24,.4);}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:700;letter-spacing:.16em;
+  text-transform:uppercase;color:rgba(255,255,255,.75);margin-bottom:10px;
+  text-shadow:0 1px 3px rgba(0,0,0,.3);
+}
+.hero h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(30px,5.5vw,52px);
+  line-height:1.05;letter-spacing:.01em;text-transform:uppercase;text-shadow:0 2px 8px rgba(0,0,0,.25);
+}
+.hero p{margin-top:10px;font-size:14px;font-weight:600;opacity:.9;text-shadow:0 1px 3px rgba(0,0,0,.25);}
+
+.container{max-width:1450px;margin:0 auto;padding:26px 16px 70px;}
+
+/* ── Stat cards ───────────────────────────────────────── */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px;}
+.stat-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;text-align:center;}
+.stat-value{font-family:var(--display);font-weight:600;font-size:30px;line-height:1;margin-bottom:8px;color:var(--ink);}
+.stat-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+
+/* ── Sections ─────────────────────────────────────────── */
+.section{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:20px;}
+.section-title{
+  font-family:var(--display);font-weight:600;font-size:19px;letter-spacing:.01em;text-transform:uppercase;
+  margin-bottom:16px;color:var(--ink);
+}
+.filters{margin-bottom:18px;}
+select{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);font-size:13px;font-weight:600;
+  background:var(--surface);color:var(--ink);min-width:220px;cursor:pointer;
+}
+select:hover{border-color:var(--faint);}
+
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:20px;}
+table{width:100%;border-collapse:collapse;}
+th{background:#f7f9fb;padding:10px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);text-align:left;border-bottom:1px solid var(--line);}
+td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600;color:#27313c;}
+tr:last-child td{border-bottom:none;}
+.player-link{text-decoration:none;font-weight:700;color:var(--ink);}
+.player-link:hover{color:var(--accent);text-decoration:underline;}
+.loading,.error{padding:100px 20px;text-align:center;font-family:var(--display);font-size:26px;font-weight:600;text-transform:uppercase;letter-spacing:.01em;color:var(--muted);}
+.error{color:#c0362c;}
+
+.games-table tr{transition:.15s;cursor:pointer;}
+.games-table tr:hover td{background:#f0f6ff;}
+.games-table td{font-size:13.5px;padding:12px;}
+.games-table th{font-size:11px;padding:10px 12px;}
+.result-win{font-weight:700;color:#1a7a3a;font-size:14px;}
+.result-loss{font-weight:700;color:#c0362c;font-size:14px;}
+.result-draw{font-weight:700;color:#b3860f;font-size:14px;}
+
+.duo-search-wrap{display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+#duoPlayerInput{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);font-size:13px;font-weight:600;
+  width:260px;max-width:100%;background:var(--surface);color:var(--ink);
+}
+#duoPlayerInput:focus{outline:none;border-color:var(--accent);}
+.duo-table td:nth-child(2),.duo-table td:nth-child(4),.duo-table td:nth-child(5),.duo-table td:nth-child(6){text-align:right;}
+.duo-table th:nth-child(2),.duo-table th:nth-child(4),.duo-table th:nth-child(5),.duo-table th:nth-child(6){text-align:right;}
+
+@media(max-width:900px){
+  .hero h1{font-size:36px;}
+  .section-title{font-size:17px;}
+  .stat-value{font-size:24px;}
+  .tables-grid{grid-template-columns:1fr;}
+  table{display:block;overflow-x:auto;}
+  .games-table{display:block;width:100%;}
+  .games-table thead{display:none;}
+  .games-table tbody{display:block;width:100%;}
+  .games-table tr{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:12px;border-bottom:2px solid var(--line);background:var(--surface) !important;}
+  .games-table td{display:block;border:none;padding:4px 8px;font-size:13px;}
+  .games-table td:nth-child(4){font-size:18px;text-align:right;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/jleague.html">J-League</a>
+  <a href="/jleague-teams.html">Teams</a>
+  <a href="/jleague-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div id="page">
+  <div class="loading">Loading Team...</div>
+</div>
+
+<script>
+
+// No verified real J-League club colors available -- every team uses
+// the neutral fallback gradient below rather than guessed hex codes.
+const TEAM_COLOURS = {};
+
+function slugify(str){
+  return (str || "")
+    .toLowerCase()
+    .replace(/&/g,"and")
+    .replace(/[^a-z0-9]+/g,"-")
+    .replace(/^-|-$/g,"");
+}
+
+function playerSlug(p){
+  const name      = slugify(p.name || '');
+  const firstTeam = slugify((p.teams && p.teams[0]) || '');
+  return firstTeam ? `${name}--${firstTeam}` : name;
+}
+
+// Same canonicalization as build_jleague_data.py -- this page reads raw
+// season files directly for its match list, so both the team name from
+// the URL and the raw games' home/away fields need normalizing, or a
+// filter comparing them (canonical vs raw) would silently miss games.
+// "Paris FC" is genuinely different and not mapped.
+// No known J-League team-name collisions yet -- add entries here the
+// moment a real one is found (e.g. raw data using both "LAFC" and
+// "Los Angeles FC"), the same way it was done for Ligue 1's PSG case.
+const TEAM_NAME_CANONICAL = {
+  "avispa fukuoka": "Avispa",
+  "cerezo osaka": "Cerezo",
+  "hokkaido consadole sapporo": "Consadole",
+  "kawasaki frontale": "Frontale",
+  "gamba osaka": "Gamba",
+  "jef united chiba": "JEF United",
+  "kyoto sanga fc": "Kyoto",
+  "fc machida zelvia": "Machida Zelvia",
+  "yokohama f. marinos": "Marinos",
+  "urawa red diamonds": "Red Diamonds",
+  "shimizu s-pulse": "S-Pulse",
+  "sagan tosu": "Sagan",
+  "sanfrecce hiroshima": "Sanfrecce",
+  "v-varen nagasaki": "V-Varen",
+  "ventforet kofu": "Ventforet",
+  "tokyo verdy": "Verdy",
+  "yokohama flügels": "Yokohama Flügel",
+};
+function canonicalTeam(name){
+    if(!name) return name;
+    return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
+const params   = new URLSearchParams(window.location.search);
+const teamName = canonicalTeam(params.get("team") || "");
+const page     = document.getElementById("page");
+
+async function loadTeam(){
+  try{
+
+    const [playersRes, teamStatsRes] = await Promise.all([
+      fetch("/data/jleague/players.json"),
+      fetch("/data/jleague/team-stats.json")
+    ]);
+
+    if(!playersRes.ok)   throw new Error("players.json failed");
+    if(!teamStatsRes.ok) throw new Error("team-stats.json failed");
+
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+
+    const teamSeasonStats = allTeamStats.filter(s => s.team === teamName);
+
+    if(!teamSeasonStats.length){
+      page.innerHTML = `<div class="error">Team Not Found</div>`;
+      return;
+    }
+
+    const seasonIds = [...new Set(teamSeasonStats.map(s => s.season))].sort();
+
+    const seasonResults = await Promise.all(seasonIds.map(async seasonId => {
+      try{
+        const r = await fetch(`/data/jleague/seasons/${seasonId}.json`);
+        if(!r.ok) return [];
+        const data = await r.json();
+        const rawGames = Array.isArray(data) ? data : (data.games || []);
+        // J-League's season file uses home_team/away_team/home_score/
+        // away_score/game_id (confirmed against the real data) --
+        // different field names than what the rest of this page
+        // expects (home/away/score_home/score_away/match_id).
+        const games = rawGames.map(g => ({
+          ...g,
+          match_id: g.game_id || g.match_id,
+          home: canonicalTeam(g.home_team || g.home),
+          away: canonicalTeam(g.away_team || g.away),
+          score_home: g.home_score ?? g.score_home,
+          score_away: g.away_score ?? g.score_away,
+        }));
+        return games
+          .filter(g => g.home === teamName || g.away === teamName)
+          .map(g => ({ ...g, season: seasonId }));
+      }catch(e){ return []; }
+    }));
+
+    const allGames = seasonResults.flat();
+
+    const totals = teamSeasonStats.reduce((acc, s) => {
+      acc.played        += s.played        || 0;
+      acc.wins          += s.wins          || 0;
+      acc.draws         += s.draws         || 0;
+      acc.losses        += s.losses        || 0;
+      acc.goals_for     += s.goals_for     || 0;
+      acc.goals_against += s.goals_against || 0;
+      acc.yellow_cards  += s.yellow_cards  || 0;
+      acc.red_cards     += s.red_cards     || 0;
+      return acc;
+    }, { played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, yellow_cards:0, red_cards:0 });
+
+    const teamPlayers = players
+      .filter(p => p.teams && p.teams.includes(teamName))
+      .map(p => {
+        const goals   = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.goals||0), 0);
+        const pens    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.penalties||0), 0);
+        const yellows = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.yellow_cards||0), 0);
+        const reds    = (p.season_stats || []).filter(s => s.team === teamName).reduce((sum,s) => sum+(s.red_cards||0), 0);
+        return { name: p.name, teams: p.teams, goals, pens, yellows, reds };
+      });
+
+    const topScorers = [...teamPlayers].sort((a,b) => b.goals - a.goals).filter(p => p.goals > 0).slice(0,10);
+    const topYellows = [...teamPlayers].sort((a,b) => b.yellows - a.yellows).filter(p => p.yellows > 0).slice(0,10);
+    const topReds    = [...teamPlayers].sort((a,b) => b.reds - a.reds).filter(p => p.reds > 0).slice(0,10);
+
+    const opponentSet = new Set();
+    allGames.forEach(g => opponentSet.add(g.home === teamName ? g.away : g.home));
+    const opponents = [...opponentSet].sort();
+
+    function buildGameStats(opponent){
+      const filtered = opponent
+        ? allGames.filter(g => (g.home === teamName ? g.away : g.home) === opponent)
+        : allGames;
+      let wins=0, draws=0, losses=0, goals=0;
+      filtered.forEach(g => {
+        const tf = g.home === teamName ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of = g.home === teamName ? Number(g.score_away||0) : Number(g.score_home||0);
+        goals += tf;
+        if(tf > of) wins++;
+        else if(tf < of) losses++;
+        else draws++;
+      });
+      return { games: filtered.length, wins, draws, losses, goals, filtered };
+    }
+
+    function gameRows(games){
+      if(!games.length) return `<tr><td colspan="4">No games found</td></tr>`;
+      return [...games].reverse().slice(0,100).map(g => {
+        const isHome = g.home === teamName;
+        const tf  = isHome ? Number(g.score_home||0) : Number(g.score_away||0);
+        const of  = isHome ? Number(g.score_away||0) : Number(g.score_home||0);
+        const opp = isHome ? g.away : g.home;
+        const res = tf > of ? 'W' : tf < of ? 'L' : 'D';
+        const cls = tf > of ? 'result-win' : tf < of ? 'result-loss' : 'result-draw';
+        return `<tr onclick="window.location.href='/jleague-game.html?match=${encodeURIComponent(g.match_id)}&season=${encodeURIComponent(g.season)}'">
+          <td>${g.season}</td>
+          <td>${opp}</td>
+          <td>${tf}-${of}</td>
+          <td class="${cls}">${res}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function playerRows(list, valueKey){
+      if(!list.length) return `<tr><td colspan="2">No data</td></tr>`;
+      return list.map(p => `
+        <tr>
+          <td><a class="player-link" href="/jleague-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
+          <td>${p[valueKey]}</td>
+        </tr>`).join('');
+    }
+
+    const overall      = buildGameStats(null);
+    const heroGradient = TEAM_COLOURS[teamName] || 'linear-gradient(135deg,#111,#444)';
+
+    page.innerHTML = `
+      <div class="hero" style="background:${heroGradient};">
+        <div class="eyebrow">J-League Club</div>
+        <h1>${teamName}</h1>
+        <p>J-League Club Profile</p>
+      </div>
+
+      <div class="container">
+
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value">${totals.played}</div><div class="stat-label">Played</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.wins}</div><div class="stat-label">Wins</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.draws}</div><div class="stat-label">Draws</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.losses}</div><div class="stat-label">Losses</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.goals_for}</div><div class="stat-label">Goals For</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.goals_against}</div><div class="stat-label">Goals Against</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.yellow_cards}</div><div class="stat-label">Yellow Cards</div></div>
+          <div class="stat-card"><div class="stat-value">${totals.red_cards}</div><div class="stat-label">Red Cards</div></div>
+        </div>
+
+        <div class="tables-grid">
+          <div class="section">
+            <div class="section-title">Top Scorers</div>
+            <table>
+              <thead><tr><th>Player</th><th>Goals</th><th>Penalties</th></tr></thead>
+              <tbody>${topScorers.map(p => `
+                <tr>
+                  <td><a class="player-link" href="/jleague-player.html?player=${encodeURIComponent(playerSlug(p))}">${p.name}</a></td>
+                  <td>${p.goals}</td>
+                  <td>${p.pens}</td>
+                </tr>`).join('') || '<tr><td colspan="3">No data</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Yellow Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Yellow</th></tr></thead>
+              <tbody>${playerRows(topYellows, 'yellows')}</tbody>
+            </table>
+          </div>
+          <div class="section">
+            <div class="section-title">Red Card Leaders</div>
+            <table>
+              <thead><tr><th>Player</th><th>Red</th></tr></thead>
+              <tbody>${playerRows(topReds, 'reds')}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">Results by Opponent</div>
+          <div class="filters">
+            <select id="opponentSelect">
+              <option value="">All Opponents</option>
+              ${opponents.map(o => `<option value="${o}">${o}</option>`).join('')}
+            </select>
+          </div>
+          <div class="stats-grid" style="margin-top:20px;">
+            <div class="stat-card"><div class="stat-value" id="oGames">${overall.games}</div><div class="stat-label">Games</div></div>
+            <div class="stat-card"><div class="stat-value" id="oWins">${overall.wins}</div><div class="stat-label">Wins</div></div>
+            <div class="stat-card"><div class="stat-value" id="oDraws">${overall.draws}</div><div class="stat-label">Draws</div></div>
+            <div class="stat-card"><div class="stat-value" id="oLosses">${overall.losses}</div><div class="stat-label">Losses</div></div>
+            <div class="stat-card"><div class="stat-value" id="oGoals">${overall.goals}</div><div class="stat-label">Goals</div></div>
+          </div>
+          <table class="games-table">
+            <thead><tr><th>Season</th><th>Opponent</th><th>Score</th><th>Result</th></tr></thead>
+            <tbody id="gamesBody">${gameRows(overall.filtered)}</tbody>
+          </table>
+        </div>
+
+      </div>
+    `;
+
+    document.getElementById("opponentSelect").addEventListener("change", e => {
+      const opp   = e.target.value;
+      const stats = buildGameStats(opp || null);
+      document.getElementById("oGames").textContent  = stats.games;
+      document.getElementById("oWins").textContent   = stats.wins;
+      document.getElementById("oDraws").textContent  = stats.draws;
+      document.getElementById("oLosses").textContent = stats.losses;
+      document.getElementById("oGoals").textContent  = stats.goals;
+      document.getElementById("gamesBody").innerHTML = gameRows(stats.filtered);
+    });
+
+  }catch(err){
+    console.error(err);
+    page.innerHTML = `<div class="error">Failed to load team data</div>`;
+  }
+}
+
+loadTeam();
+
+</script>
+</body>
+</html>
