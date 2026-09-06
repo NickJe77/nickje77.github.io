@@ -1,0 +1,39 @@
+name: Build UEFA Euro Data
+on:
+  push:
+    paths:
+      - "docs/data/uefaeuro/matches/**"
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Clear old data files
+        run: |
+          echo "[]" > docs/data/uefaeuro/players.json
+          echo "[]" > docs/data/uefaeuro/teams.json
+          echo "[]" > docs/data/uefaeuro/team-stats.json
+          echo "{}" > docs/data/uefaeuro/match-records.json
+      - name: Run build script
+        run: |
+          cd $GITHUB_WORKSPACE
+          python scripts/build_uefaeuro_data.py
+      - name: Commit and push generated files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/uefaeuro/players.json \
+                  docs/data/uefaeuro/teams.json \
+                  docs/data/uefaeuro/team-stats.json \
+                  docs/data/uefaeuro/match-records.json
+          git diff --cached --quiet || git commit -m "chore: rebuild UEFA Euro data [skip ci]"
+          git pull --rebase origin main
+          git push
