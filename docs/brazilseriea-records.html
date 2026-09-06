@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Brazilian Serie A Records | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c130f;
+  --board-2:#161f16;
+  --accent:#c99a3d;
+  --accent-soft:rgba(201,154,61,.16);
+  --league:#c99a3d;
+  --league-soft:rgba(61,25,91,.08);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+.navbar a.current{opacity:1;color:var(--accent);}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  color:#fff;padding:44px 20px;text-align:center;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+}
+.hero h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(28px,5vw,46px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+.hero p{margin-top:10px;font-size:14px;color:rgba(255,255,255,.65);}
+
+.container{max-width:1400px;margin:0 auto;padding:26px 20px 70px;}
+
+.records-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:18px;}
+.section{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:22px;}
+.section-title{
+  font-family:var(--display);font-weight:600;font-size:16px;letter-spacing:.02em;text-transform:uppercase;
+  margin:0 0 16px;color:var(--league);display:flex;align-items:center;gap:9px;
+}
+
+table{width:100%;border-collapse:collapse;}
+th{background:var(--league-soft);padding:10px 12px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;text-align:center;color:var(--league);}
+td{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13.5px;font-weight:600;text-align:center;color:#27313c;}
+tr:last-child td{border-bottom:none;}
+.rank{font-weight:700;color:var(--faint);width:32px;}
+.link{text-decoration:none;font-weight:700;color:var(--ink);}
+.link:hover{color:var(--accent);text-decoration:underline;}
+.gold{color:#c89000;font-weight:700;}
+.loading{text-align:center;padding:60px;font-size:14px;color:var(--muted);}
+
+@media(max-width:768px){
+  .records-grid{grid-template-columns:1fr;}
+  table{display:block;overflow-x:auto;}
+}
+</style>
+</head>
+<body>
+
+<div class="navbar">
+  <a href="/">Home</a>
+  <a href="/epl.html">EPL</a>
+  <a href="/brazilseriea.html">Brazilian Serie A</a>
+  <a href="/brazilseriea-teams.html">Teams</a>
+  <a href="/brazilseriea-players.html">Players</a>
+  <a href="/nba.html">NBA</a>
+  <a href="/afl.html">AFL</a>
+</div>
+
+<div class="hero">
+  <div class="eyebrow">Football</div>
+  <h1>Brazilian Serie A Records</h1>
+  <p>All-time Brazilian Serie A records from 1995 to present</p>
+</div>
+
+<div class="container">
+  <div class="loading" id="loadingMsg">Loading records...</div>
+  <div class="records-grid" id="recordsGrid" style="display:none;"></div>
+</div>
+
+<script>
+
+function slugify(str){
+  return (str||'').toLowerCase().replace(/\./g,'').replace(/'/g,'').replace(/\u2019/g,'').replace(/"/g,'').replace(/\s+/g,'-');
+}
+
+function playerLink(name){
+  return `<a class="link" href="/brazilseriea-player.html?player=${encodeURIComponent(slugify(name))}">${name}</a>`;
+}
+
+function teamLink(name){
+  return `<a class="link" href="/brazilseriea-team.html?team=${encodeURIComponent(name)}">${name}</a>`;
+}
+
+function recordTable(rows, cols){
+  const heads = cols.map(c => `<th>${c.label}</th>`).join('');
+  const body  = rows.map((r, i) => {
+    const cells = cols.map(c => {
+      if(c.key === 'rank') return `<td class="rank">${i===0?'🥇':i===1?'🥈':i===2?'🥉':i+1}</td>`;
+      return `<td>${r[c.key]}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  return `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+async function loadRecords(){
+  try{
+    const [playersRes, teamStatsRes] = await Promise.all([
+      fetch('/data/brazilseriea/players.json'),
+      fetch('/data/brazilseriea/team-stats.json')
+    ]);
+    const players      = await playersRes.json();
+    const allTeamStats = await teamStatsRes.json();
+
+    const careerGoals = [...players]
+      .filter(p => p.goals > 0)
+      .sort((a,b) => b.goals - a.goals)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), goals: p.goals, seasons: p.seasons.length }));
+
+    const seasonGoals = [];
+    players.forEach(p => {
+      (p.season_stats||[]).forEach(s => {
+        if(s.goals > 0) seasonGoals.push({ name: playerLink(p.name), season: s.season, team: teamLink(s.team), goals: s.goals });
+      });
+    });
+    seasonGoals.sort((a,b) => b.goals - a.goals);
+    const topSeasonGoals = seasonGoals.slice(0,10).map(r => ({rank:'', ...r}));
+
+    const careerYellows = [...players]
+      .filter(p => p.yellow_cards > 0)
+      .sort((a,b) => b.yellow_cards - a.yellow_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), yellow_cards: p.yellow_cards, seasons: p.seasons.length }));
+
+    const careerReds = [...players]
+      .filter(p => p.red_cards > 0)
+      .sort((a,b) => b.red_cards - a.red_cards)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), red_cards: p.red_cards, seasons: p.seasons.length }));
+
+    const mostSeasons = [...players]
+      .sort((a,b) => b.seasons.length - a.seasons.length)
+      .slice(0,10)
+      .map(p => ({ rank:'', name: playerLink(p.name), seasons: p.seasons.length, teams: p.teams.join(', ') }));
+
+    const teamTotals = {};
+    allTeamStats.forEach(s => {
+      if(!teamTotals[s.team]) teamTotals[s.team] = { team: s.team, played:0, wins:0, draws:0, losses:0, goals_for:0, goals_against:0, points:0, seasons:0, clean_sheets:0 };
+      const t = teamTotals[s.team];
+      t.played        += s.played        || 0;
+      t.wins          += s.wins          || 0;
+      t.draws         += s.draws         || 0;
+      t.losses        += s.losses        || 0;
+      t.goals_for     += s.goals_for     || 0;
+      t.goals_against += s.goals_against || 0;
+      t.points        += s.points        || 0;
+      t.clean_sheets  += s.clean_sheets  || 0;
+      t.seasons++;
+    });
+    const teams = Object.values(teamTotals);
+
+    const mostWins = [...teams]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), wins: t.wins, played: t.played, seasons: t.seasons }));
+
+    const mostWinsSeason = [...allTeamStats]
+      .sort((a,b) => b.wins - a.wins)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: s.season, wins: s.wins, points: s.points }));
+
+    const mostGoalsSeason = [...allTeamStats]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: s.season, goals: s.goals_for }));
+
+    const mostGoalsAllTime = [...teams]
+      .sort((a,b) => b.goals_for - a.goals_for)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), goals: t.goals_for, seasons: t.seasons }));
+
+    const mostCleanSheetsSeason = [...allTeamStats]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(s => ({ rank:'', team: teamLink(s.team), season: s.season, clean_sheets: s.clean_sheets }));
+
+    const mostCleanSheetsAllTime = [...teams]
+      .sort((a,b) => b.clean_sheets - a.clean_sheets)
+      .slice(0,10)
+      .map(t => ({ rank:'', team: teamLink(t.team), clean_sheets: t.clean_sheets, seasons: t.seasons }));
+
+    // Raw season files use full official club names, but team-stats.json
+    // uses shorter common names -- confirmed real mismatch between these
+    // two data sources. Without this, biggest-wins/highest-scoring would
+    // silently pull from an empty set for every game with mismatched names.
+    const TEAM_NAME_CANONICAL = {
+  "abc - rn": "ABC",
+  "americano - rj": "Americano",
+  "américa - rj": "América",
+  "américa - mg": "América Mineiro",
+  "américa - rn": "América-RN",
+  "anapolina - go": "Anapolina",
+  "athletico paranaense": "Athletico - PR",
+  "atlético mineiro": "Atl. Mineiro",
+  "atlético goianiense": "Atlético",
+  "avaí - sc": "Avaí",
+  "bahia - ba": "Bahia",
+  "união bandeirante - pr": "Bandeirante",
+  "bangu - rj": "Bangu",
+  "botafogo - rj": "Botafogo",
+  "botafogo - sp": "Botafogo SP",
+  "red bull bragantino": "Bragantino",
+  "brasil de pelotas - rs": "Brasil",
+  "brasiliense - df": "Brasiliense",
+  "cr brasil - al": "CR Brasil",
+  "csa - al": "CSA",
+  "caxias - sc": "Caxias",
+  "ceará - ce": "Ceará SC",
+  "corinthians sp": "Corinthians",
+  "coritiba - pr": "Coritiba FC",
+  "criciúma - sc": "Criciúma EC",
+  "cuiabá - mt": "Cuiabá",
+  "desportiva ferroviária - es": "Desportiva",
+  "vitória - ba": "EC Vitória",
+  "figueirense - sc": "Figueirense",
+  "flamengo rj": "Flamengo",
+  "fluminense rj": "Fluminense",
+  "fortaleza - ce": "Fortaleza",
+  "gama - df": "Gama",
+  "goiás - go": "Goiás",
+  "grêmio porto alegre": "Grêmio",
+  "grêmio barueri - sp": "Grêmio Barueri",
+  "guarani - sp": "Guarani",
+  "ipatinga - mg": "Ipatinga",
+  "joinville - sc": "Joinville",
+  "juventude - rs": "Juventude",
+  "londrina - pr": "Londrina",
+  "marcílio dias - sc": "Marcílio Dias",
+  "mirassol - sp": "Mirassol",
+  "nacional - am": "Nacional",
+  "náutico - pe": "Náutico",
+  "paysandu - pa": "Paysandu SC",
+  "portuguesa - sp": "Portuguesa",
+  "remo - pa": "Remo",
+  "river - pi": "Ríver",
+  "sport recife - pe": "SC Recife",
+  "sampaio corrêa - ma": "Sampaio Corrêa",
+  "santa cruz - pe": "Santa Cruz",
+  "santo andré - sp": "Santo André",
+  "serra - es": "Serra",
+  "são caetano - sp": "São Caetano",
+  "união são joão - sp": "São João",
+  "são raimundo - am": "São Raimundo",
+  "vasco da gama - rj": "Vasco da Gama",
+  "vila nova - go": "Vila Nova",
+  "villa nova - mg": "Villa Nova",
+  "xv de piracicaba - sp": "XV de Pira",
+};
+    function canonicalTeam(name){
+      if(!name) return name;
+      return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+    }
+
+    const seasonIds = [];
+    const currentYear = new Date().getFullYear();
+    for(let y=1995; y<=currentYear; y++) seasonIds.push(`${y}`);
+
+    const allGames = [];
+    await Promise.all(seasonIds.map(async sid => {
+      try{
+        const r = await fetch(`/data/brazilseriea/seasons/${sid}.json`);
+        if(!r.ok) return;
+        const data = await r.json();
+        const rawGames = Array.isArray(data) ? data : (data.games||[]);
+        // Brazilian Serie A's season file uses home_team/away_team/home_score/
+        // away_score (confirmed against the real data), different
+        // field names than what the rest of this page expects.
+        rawGames.forEach(raw => {
+          const g = {
+            ...raw,
+            home: canonicalTeam(raw.home_team || raw.home),
+            away: canonicalTeam(raw.away_team || raw.away),
+            score_home: raw.home_score ?? raw.score_home,
+            score_away: raw.away_score ?? raw.score_away,
+          };
+          if(g.score_home != null && g.score_away != null){
+            allGames.push({...g, season: sid});
+          }
+        });
+      }catch(e){}
+    }));
+
+    const biggestWins = allGames
+      .map(g => {
+        const diff   = Math.abs(Number(g.score_home) - Number(g.score_away));
+        const winner = Number(g.score_home) > Number(g.score_away) ? g.home : g.away;
+        const loser  = Number(g.score_home) > Number(g.score_away) ? g.away : g.home;
+        return { diff, winner, loser, score: `${g.score_home}-${g.score_away}`, season: g.season, date: g.date||'' };
+      })
+      .filter(g => g.diff > 0)
+      .sort((a,b) => b.diff - a.diff)
+      .slice(0,10)
+      .map(g => ({ rank:'', winner: teamLink(g.winner), loser: teamLink(g.loser), score: g.score, season: g.season, margin: g.diff }));
+
+    const highestScoring = allGames
+      .map(g => ({
+        total: Number(g.score_home) + Number(g.score_away),
+        home: g.home, away: g.away,
+        score: `${g.score_home}-${g.score_away}`,
+        season: g.season, date: g.date||''
+      }))
+      .sort((a,b) => b.total - a.total)
+      .slice(0,10)
+      .map(g => ({ rank:'', home: teamLink(g.home), away: teamLink(g.away), score: g.score, season: g.season, total: g.total }));
+
+    const grid = document.getElementById('recordsGrid');
+    grid.style.display = 'grid';
+    document.getElementById('loadingMsg').style.display = 'none';
+
+    const sections = [
+      { title:'⚽ Most Career Goals',              table: recordTable(careerGoals,            [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'goals',label:'Goals'},{key:'seasons',label:'Seasons'}]) },
+      { title:'⚽ Most Goals in a Season',          table: recordTable(topSeasonGoals,         [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'season',label:'Season'},{key:'team',label:'Club'},{key:'goals',label:'Goals'}]) },
+      { title:'🟨 Most Career Yellow Cards',        table: recordTable(careerYellows,          [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'yellow_cards',label:'Yellows'},{key:'seasons',label:'Seasons'}]) },
+      { title:'🟥 Most Career Red Cards',           table: recordTable(careerReds,             [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'red_cards',label:'Reds'},{key:'seasons',label:'Seasons'}]) },
+      { title:'📅 Most Brazilian Serie A Seasons',           table: recordTable(mostSeasons,            [{key:'rank',label:'#'},{key:'name',label:'Player'},{key:'seasons',label:'Seasons'},{key:'teams',label:'Clubs'}]) },
+      { title:'🏆 Most All-Time Wins',              table: recordTable(mostWins,               [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'wins',label:'Wins'},{key:'played',label:'Played'},{key:'seasons',label:'Seasons'}]) },
+      { title:'🏆 Most Wins in a Season',           table: recordTable(mostWinsSeason,         [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'wins',label:'Wins'},{key:'points',label:'Points'}]) },
+      { title:'⚽ Most Goals in a Season (Team)',   table: recordTable(mostGoalsSeason,        [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'goals',label:'Goals'}]) },
+      { title:'⚽ Most All-Time Goals (Team)',      table: recordTable(mostGoalsAllTime,       [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'goals',label:'Goals'},{key:'seasons',label:'Seasons'}]) },
+      { title:'🧤 Most Clean Sheets in a Season',  table: recordTable(mostCleanSheetsSeason,  [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'season',label:'Season'},{key:'clean_sheets',label:'Clean Sheets'}]) },
+      { title:'🧤 Most All-Time Clean Sheets',     table: recordTable(mostCleanSheetsAllTime, [{key:'rank',label:'#'},{key:'team',label:'Club'},{key:'clean_sheets',label:'Clean Sheets'},{key:'seasons',label:'Seasons'}]) },
+      { title:'💥 Biggest Winning Margins',         table: recordTable(biggestWins,            [{key:'rank',label:'#'},{key:'winner',label:'Winner'},{key:'loser',label:'Loser'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'margin',label:'Margin'}]) },
+      { title:'🔥 Highest Scoring Matches',         table: recordTable(highestScoring,         [{key:'rank',label:'#'},{key:'home',label:'Home'},{key:'away',label:'Away'},{key:'score',label:'Score'},{key:'season',label:'Season'},{key:'total',label:'Total Goals'}]) },
+    ];
+
+    grid.innerHTML = sections.map(s => `
+      <div class="section">
+        <div class="section-title">${s.title}</div>
+        ${s.table}
+      </div>
+    `).join('');
+
+  }catch(err){
+    console.error(err);
+    document.getElementById('loadingMsg').textContent = 'Failed to load records';
+  }
+}
+
+loadRecords();
+</script>
+</body>
+</html>
