@@ -159,11 +159,32 @@ async function loadSeason() {
   matchesContainer.innerHTML = '<div class="loading">Loading matches...</div>';
   teamFilter.innerHTML = '<option value="">All Teams</option>';
 
+  // Raw season files use short team names ("Tottenham"), but
+  // team-stats.json (which team pages read) uses full official names
+  // ("Tottenham Hotspur") -- confirmed real mismatch, affecting every
+  // EPL season, not just the current one. Without this, clicking a
+  // team link for any of these five silently leads to "Team Not Found".
+  const TEAM_NAME_CANONICAL = {
+    "tottenham": "Tottenham Hotspur",
+    "newcastle": "Newcastle United",
+    "manchester utd": "Manchester United",
+    "brighton": "Brighton & Hove Albion",
+    "nottingham": "Nottingham Forest",
+  };
+  function canonicalTeam(name){
+    if(!name) return name;
+    return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+  }
+
   try {
     const response = await fetch(`/data/epl/seasons/${currentSeason}.json`);
     if (!response.ok) throw new Error("Season JSON not found");
     const data = await response.json();
-    allMatches = data.games || data;
+    allMatches = (data.games || data).map(m => ({
+      ...m,
+      home: canonicalTeam(m.home),
+      away: canonicalTeam(m.away),
+    }));
     buildFilters();
     renderMatches();
   } catch (err) {

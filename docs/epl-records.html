@@ -237,8 +237,26 @@ async function loadRecords(){
       .map(t => ({ rank:'', team: teamLink(t.team), clean_sheets: t.clean_sheets, seasons: t.seasons }));
 
     // Now fetch season files for biggest wins
+    // Raw season files use short team names, but team-stats.json (and
+    // this page's own teamLink() targets) use full official names --
+    // confirmed real mismatch across every EPL season. Canonicalizing
+    // here, right when games are collected, so it correctly propagates
+    // to winner/loser/home/away wherever they're derived below.
+    const TEAM_NAME_CANONICAL = {
+      "tottenham": "Tottenham Hotspur",
+      "newcastle": "Newcastle United",
+      "manchester utd": "Manchester United",
+      "brighton": "Brighton & Hove Albion",
+      "nottingham": "Nottingham Forest",
+    };
+    function canonicalTeam(name){
+      if(!name) return name;
+      return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+    }
+
     const seasonIds = [];
-    for(let y=1992; y<=2026; y++) seasonIds.push(`${y}-${y+1}`);
+    const currentYear = new Date().getFullYear();
+    for(let y=1992; y<=currentYear; y++) seasonIds.push(`${y}-${y+1}`);
 
     const allGames = [];
     await Promise.all(seasonIds.map(async sid => {
@@ -249,7 +267,12 @@ async function loadRecords(){
         const games = Array.isArray(data) ? data : (data.games||[]);
         games.forEach(g => {
           if(g.score_home != null && g.score_away != null){
-            allGames.push({...g, season: sid});
+            allGames.push({
+              ...g,
+              home: canonicalTeam(g.home),
+              away: canonicalTeam(g.away),
+              season: sid,
+            });
           }
         });
       }catch(e){}

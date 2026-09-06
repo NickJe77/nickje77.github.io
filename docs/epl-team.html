@@ -201,7 +201,24 @@ function playerSlug(p){
 }
 
 const params   = new URLSearchParams(window.location.search);
-const teamName = params.get("team")||"";
+// Raw season files use short team names ("Tottenham"), but
+// team-stats.json (used just below for the actual lookup) uses full
+// official names ("Tottenham Hotspur") -- confirmed real mismatch,
+// affecting every EPL season. This is exactly why a season-page link
+// for any of these five led to "Team Not Found".
+const TEAM_NAME_CANONICAL = {
+  "tottenham": "Tottenham Hotspur",
+  "newcastle": "Newcastle United",
+  "manchester utd": "Manchester United",
+  "brighton": "Brighton & Hove Albion",
+  "nottingham": "Nottingham Forest",
+};
+function canonicalTeam(name){
+  if(!name) return name;
+  return TEAM_NAME_CANONICAL[name.trim().toLowerCase()] || name;
+}
+
+const teamName = canonicalTeam(params.get("team")||"");
 const page     = document.getElementById("page");
 
 let _allGames=[], _players=[];
@@ -229,7 +246,8 @@ async function loadTeam(){
         const r=await fetch(`/data/epl/seasons/${seasonId}.json`);
         if(!r.ok) return [];
         const data=await r.json();
-        const games=Array.isArray(data)?data:(data.games||[]);
+        const rawGames=Array.isArray(data)?data:(data.games||[]);
+        const games=rawGames.map(g=>({...g, home: canonicalTeam(g.home), away: canonicalTeam(g.away)}));
         return games.filter(g=>g.home===teamName||g.away===teamName).map(g=>({...g,season:seasonId}));
       }catch(e){ return []; }
     }));
