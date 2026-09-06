@@ -1,0 +1,68 @@
+name: Extract Brazil Serie A Zip
+on:
+  workflow_dispatch:
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Remove broken nested folders
+        run: |
+          rm -rf docs/data/brazilseriea/brazilseriea
+          rm -rf docs/data/brazilseriea/brazil-serie-a
+          rm -rf docs/data/brazilseriea/brazil_serie_a
+      - name: Clear previous extraction
+        run: |
+          # Without this, files from an earlier zip upload that aren't in
+          # the CURRENT zip never get removed -- unzip -o only overwrites
+          # matching filenames, it doesn't delete anything. Confirmed real
+          # case on Ligue 1: removed seasons kept showing up in the live
+          # data because their old extracted files just sat there untouched
+          # across multiple re-extractions.
+          rm -rf docs/data/brazilseriea/matches docs/data/brazilseriea/seasons
+      - name: Extract Brazil Serie A zip correctly
+        run: |
+          # The zip itself still lives under the old brazil_serie_a
+          # folder from before this was standardized -- reading it from
+          # there rather than asking for a re-upload. Confirmed by
+          # inspecting the real zip directly: it contains an internal
+          # "brazil-serie-a/" wrapper folder (hyphenated), so a plain
+          # extract would leave everything nested one level too deep
+          # under the wrong name either way. Extract to a temp location,
+          # then move the real contents into the new, correctly-named
+          # destination.
+          mkdir -p docs/data/brazilseriea
+          rm -rf /tmp/brazil_extract
+          mkdir -p /tmp/brazil_extract
+          unzip -o docs/data/brazil_serie_a/brazil-serie-a.zip -d /tmp/brazil_extract
+          mv /tmp/brazil_extract/brazil-serie-a/matches docs/data/brazilseriea/
+          mv /tmp/brazil_extract/brazil-serie-a/seasons docs/data/brazilseriea/
+          rm -rf /tmp/brazil_extract
+      - name: Remove macOS junk files
+        run: |
+          find docs/data/brazilseriea -name ".DS_Store" -delete
+          rm -rf docs/data/brazilseriea/__MACOSX
+      - name: Remove old, now-unused folder
+        run: |
+          # The zip and the stray "a" file used to live here under the
+          # pre-standardization name -- safe to remove now that
+          # everything's been moved to docs/data/brazilseriea/.
+          rm -rf docs/data/brazil_serie_a
+      - name: Verify structure
+        run: |
+          echo "----- BRAZIL SERIE A ROOT -----"
+          ls docs/data/brazilseriea
+          echo "----- MATCHES -----"
+          find docs/data/brazilseriea/matches -maxdepth 1
+          echo "----- SEASONS -----"
+          find docs/data/brazilseriea/seasons -maxdepth 1
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/brazilseriea/ docs/data/brazil_serie_a/
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Extract Brazil Serie A data into standardized folder name"
+          git pull --rebase origin main
+          git push
