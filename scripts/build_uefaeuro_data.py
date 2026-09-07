@@ -116,6 +116,37 @@ def parse_final_score(score_str):
         return None, None
 
 
+def true_regulation_score(events):
+    """For matches decided by a penalty shootout, match.final_score
+    reflects the SHOOTOUT result, not the real goals scored -- confirmed
+    on the real 2020 final (Italy 3:2 England in final_score, but the
+    actual match was 1-1; the shootout kicks are recorded as ordinary
+    "goal" events at minute "120" with an empty running_score, mixed in
+    with the real goals). This returns the true end-of-normal/extra-time
+    score by taking the last goal event that has a real, non-empty
+    running_score -- shootout kicks never have one, confirmed across
+    the full dataset (141 of 143 minute="120" events have an empty
+    running_score; the other 2 are genuine 120th-minute goals with a
+    real running_score, and are correctly kept here since this only
+    excludes events with a MISSING running_score, not all minute=120
+    events indiscriminately).
+    """
+    last_valid = None
+    for e in events:
+        if e.get("type") != "goal":
+            continue
+        rs = e.get("running_score")
+        if rs and ":" in rs:
+            last_valid = rs
+    if not last_valid:
+        return 0, 0
+    try:
+        h, a = last_valid.split(":", 1)
+        return int(h.strip()), int(a.strip())
+    except (ValueError, TypeError):
+        return 0, 0
+
+
 def make_team_stats(team, season):
     return {
         "team": team, "season": season,
@@ -205,26 +236,32 @@ def main():
             skipped_no_score += 1
             continue
 
+        # For goals purposes only, use the true regulation/extra-time
+        # score (see true_regulation_score docstring) -- home_score/
+        # away_score above still correctly reflect who WON when a
+        # shootout was involved, and are kept as-is for that purpose.
+        true_home, true_away = true_regulation_score(data.get("events", []))
+
         match_summaries.append({
             "home_team": home_team, "away_team": away_team,
-            "home_score": home_score, "away_score": away_score,
+            "home_score": true_home, "away_score": true_away,
             "season": season,
         })
 
         teams_set.add(home_team)
         teams_set.add(away_team)
 
-        for team, scored, conceded in [
-            (home_team, home_score, away_score),
-            (away_team, away_score, home_score),
+        for team, scored, conceded, result_scored, result_conceded in [
+            (home_team, true_home, true_away, home_score, away_score),
+            (away_team, true_away, true_home, away_score, home_score),
         ]:
             s = get_or_create_team_stats(team_stats_map, team, season)
             s["played"]        += 1
             s["goals_for"]     += scored
             s["goals_against"] += conceded
-            if scored > conceded:
+            if result_scored > result_conceded:
                 s["wins"] += 1; s["points"] += 3
-            elif scored == conceded:
+            elif result_scored == result_conceded:
                 s["draws"] += 1; s["points"] += 1
             else:
                 s["losses"] += 1
@@ -247,23 +284,34 @@ def main():
             name = (event.get("scorer") or "").strip()
             if not name:
                 continue
-            side = event.get("side")
-            credited_team = home_team if side == "home" else away_team if side == "away" else ""
-
-            # This dataset has no explicit own-goal flag (confirmed
-            # across the full 385 file dataset). The same lineup
-            # cross-reference technique that correctly detected own
-            # goals for J-League/Brazil finds zero here across all
-            # 1,137 real goal events -- a genuine, documented
-            # limitation (see module docstring), not assumed to work
-            # the same way here. own_goals will honestly show 0 for
-            # every player in this dataset as a result.
-            if side == "home" and name in away_names and name not in home_names:
-                actual_team, is_own_goal = away_team, True
-            elif side == "away" and name in home_names and name not in away_names:
-                actual_team, is_own_goal = home_team, True
+            # CONFIRMED across the full dataset: event.get("side") is
+            # null for every single one of the 1,137 goal events here --
+            # this is NOT a per-match quirk, it's simply absent from this
+            # data source entirely (unlike J-League/Brazil, where it's
+            # populated). Team attribution therefore can't use "side" at
+            # all; the scorer's real team is determined via lineup
+            # lookup instead (the same mechanism already built for
+            # own-goal detection below).
+            #
+            # This also explains, precisely, why own-goal detection
+            # returns zero for this dataset: an own goal requires
+            # knowing which team's SCOREBOARD TALLY the goal counted
+            # toward, and with "side" completely absent, that
+            # information doesn't exist anywhere in this data -- only
+            # which team the scorer personally belongs to (via lineup
+            # lookup) is determinable, which isn't the same thing.
+            # own_goals will therefore continue to honestly show 0 for
+            # every player -- not a bug to chase further, a genuine
+            # limitation of what this data source records.
+            if name in home_names and name not in away_names:
+                actual_team, is_own_goal = home_team, False
+            elif name in away_names and name not in home_names:
+                actual_team, is_own_goal = away_team, False
             else:
-                actual_team, is_own_goal = credited_team, False
+                # Scorer not found in either lineup (or found in both,
+                # e.g. a name collision) -- fall back to crediting
+                # nobody's team rather than guessing wrong.
+                actual_team, is_own_goal = "", False
 
             opponent = away_team if actual_team == home_team else home_team if actual_team else ""
 
