@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Euro Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#1fa25c;
+  --league:#a8790a;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{color:var(--ink);text-decoration:none;opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+.page-wrap{max-width:1100px;margin:0 auto;padding:26px 20px 70px;}
+
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;margin-bottom:18px;color:var(--muted);
+  font-weight:600;text-decoration:none;font-size:13px;
+}
+.back-link:hover{color:var(--ink);}
+
+/* ── Scorebug ─────────────────────────────────────────── */
+.scorebug{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;
+}
+.scorebug .eyebrow{
+  text-align:center;font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--league);
+  padding:20px 16px 0;
+}
+.bug-grid{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  gap:14px;padding:14px 30px 20px;
+}
+.bug-team{display:flex;align-items:center;gap:14px;min-width:0;}
+.bug-team.home{justify-content:flex-end;text-align:right;}
+.bug-team.away{justify-content:flex-start;text-align:left;}
+.bug-team a.tname{
+  font-family:var(--display);font-weight:600;font-size:clamp(15px,2.4vw,24px);
+  line-height:1.04;letter-spacing:.01em;text-transform:uppercase;color:#fff;text-decoration:none;
+}
+.bug-team a.tname:hover{color:var(--league);}
+.bug-flag{font-size:clamp(24px,3.6vw,38px);line-height:1;flex:0 0 auto;}
+.bug-score{
+  display:flex;align-items:center;gap:12px;font-family:var(--display);font-weight:600;
+  font-size:clamp(32px,6vw,56px);line-height:1;letter-spacing:.01em;white-space:nowrap;
+}
+.bug-score .sc.lose{color:rgba(255,255,255,.42);font-weight:500;}
+.bug-score .dash{color:rgba(255,255,255,.3);font-weight:400;}
+.bug-score .raw{font-size:clamp(24px,4vw,36px);}
+.winner-line{
+  text-align:center;padding:0 16px 22px;font-size:13px;font-weight:600;color:rgba(255,255,255,.65);
+}
+
+@media(max-width:820px){
+  .bug-grid{grid-template-columns:1fr;gap:14px;padding:10px 18px 20px;}
+  .bug-team.home,.bug-team.away{justify-content:center;text-align:center;}
+}
+
+/* ── Sections ─────────────────────────────────────────── */
+.section-title{
+  font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;
+  margin:26px 0 12px;color:var(--muted);
+}
+.match{
+  border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;
+  background:var(--surface);
+}
+.match h3{margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:16px;color:var(--ink);}
+.small{font-size:12.5px;color:var(--muted);font-weight:600;}
+.og-tag{color:var(--league);font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;margin-left:6px;}
+
+.team-link{color:var(--league);text-decoration:none;font-weight:700;}
+.team-link:hover{color:var(--accent);text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="euro.html">Euro</a>
+<a href="euro-countries.html">Countries</a>
+</nav>
+
+<div class="page-wrap">
+<a class="back-link" href="javascript:history.back()">← Back</a>
+<div id="output"></div>
+</div>
+
+<script>
+const COUNTRY_PAGE="euro-country.html";
+
+const params=new URLSearchParams(location.search);
+const seasonQ=params.get("season")||"";
+const matchQ=params.get("match")||"";
+
+const countryCodes={"Albania": "AL", "Austria": "AT", "Belgium": "BE", "Bulgaria": "BG", "Croatia": "HR", "Czech Republic": "CZ", "Denmark": "DK", "England": "GB", "Finland": "FI", "France": "FR", "Georgia": "GE", "Germany": "DE", "Greece": "GR", "Hungary": "HU", "Iceland": "IS", "Ireland": "IE", "Italy": "IT", "Latvia": "LV", "N. Ireland": "GB", "Netherlands": "NL", "North Macedonia": "MK", "Norway": "NO", "Poland": "PL", "Portugal": "PT", "Romania": "RO", "Russia": "RU", "Scotland": "GB", "Serbia": "RS", "Slovakia": "SK", "Slovenia": "SI", "Spain": "ES", "Sweden": "SE", "Switzerland": "CH", "Turkey": "TR", "Ukraine": "UA", "Wales": "GB", "CIS": "", "CSSR": "", "USSR": "", "Yugoslavia": ""};
+function flagEmoji(code){
+ if(!code) return "";
+ return code.replace(/./g,c=>String.fromCodePoint(127397+c.charCodeAt()));
+}
+function getFlag(name){ return flagEmoji(countryCodes[name]||""); }
+
+fetch(`data/uefaeuro/matches/${seasonQ}/${matchQ}.json`,{cache:"no-store"})
+.then(r=> r.ok ? r.json() : null)
+.then(data=>render(data))
+.catch(()=>render(null));
+
+function render(raw){
+ const out=document.getElementById("output");
+
+ if(!raw){
+  out.innerHTML=`
+    <div class="scorebug">
+      <div class="eyebrow">UEFA Euro</div>
+      <div class="winner-line" style="padding-top:20px;">Match not found.</div>
+    </div>`;
+  return;
+ }
+
+ const m = raw.match || {};
+ const team1 = (m.home_team||{}).name || "";
+ const team2 = (m.away_team||{}).name || "";
+
+ document.title = `${team1} vs ${team2} ${seasonQ} | The Sporting Almanac`;
+
+ // final_score reflects the PENALTY SHOOTOUT result for shootout-decided
+ // matches, not the real goals scored -- confirmed directly on the real
+ // 2020 final (Italy 3:2 England in final_score, but the actual match
+ // was 1-1). The true regulation/extra-time score is recovered from the
+ // last goal event that has a real running_score (shootout kicks never
+ // have one). Same fix already applied in build_uefaeuro_data.py.
+ function trueRegulationScore(events){
+  let last = null;
+  (events||[]).forEach(e=>{
+   if(e.type==='goal' && e.running_score && e.running_score.includes(':')) last = e.running_score;
+  });
+  if(!last) return [0,0];
+  const [h,a] = last.split(':').map(Number);
+  return [h,a];
+ }
+
+ const [regHome, regAway] = trueRegulationScore(raw.events);
+ let [finalHome, finalAway] = [regHome, regAway];
+ if(m.final_score && m.final_score.includes(':')){
+  const parts = m.final_score.split(':').map(Number);
+  finalHome = parts[0]; finalAway = parts[1];
+ }
+ const wasShootout = (finalHome !== regHome) || (finalAway !== regAway);
+
+ let resolvedWinner = "";
+ let penaltyNote = "";
+ if(wasShootout){
+  resolvedWinner = finalHome > finalAway ? team1 : team2;
+  penaltyNote = ` — won ${Math.max(finalHome,finalAway)}–${Math.min(finalHome,finalAway)} on penalties`;
+ } else if(regHome > regAway){
+  resolvedWinner = team1;
+ } else if(regAway > regHome){
+  resolvedWinner = team2;
+ }
+
+ const team1Lost = resolvedWinner && resolvedWinner !== team1;
+ const team2Lost = resolvedWinner && resolvedWinner !== team2;
+
+ const scoreHTML = `<span class="sc ${team1Lost?'lose':''}">${regHome}</span><span class="dash">–</span><span class="sc ${team2Lost?'lose':''}">${regAway}</span>`;
+
+ const winnerLine = resolvedWinner
+   ? `Winner: ${resolvedWinner} ${getFlag(resolvedWinner)}${penaltyNote}`
+   : "Draw";
+
+ out.innerHTML=`
+  <div class="scorebug">
+    <div class="eyebrow">${seasonQ} UEFA Euro</div>
+    <div class="bug-grid">
+      <div class="bug-team home">
+        <a class="tname" href="${'euro-country.html'}?team=${encodeURIComponent(team1)}">${team1}</a>
+        <span class="bug-flag">${getFlag(team1)}</span>
+      </div>
+      <div class="bug-score">${scoreHTML}</div>
+      <div class="bug-team away">
+        <span class="bug-flag">${getFlag(team2)}</span>
+        <a class="tname" href="${'euro-country.html'}?team=${encodeURIComponent(team2)}">${team2}</a>
+      </div>
+    </div>
+    <div class="winner-line">${winnerLine}</div>
+  </div>`;
+
+ // ── Goals -- excludes shootout kicks (minute="120" with no
+ // running_score, confirmed real pattern) so the list shows only
+ // genuine match goals. ──────────────────────────────────────────────
+ const goalEvents = (raw.events||[]).filter(e=>
+   e.type==='goal' && e.scorer && !(e.minute==='120' && !e.running_score)
+ );
+ if(goalEvents.length){
+  out.innerHTML+=`<div class="section-title">Goals</div>`;
+  goalEvents.forEach(e=>{
+   out.innerHTML+=`
+    <div class="match">
+     <h3>${e.scorer}</h3>
+     <div class="small">Minute: ${e.minute||"–"} &nbsp;·&nbsp; Score: ${e.running_score||"–"}</div>
+    </div>`;
+  });
+ }
+
+ // ── Cards -- embedded per player inside lineups, not a flat string ──
+ const lineups = raw.lineups || {};
+ const homePlayers = [...(lineups.home?.starters||[]), ...(lineups.home?.bench||[])];
+ const awayPlayers = [...(lineups.away?.starters||[]), ...(lineups.away?.bench||[])];
+
+ function cardLines(players, team){
+  const lines = [];
+  players.forEach(p=>{
+   (p.yellow_card_minutes||[]).forEach(min=> lines.push(`${p.name} (${team}) ${min}'`));
+  });
+  return lines;
+ }
+ function redLines(players, team){
+  const lines = [];
+  players.forEach(p=>{
+   (p.red_card_minutes||[]).forEach(min=> lines.push(`${p.name} (${team}) ${min}'`));
+  });
+  return lines;
+ }
+
+ const yellowLines = [...cardLines(homePlayers, team1), ...cardLines(awayPlayers, team2)];
+ const redCardLines = [...redLines(homePlayers, team1), ...redLines(awayPlayers, team2)];
+
+ if(yellowLines.length || redCardLines.length){
+  out.innerHTML+=`<div class="section-title">Cards</div>`;
+  if(yellowLines.length){
+   out.innerHTML+=`<div class="match"><h3>🟨 Yellow Cards</h3><div class="small">${yellowLines.join(" &nbsp;·&nbsp; ")}</div></div>`;
+  }
+  if(redCardLines.length){
+   out.innerHTML+=`<div class="match"><h3>🟥 Red Cards</h3><div class="small">${redCardLines.join(" &nbsp;·&nbsp; ")}</div></div>`;
+  }
+ }
+
+ // ── Referee & venue ───────────────────────────────────────────────
+ const facts = raw.facts || {};
+ if(facts.referee || facts.venue){
+  out.innerHTML+=`<div class="section-title">Match Details</div>`;
+  if(facts.venue){
+   out.innerHTML+=`<div class="match"><h3>${facts.venue}</h3>${facts.attendance ? `<div class="small">Attendance: ${facts.attendance.toLocaleString()}</div>` : ''}</div>`;
+  }
+  if(facts.referee && facts.referee.name){
+   out.innerHTML+=`<div class="match"><h3>Referee: ${facts.referee.name}</h3></div>`;
+  }
+ }
+}
+
+</script>
+
+</body>
+</html>

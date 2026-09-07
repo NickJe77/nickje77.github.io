@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>UEFA Euro – Countries | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --accent:#1fa25c;
+  --league:#a8790a;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{color:var(--ink);text-decoration:none;opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  color:#fff;padding:44px 20px;text-align:center;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--accent);margin-bottom:10px;
+}
+.hero h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(24px,4.5vw,40px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+
+.page-wrap{max-width:1200px;margin:0 auto;padding:26px 20px 70px;}
+
+.country-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;}
+.country-tile{
+  position:relative;height:100px;border:4px solid var(--line);border-radius:var(--radius);
+  background:var(--surface);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-family:var(--display);font-weight:600;text-align:center;overflow:hidden;
+  transition:transform .15s ease,box-shadow .15s ease,background .15s ease;
+}
+.country-tile:hover{
+  transform:translateY(-3px);box-shadow:0 14px 30px -16px rgba(10,16,24,.2);
+  background:var(--ink);color:#fff;
+}
+.country-tile .label{
+  position:relative;z-index:2;padding:0 8px;font-size:15px;letter-spacing:.01em;text-transform:uppercase;
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="euro.html">Euro</a>
+<a href="euro-countries.html">Countries</a>
+</nav>
+
+<div class="hero">
+  <div class="eyebrow">Football</div>
+  <h1>UEFA Euro – Countries</h1>
+</div>
+
+<div class="page-wrap">
+<div id="countries" class="country-grid"></div>
+</div>
+
+<script>
+const COUNTRY_PAGE = "euro-country.html";
+let countrySet = new Set();
+// Each country's recognized NATIONAL/SPORTING colours — not just a literal
+// reading of the flag's stripes. Several nations' actual identity colours
+// differ a lot from their flag (Australia is green-and-gold, not the flag's
+// navy/red/white; the Netherlands is orange, not the flag's red/white/blue;
+// Italy's Azzurri wear blue, not the flag's green/white/red; etc).
+const flagColours = {"Albania": ["#E41E20", "#000000"], "Austria": ["#ED2939", "#FFFFFF"], "Belgium": ["#000000", "#FDDA24", "#EF3340"], "Bulgaria": ["#FFFFFF", "#00966E", "#D62612"], "Croatia": ["#FF0000", "#FFFFFF", "#171796"], "Czech Republic": ["#D7141A", "#FFFFFF", "#11457E"], "Denmark": ["#C60C30", "#FFFFFF"], "England": ["#FFFFFF", "#CE1124"], "Finland": ["#003580", "#FFFFFF"], "France": ["#0055A4", "#FFFFFF", "#EF4135"], "Georgia": ["#FFFFFF", "#FF0000"], "Germany": ["#000000", "#DD0000", "#FFCE00"], "Greece": ["#0D5EAF", "#FFFFFF"], "Hungary": ["#CE2939", "#FFFFFF", "#477050"], "Iceland": ["#02529C", "#FFFFFF", "#DC1E35"], "Ireland": ["#169B62", "#FF883E"], "Italy": ["#0068A8", "#FFFFFF"], "Latvia": ["#9E3039", "#FFFFFF"], "N. Ireland": ["#FFFFFF", "#CE1124"], "Netherlands": ["#FF7900", "#21468B"], "North Macedonia": ["#D20000", "#FFE600"], "Norway": ["#EF2B2D", "#002868"], "Poland": ["#FFFFFF", "#DC143C"], "Portugal": ["#CE1126", "#046A38"], "Romania": ["#002B7F", "#FCD116", "#CE1126"], "Russia": ["#FFFFFF", "#0039A6", "#D52B1E"], "Scotland": ["#0065BF", "#FFFFFF"], "Serbia": ["#C6363C", "#0C4076"], "Slovakia": ["#EE1C25", "#FFFFFF", "#0B4EA2"], "Slovenia": ["#FFFFFF", "#005CE7", "#ED1C24"], "Spain": ["#C60B1E", "#FFC400"], "Sweden": ["#006AA7", "#FECC00"], "Switzerland": ["#FF0000", "#FFFFFF"], "Turkey": ["#E30A17", "#FFFFFF"], "Ukraine": ["#005BBB", "#FFD500"], "Wales": ["#D30731", "#00B140"], "CIS": ["#9aa3ad", "#c7ccd3"], "CSSR": ["#9aa3ad", "#c7ccd3"], "USSR": ["#9aa3ad", "#c7ccd3"], "Yugoslavia": ["#9aa3ad", "#c7ccd3"]};
+function flagBorderStyle(country){
+ const colours = flagColours[country] || ["#c7ccd3","#9aa3ad"];
+ const n = colours.length;
+ const stops = colours.map((c, i) => {
+  const start = (i / n * 100).toFixed(2);
+  const end = ((i + 1) / n * 100).toFixed(2);
+  return `${c} ${start}%, ${c} ${end}%`;
+ }).join(", ");
+ return `linear-gradient(90deg, ${stops}) 1`;
+}
+fetch("data/uefaeuro/teams.json",{cache:"no-store"})
+.then(r=>r.json())
+.then(data=>{
+ data.forEach(t=>{
+  if(t.name) countrySet.add(t.name);
+ });
+ buildCountries();
+});
+function buildCountries(){
+ const box=document.getElementById("countries");
+ Array.from(countrySet)
+  .filter(c=>c.length>0)
+  .sort((a,b)=>a.localeCompare(b))
+  .forEach(c=>{
+   const d=document.createElement("div");
+   d.className="country-tile";
+   d.style.borderImage = flagBorderStyle(c);
+   d.innerHTML=`<span class="label">${c}</span>`;
+   d.onclick=()=>{
+    window.location.href = COUNTRY_PAGE + "?team=" + encodeURIComponent(c);
+   };
+   box.appendChild(d);
+  });
+}
+</script>
+</body>
+</html>

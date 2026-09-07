@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Euro Country | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#1fa25c;
+  --league:#a8790a;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{color:var(--ink);text-decoration:none;opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+.page-wrap{max-width:1200px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Header hero ──────────────────────────────────────── */
+.header{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:22px;padding:36px 26px;display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.header h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(28px,5vw,46px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+
+/* ── Stats ────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px;}
+.stat-box{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
+  text-align:center;font-family:var(--display);font-weight:600;font-size:20px;color:var(--ink);line-height:1.7;
+}
+
+/* ── Leaders ──────────────────────────────────────────── */
+.leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:30px;}
+.leader-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;}
+.leader-box h3{
+  text-align:center;margin:0 0 12px;font-family:var(--display);font-weight:600;font-size:14px;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--league);
+}
+.leader-line{font-size:13.5px;font-weight:600;padding:6px 0;border-bottom:1px solid var(--line);text-align:center;color:var(--ink);}
+.leader-line:last-child{border-bottom:none;}
+
+/* ── Year sections ────────────────────────────────────── */
+.year-section{margin-bottom:30px;}
+.year-section h2{
+  border-bottom:2px solid var(--league);padding-bottom:8px;font-family:var(--display);font-weight:600;
+  font-size:22px;letter-spacing:.01em;color:var(--ink);margin:0 0 14px;
+}
+
+.match{
+  border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin-top:10px;
+  background:var(--surface);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
+}
+.match:hover{transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(10,16,24,.18);border-color:var(--faint);}
+.match h3{margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:17px;color:var(--ink);}
+.small{font-size:12.5px;color:var(--muted);font-weight:600;}
+.error{color:#c0362c;font-weight:700;}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="football.html">Football</a>
+<a href="euro.html">Euro</a>
+<a href="euro-countries.html">Countries</a>
+</nav>
+
+<div class="page-wrap">
+<div id="content"></div>
+</div>
+
+<script>
+let team=new URLSearchParams(location.search).get("team");
+
+if(!team){
+ document.getElementById("content").innerHTML="<div class='error'>No country selected.</div>";
+ throw new Error("No team");
+}
+
+/* ---------- DATA LOADING ---------- */
+// Euro's data is already clean and structured -- players.json has
+// per-player goals/cards with a season_stats breakdown by team, and
+// team-stats.json has per-team W/D/L/goals already computed. No
+// string-parsing needed, unlike World Cup's CSV-derived source.
+
+const YEARS = [1960,1964,1968,1972,1976,1980,1984,1988,1992,1996,2000,2004,2008,2012,2016,2020,2024];
+
+// Sorts a season's games by their REAL date (DD.MM.YYYY strings sort
+// wrong alphabetically -- confirmed directly: "29.06.2021" incorrectly
+// sorts after "11.07.2021" as plain strings even though June is
+// earlier than July). The last match by real date in a tournament is
+// reliably its final, since no round-name field exists anywhere in
+// this data source to identify "Final" directly.
+function sortByRealDate(games){
+  return [...games].sort((a,b)=>{
+    const [da,ma,ya] = a.date.split(".").map(Number);
+    const [db,mb,yb] = b.date.split(".").map(Number);
+    return (ya*10000+ma*100+da) - (yb*10000+mb*100+db);
+  });
+}
+
+Promise.all([
+  fetch("data/uefaeuro/players.json").then(r=>r.json()),
+  fetch("data/uefaeuro/team-stats.json").then(r=>r.json()),
+]).then(([players, teamStats])=>{
+
+  const myStats = teamStats.filter(s=>s.team===team);
+  if(!myStats.length){
+    document.getElementById("content").innerHTML = `<div class="error">${team} did not appear in this dataset.</div>`;
+    return;
+  }
+
+  const myPlayers = players.filter(p=>p.teams.includes(team));
+
+  const totals = myStats.reduce((acc,s)=>{
+    acc.played += s.played; acc.wins += s.wins; acc.draws += s.draws;
+    acc.losses += s.losses; acc.goals_for += s.goals_for;
+    return acc;
+  }, {played:0,wins:0,draws:0,losses:0,goals_for:0});
+
+  const goalsBoard = myPlayers
+    .map(p=>({name:p.name, value:p.season_stats.filter(s=>s.team===team).reduce((a,s)=>a+s.goals,0)}))
+    .filter(p=>p.value>0).sort((a,b)=>b.value-a.value).slice(0,5);
+  const yellowBoard = myPlayers
+    .map(p=>({name:p.name, value:p.season_stats.filter(s=>s.team===team).reduce((a,s)=>a+s.yellow_cards,0)}))
+    .filter(p=>p.value>0).sort((a,b)=>b.value-a.value).slice(0,5);
+  const redBoard = myPlayers
+    .map(p=>({name:p.name, value:p.season_stats.filter(s=>s.team===team).reduce((a,s)=>a+s.red_cards,0)}))
+    .filter(p=>p.value>0).sort((a,b)=>b.value-a.value).slice(0,5);
+
+  const appearances = myStats.length;
+  const seasonsPlayed = myStats.map(s=>s.season).sort();
+
+  // Determine finals/titles by checking, for each season this team
+  // played in, whether they appear in that tournament's last match by
+  // real date (the final).
+  Promise.all(seasonsPlayed.map(season =>
+    fetch(`data/uefaeuro/seasons/${season}.json`).then(r=>r.json()).then(d=>({season, games: d.games||d}))
+  )).then(seasonData=>{
+
+    let finals=0, titles=0;
+    const yearSections = [];
+
+    seasonData.forEach(({season, games})=>{
+      const sorted = sortByRealDate(games);
+      const final = sorted[sorted.length-1];
+      const inFinal = final.home_team===team || final.away_team===team;
+      if(inFinal){
+        finals++;
+        const won = (final.home_team===team && final.home_score>final.away_score) ||
+                    (final.away_team===team && final.away_score>final.home_score);
+        if(won) titles++;
+      }
+
+      const myGames = sorted.filter(g=>g.home_team===team||g.away_team===team);
+      if(myGames.length) yearSections.push({season, games: myGames});
+    });
+
+    renderPage({totals, appearances, finals, titles, goalsBoard, yellowBoard, redBoard, yearSections});
+  });
+});
+
+function boardHTML(title, board){
+  return `<div class="leader-box"><h3>${title}</h3>${
+    board.length ? board.map(p=>`<div class="leader-line">${p.name} – ${p.value}</div>`).join("")
+                 : '<div class="leader-line">None on record</div>'
+  }</div>`;
+}
+
+function renderPage({totals, appearances, finals, titles, goalsBoard, yellowBoard, redBoard, yearSections}){
+  let html = `
+   <div class="header"><h1>${team}</h1></div>
+   <div class="stats">
+    <div class="stat-box">Appearances<br>${appearances}</div>
+    <div class="stat-box">Titles<br>${titles}</div>
+    <div class="stat-box">Finals<br>${finals}</div>
+    <div class="stat-box">Matches<br>${totals.played}</div>
+    <div class="stat-box">Goals<br>${totals.goals_for}</div>
+   </div>
+   <div class="leaders">
+    ${boardHTML("Top 5 Goals", goalsBoard)}
+    ${boardHTML("Top 5 Yellow Cards", yellowBoard)}
+    ${boardHTML("Top 5 Red Cards", redBoard)}
+   </div>
+  `;
+
+  yearSections.slice().sort((a,b)=>b.season-a.season).forEach(({season, games})=>{
+    html += `<div class="year-section"><h2>${season}</h2>`;
+    games.forEach(g=>{
+      const winner = g.home_score===g.away_score ? "" :
+        (g.home_score>g.away_score ? g.home_team : g.away_team);
+      html += `
+       <a class="match" style="display:block;text-decoration:none;color:inherit;" href="euro-match.html?season=${season}&match=${g.game_id}">
+        <h3>${g.home_team} ${g.home_score}-${g.away_score} ${g.away_team}</h3>
+        <div class="small">${g.date}</div>
+        <div class="small">${winner ? `Winner: ${winner}` : "Draw"}</div>
+       </a>`;
+    });
+    html += `</div>`;
+  });
+
+  document.getElementById("content").innerHTML = html;
+}
+
+</script>
+
+</body>
+</html>
