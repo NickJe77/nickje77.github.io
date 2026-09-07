@@ -180,9 +180,38 @@ function loadYear(year,btn){
    fetch("data/uefaeuro/players.json").then(r=>r.json()),
  ]).then(([seasonData, players])=>{
    const games = sortByRealDate(seasonData.games || seasonData);
-   out.innerHTML="";
-   buildSummary(year, games, players, out);
-   buildMatches(year, games, out);
+
+   // For any match decided by penalties, the season file's home_score/
+   // away_score reflects the SHOOTOUT result, not the real regulation
+   // score -- confirmed real bug (e.g. Italy 3-2 England shown for the
+   // 2020 final, when the actual match was 1-1; same for the Italy 4-2
+   // Spain semifinal, actually 1-1). Fetch each match's own file to
+   // recover the true score for display; winner determination below is
+   // untouched since the season-file score already correctly reflects
+   // who really won, shootout or not.
+   Promise.all(games.map(g=>
+     fetch(`data/uefaeuro/matches/${year}/${g.game_id}.json`)
+       .then(r=> r.ok ? r.json() : null)
+       .then(raw=>{
+         if(!raw) return g;
+         let lastValid = null;
+         (raw.events||[]).forEach(e=>{
+           if(e.type==='goal' && e.running_score && e.running_score.includes(':')) lastValid = e.running_score;
+         });
+         if(!lastValid){
+           const wasShootout0 = (g.home_score !== 0) || (g.away_score !== 0);
+           return {...g, trueHome:0, trueAway:0, penaltyScore: wasShootout0 ? `${g.home_score}-${g.away_score}` : null};
+         }
+         const [h,a2] = lastValid.split(':').map(Number);
+         const wasShootout = (h!==g.home_score) || (a2!==g.away_score);
+         return {...g, trueHome:h, trueAway:a2, penaltyScore: wasShootout ? `${g.home_score}-${g.away_score}` : null};
+       })
+       .catch(()=>g)
+   )).then(correctedGames=>{
+     out.innerHTML="";
+     buildSummary(year, correctedGames, players, out);
+     buildMatches(year, correctedGames, out);
+   });
  });
 }
 
@@ -237,17 +266,21 @@ function buildMatches(year, games, out){
   div.style.color="inherit";
   div.href=`euro-match.html?season=${year}&match=${m.game_id}`;
 
+  const hasTrue = m.trueHome !== undefined;
+  const dispHome = hasTrue ? m.trueHome : m.home_score;
+  const dispAway = hasTrue ? m.trueAway : m.away_score;
   const result = m.home_score===m.away_score ? "Draw"
                : (m.home_score>m.away_score ? m.home_team : m.away_team);
+  const penaltyNote = m.penaltyScore ? ` (won ${m.penaltyScore} on penalties)` : "";
 
   div.innerHTML=`
    <h3>
     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.home_team)}" onclick="event.stopPropagation()">${m.home_team}</a>
-    ${m.home_score}-${m.away_score}
+    ${dispHome}-${dispAway}
     <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.away_team)}" onclick="event.stopPropagation()">${m.away_team}</a>
    </h3>
    <div class="small">${m.date}</div>
-   <div class="small">${result==="Draw" ? "Draw" : `Winner: ${result}`}</div>
+   <div class="small">${result==="Draw" ? "Draw" : `Winner: ${result}${penaltyNote}`}</div>
   `;
 
   out.appendChild(div);

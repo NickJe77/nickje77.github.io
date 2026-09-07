@@ -187,7 +187,34 @@ function compare(){
     });
    });
 
-   render(a,b,matches,scorers);
+   // For any match decided by penalties, the season file's home_score/
+   // away_score reflects the SHOOTOUT result, not the real regulation
+   // score -- confirmed real bug (Italy 3:2 England shown for the 2020
+   // final, when the actual match was 1-1). Fetch each h2h match's own
+   // file to recover the true score for display; win/loss tallying
+   // above is untouched since the season-file score already correctly
+   // reflects who really won, shootout or not.
+   Promise.all(matches.map(m=>
+     fetch(`data/uefaeuro/matches/${m.year}/${m.game_id}.json`)
+       .then(r=> r.ok ? r.json() : null)
+       .then(raw=>{
+         if(!raw) return m;
+         let lastValid = null;
+         (raw.events||[]).forEach(e=>{
+           if(e.type==='goal' && e.running_score && e.running_score.includes(':')) lastValid = e.running_score;
+         });
+         if(!lastValid){
+           const wasShootout0 = (m.home_score !== 0) || (m.away_score !== 0);
+           return {...m, trueHome:0, trueAway:0, penaltyScore: wasShootout0 ? `${m.home_score}-${m.away_score}` : null};
+         }
+         const [h,a2] = lastValid.split(':').map(Number);
+         const wasShootout = (h!==m.home_score) || (a2!==m.away_score);
+         return {...m, trueHome:h, trueAway:a2, penaltyScore: wasShootout ? `${m.home_score}-${m.away_score}` : null};
+       })
+       .catch(()=>m)
+   )).then(correctedMatches=>{
+     render(a,b,correctedMatches,scorers);
+   });
  });
 }
 
@@ -239,17 +266,21 @@ function render(a,b,matches,scorers){
  matches
   .sort((x,y)=>x.year-y.year)
   .forEach(m=>{
+   const hasTrue = m.trueHome !== undefined;
+   const dispHome = hasTrue ? m.trueHome : m.home_score;
+   const dispAway = hasTrue ? m.trueAway : m.away_score;
    const result = m.home_score===m.away_score ? "Draw"
                 : (m.home_score>m.away_score ? m.home_team : m.away_team);
+   const penaltyNote = m.penaltyScore ? ` (won ${m.penaltyScore} on penalties)` : "";
    out.innerHTML += `
     <div class="match">
      <h3>
       <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.home_team)}">${m.home_team}</a>
-      ${m.home_score}-${m.away_score}
+      ${dispHome}-${dispAway}
       <a class="team-link" href="${COUNTRY_PAGE}?team=${encodeURIComponent(m.away_team)}">${m.away_team}</a>
      </h3>
      <div class="small">${m.year} – ${m.date}</div>
-     <div class="small">${result==="Draw" ? "Draw" : `Winner: ${result}`}</div>
+     <div class="small">${result==="Draw" ? "Draw" : `Winner: ${result}${penaltyNote}`}</div>
     </div>
    `;
   });
