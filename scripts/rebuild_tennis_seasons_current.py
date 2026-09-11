@@ -1,327 +1,136 @@
-import requests
+#!/usr/bin/env python3
+"""
+rebuild_tennis_seasons_current.py
+
+tennis-data.co.uk started blocking automated requests (403 Forbidden) from
+GitHub Actions, the same way pro-football-reference.com did for the NFL
+scraper. Rather than fight another bot-wall, this version pulls from a
+GitHub-hosted, continuously-updated mirror of Jeff Sackmann's original
+tennis_atp/tennis_wta match data (the source this site's historical files
+like 1985.json were already built from):
+
+    https://github.com/Aneeshers/tennis-sackmann-archive
+
+Since it's plain files on GitHub, there's no bot-wall to hit. It also
+means real full player names and real match stats (aces, break points,
+etc.) are available again — no more name-abbreviation workarounds and no
+more zeroed-out stat fields.
+
+Output schema for docs/data/tennis/seasons/{year}.json is UNCHANGED:
+    { "matches": [ { "match_id", "date", "tournament", "surface", "round",
+                      "player1", "player2", "winner", "loser", "score",
+                      "gender", "best_of", "draw_size", "minutes",
+                      "tourney_level", "tourney_id",
+                      "w_ace", "w_df", "w_svpt", "w_1stIn", "w_1stWon",
+                      "w_2ndWon", "w_SvGms", "w_bpSaved", "w_bpFaced",
+                      "l_ace", "l_df", "l_svpt", "l_1stIn", "l_1stWon",
+                      "l_2ndWon", "l_SvGms", "l_bpSaved", "l_bpFaced" }, ... ] }
+
+Usage:
+    python3 scripts/rebuild_tennis_seasons_current.py
+"""
+
+import csv
+import io
 import json
 import os
 from datetime import date
-from io import BytesIO
 
-try:
-    import openpyxl
-except ImportError:
-    import subprocess, sys
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "openpyxl", "-q", "--break-system-packages"])
-    import openpyxl
+import requests
 
 BASE = "docs/data/tennis/seasons"
+
 CURRENT_YEAR = date.today().year
 PREV_YEAR = CURRENT_YEAR - 1
 
-HEADERS = {"User-Agent": "tennis-seasons-updater/1.0 (github-actions)"}
-
-STATIC_NAMES = {
-    "tirante t.a.": "Tomas Agustin Tirante",
-    "llamas ruiz p.": "Pedro Llamas Ruiz",
-    "gea a.": "Adrian Gea",
-    "davidovich fokina a.": "Alejandro Davidovich Fokina",
-    "cina f.": "Flavio Cobolli",
-    "zheng m.": "Zheng Juncheng",
-    "pavlovic l.": "Luca Pavlovic",
-    "royer v.": "Valentin Royer",
-    "mpetshi g.": "Giovanni Mpetshi Perricard",
-    "carreno busta p.": "Pablo Carreno Busta",
-    "de minaur a.": "Alex De Minaur",
-    "van assche l.": "Luca Van Assche",
-    "jodar r.": "Rodrigo Jodar",
-    "bautista agut r.": "Roberto Bautista Agut",
-    "de jong j.": "Jesper De Jong",
-    "ugo carabelli c.": "Camilo Ugo Carabelli",
-    "faurel t.": "Titouan Faurel",
-    "diaz acosta f.": "Facundo Diaz Acosta",
-    "zhang zh.": "Zhang Zhizhen",
-    "prado angelo j.c.": "Juan Carlos Prado Angelo",
-    "struff j.l.": "Jan-Lennard Struff",
-    "cerundolo j.m.": "Juan Manuel Cerundolo",
-    "auger-aliassime f.": "Felix Auger-Aliassime",
-    "tabur c.": "Clement Tabur",
-    "kouame m.": "Mathis Hamou",
-    "merida aguilar d.": "Daniel Merida Aguilar",
-    "van de zandschulp b.": "Botic Van De Zandschulp",
-    "tiafoe f.": "Frances Tiafoe",
-    "draxl l.": "Leandro Riedi",
-    "budkov kjaer n.": "Nicola Budkov Kjaer",
-    "maristany g.": "Guiomar Maristany",
-    "bouzas maneiro j.": "Julia Bouzas Maneiro",
-    "fils a.": "Arthur Fils",
-    "muller a.": "Alexandre Muller",
-    "cazaux a.": "Arthur Cazaux",
-    "baez s.": "Sebastian Baez",
-    "cerundolo f.": "Francisco Cerundolo",
-    "tabilo a.": "Alejandro Tabilo",
-    "shelton b.": "Ben Shelton",
-    "rune h.": "Holger Rune",
-    "ruud c.": "Casper Ruud",
-    "zverev a.": "Alexander Zverev",
-    "alcaraz c.": "Carlos Alcaraz",
-    "sinner j.": "Jannik Sinner",
-    "medvedev d.": "Daniil Medvedev",
-    "tsitsipas s.": "Stefanos Tsitsipas",
-    "hurkacz h.": "Hubert Hurkacz",
-    "rublev a.": "Andrey Rublev",
-    "fritz t.": "Taylor Fritz",
-    "paul t.": "Tommy Paul",
-    "nakashima b.": "Brandon Nakashima",
-    "kokkinakis t.": "Thanasi Kokkinakis",
-    "duckworth j.": "James Duckworth",
-    "rinderknech a.": "Arthur Rinderknech",
-    "fonseca j.": "Joao Fonseca",
-    "mensik j.": "Jakub Mensik",
-    "berrettini m.": "Matteo Berrettini",
-    "sonego l.": "Lorenzo Sonego",
-    "musetti l.": "Lorenzo Musetti",
-    "navone m.": "Mariano Navone",
-    "humbert u.": "Ugo Humbert",
-    "halys q.": "Quentin Halys",
-    "blockx a.": "Alexander Blockx",
-    "medjedovic h.": "Hamad Medjedovic",
-    "borges n.": "Nuno Borges",
-    "prizmic d.": "Dino Prizmic",
-    "michelsen a.": "Alex Michelsen",
-    "basavareddy n.": "Nishesh Basavareddy",
-    "trungelliti m.": "Marco Trungelliti",
-    "machac t.": "Tomas Machac",
-    "kecmanovic m.": "Miomir Kecmanovic",
-    "khachanov k.": "Karen Khachanov",
-    "djokovic n.": "Novak Djokovic",
-    "wawrinka s.": "Stan Wawrinka",
-    "lehecka j.": "Jiri Lehecka",
-    "shevchenko a.": "Alexander Shevchenko",
-    "rodionov j.": "Jurij Rodionov",
-    "fucsovics m.": "Marton Fucsovics",
-    "kovacevic a.": "Aleksandar Kovacevic",
-    "swiatek i.": "Iga Swiatek",
-    "sabalenka a.": "Aryna Sabalenka",
-    "gauff c.": "Coco Gauff",
-    "rybakina e.": "Elena Rybakina",
-    "pegula j.": "Jessica Pegula",
-    "keys m.": "Madison Keys",
-    "collins d.": "Danielle Collins",
-    "navarro e.": "Emma Navarro",
-    "andreeva m.": "Mirra Andreeva",
-    "paolini j.": "Jasmine Paolini",
-    "badosa p.": "Paula Badosa",
-    "haddad maia b.": "Beatriz Haddad Maia",
-    "muchova k.": "Karolina Muchova",
-    "vondrousova m.": "Marketa Vondrousova",
-    "ostapenko j.": "Jelena Ostapenko",
-    "kasatkina d.": "Daria Kasatkina",
-    "sakkari m.": "Maria Sakkari",
-    "garcia c.": "Caroline Garcia",
-    "azarenka v.": "Victoria Azarenka",
-    "jabeur o.": "Ons Jabeur",
-    "fernandez l.": "Leylah Fernandez",
-    "raducanu e.": "Emma Raducanu",
-    "kostyuk m.": "Marta Kostyuk",
-    "mertens e.": "Elise Mertens",
-    "bouzkova m.": "Marie Bouzkova",
-    "tauson c.": "Clara Tauson",
-    "linette m.": "Magda Linette",
-    "putintseva y.": "Yulia Putintseva",
-    "potapova a.": "Anastasia Potapova",
-    "alexandrova e.": "Ekaterina Alexandrova",
-    "samsonova l.": "Liudmila Samsonova",
-    "zheng q.": "Qinwen Zheng",
-    "wang x.": "Xinyu Wang",
-    "wang xin.": "Xinyu Wang",
-    "wang xiy.": "Xiyu Wang",
-    "bassols m.": "Marina Bassols Ribera",
-    "efremova k.": "Kamilla Efremova",
-    "valentova t.": "Tereza Valentova",
-    "sorribes tormo s.": "Sara Sorribes Tormo",
-    "ruse e.g.": "Elena-Gabriela Ruse",
-    "tagger l.": "Lina Tagger",
-    "quevedo k.": "Katarina Quevedo",
-    "rakotomanga rajaonah t.": "Tessah Rakotomanga Rajaonah",
-    "haddad maia b.": "Beatriz Haddad Maia",
-    "tomljanovic a.": "Ajla Tomljanovic",
-    "selekhmeteva o.": "Oksana Selekhmeteva",
-    "kovinic d.": "Danka Kovinic",
-    "krejcikova b.": "Barbora Krejcikova",
-    "blinkova a.": "Anna Blinkova",
-    "burel c.": "Clara Burel",
-    "kraus s.": "Sinja Kraus",
-    "bronzetti l.": "Lucia Bronzetti",
-    "bondar a.": "Anna Bondar",
-    "marcinko p.": "Petra Marcinko",
-    "joint m.": "Maya Joint",
-    "gibson t.": "Talia Gibson",
-    "jeanjean l.": "Leolia Jeanjean",
-    "udvardy p.": "Panna Udvardy",
-    "cristian j.": "Jaqueline Cristian",
-    "sramkova r.": "Rebecca Sramkova",
-    "maria t.": "Tatjana Maria",
-    "erjavec v.": "Veronika Erjavec",
-    "kenin s.": "Sofia Kenin",
-    "stephens s.": "Sloane Stephens",
-    "arango e.": "Emiliana Arango",
-    "ferro f.": "Fiona Ferro",
-    "sonmez z.": "Zeynep Sonmez",
-    "yastremska d.": "Dayana Yastremska",
-    "bucsa c.": "Cristina Bucsa",
-    "jones e.": "Elizabeth Jones",
-}
-
-ROUND_MAP = {
-    "1st round":     "R64",
-    "2nd round":     "R32",
-    "3rd round":     "R16",
-    "4th round":     "R8",
-    "quarterfinal":  "QF",
-    "quarterfinals": "QF",
-    "semifinal":     "SF",
-    "semifinals":    "SF",
-    "final":         "F",
-    "the final":     "F",
-    "round robin":   "RR",
-    "robin":         "RR",
-}
-
-def normalise_round(r):
-    return ROUND_MAP.get(str(r).strip().lower(), str(r).strip())
-
-
-def build_name_lookup():
-    lookup = dict(STATIC_NAMES)
-
-    if not os.path.isdir(BASE):
-        return lookup
-
-    for filename in sorted(os.listdir(BASE)):
-        if not filename.endswith(".json"):
-            continue
-        year = filename.replace(".json", "")
-        if year in [str(CURRENT_YEAR), str(PREV_YEAR)]:
-            continue
-        path = os.path.join(BASE, filename)
-        try:
-            with open(path, encoding="utf-8") as f:
-                data = json.load(f)
-            matches = data.get("matches", data) if isinstance(data, dict) else data
-            for m in matches:
-                for field in ("winner", "loser", "player1", "player2"):
-                    full_name = m.get(field, "").strip()
-                    if not full_name or len(full_name) < 3:
-                        continue
-                    parts = full_name.split()
-                    if len(parts) >= 2:
-                        abbrev = f"{parts[-1]} {parts[0][0].upper()}."
-                        lookup[abbrev.lower()] = full_name
-        except Exception as e:
-            print(f"  ⚠️  Could not read {filename}: {e}")
-
-    print(f"  📖 Name lookup: {len(lookup)} entries")
-    return lookup
-
-
-def resolve_name(abbrev, lookup):
-    if not abbrev:
-        return abbrev
-    return lookup.get(abbrev.strip().lower(), abbrev)
+RAW_BASE = "https://raw.githubusercontent.com/Aneeshers/tennis-sackmann-archive/main"
 
 
 def make_urls(year):
     return {
-        "M": f"http://www.tennis-data.co.uk/{year}/{year}.xlsx",
-        "F": f"http://www.tennis-data.co.uk/{year}w/{year}w.xlsx",
+        "M": f"{RAW_BASE}/atp/atp_matches_{year}.csv",
+        "F": f"{RAW_BASE}/wta/wta_matches_{year}.csv",
     }
 
 
-def fetch(url, gender, name_lookup):
-    r = requests.get(url, timeout=60, headers=HEADERS)
+def to_int(val, default=0):
+    try:
+        return int(float(val))
+    except (TypeError, ValueError):
+        return default
+
+
+def fetch(url, gender):
+    r = requests.get(url, timeout=60)
     if r.status_code == 404:
-        print(f"  ⚠️  Not found (404): {url}")
+        print(f"  Not found (404): {url}")
         return []
     r.raise_for_status()
 
-    wb = openpyxl.load_workbook(BytesIO(r.content), read_only=True, data_only=True)
-    ws = wb.active
-    rows = list(ws.iter_rows(values_only=True))
-    if not rows:
-        return []
-
-    headers = [str(h).strip() if h is not None else "" for h in rows[0]]
-
-    def col(row, *names):
-        for name in names:
-            try:
-                v = row[headers.index(name)]
-                if v is not None and str(v).strip() != "":
-                    return str(v).strip()
-            except (ValueError, IndexError):
-                pass
-        return ""
-
+    reader = csv.DictReader(io.StringIO(r.text))
     gender_char = "m" if gender == "M" else "f"
 
     matches = []
-    for row in rows[1:]:
-        raw_date = col(row, "Date")
-        if not raw_date:
+    for row in reader:
+        raw_date = (row.get("tourney_date") or "").strip()
+        if len(raw_date) != 8:
             continue
+        date_str = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:8]}"
 
-        if hasattr(raw_date, "strftime"):
-            date_str = raw_date.strftime("%Y-%m-%d")
-        else:
-            date_str = str(raw_date).strip()[:10]
-
-        winner     = resolve_name(col(row, "Winner"), name_lookup)
-        loser      = resolve_name(col(row, "Loser"),  name_lookup)
-        tournament = col(row, "Tournament")
-        surface    = col(row, "Surface", "Court")
-        round_     = normalise_round(col(row, "Round"))
-
-        score = col(row, "Score", "score")
-        if not score:
-            sets = []
-            for i in range(1, 6):
-                w = col(row, f"W{i}")
-                l = col(row, f"L{i}")
-                if w and l:
-                    sets.append(f"{w}-{l}")
-            score = " ".join(sets)
+        winner = (row.get("winner_name") or "").strip()
+        loser = (row.get("loser_name") or "").strip()
+        tournament = (row.get("tourney_name") or "").strip()
+        round_ = (row.get("round") or "").strip()
 
         if not winner or not loser:
             continue
 
         tournament_slug = tournament.replace(" ", "-").lower()
-        winner_slug     = winner.replace(" ", "-").lower()
-        loser_slug      = loser.replace(" ", "-").lower()
-        year_str        = date_str[:4]
+        winner_slug = winner.replace(" ", "-").lower()
+        loser_slug = loser.replace(" ", "-").lower()
+        round_slug = round_.lower()
+        year_str = date_str[:4]
 
-        match_id = f"{year_str}_{gender_char}_{date_str}_{tournament_slug}_{round_.lower()}_{winner_slug}_{loser_slug}"
+        match_id = (f"{year_str}_{gender_char}_{date_str}_{tournament_slug}_"
+                    f"{round_slug}_{winner_slug}_{loser_slug}")
 
         matches.append({
-            "match_id":      match_id,
-            "date":          date_str,
-            "tournament":    tournament,
-            "surface":       surface,
-            "round":         round_,
-            "player1":       winner,
-            "player2":       loser,
-            "winner":        winner,
-            "loser":         loser,
-            "score":         score,
-            "gender":        gender,
-            "best_of":       3,
-            "draw_size":     0,
-            "minutes":       0,
-            "tourney_level": "",
-            "tourney_id":    "",
-            "w_ace": 0, "w_df": 0, "w_svpt": 0, "w_1stIn": 0,
-            "w_1stWon": 0, "w_2ndWon": 0, "w_SvGms": 0, "w_bpSaved": 0, "w_bpFaced": 0,
-            "l_ace": 0, "l_df": 0, "l_svpt": 0, "l_1stIn": 0,
-            "l_1stWon": 0, "l_2ndWon": 0, "l_SvGms": 0, "l_bpSaved": 0, "l_bpFaced": 0,
+            "match_id": match_id,
+            "date": date_str,
+            "tournament": tournament,
+            "surface": (row.get("surface") or "").strip(),
+            "round": round_,
+            "player1": winner,
+            "player2": loser,
+            "winner": winner,
+            "loser": loser,
+            "score": (row.get("score") or "").strip(),
+            "gender": gender,
+            "best_of": to_int(row.get("best_of"), 3),
+            "draw_size": to_int(row.get("draw_size")),
+            "minutes": to_int(row.get("minutes")),
+            "tourney_level": (row.get("tourney_level") or "").strip(),
+            "tourney_id": (row.get("tourney_id") or "").strip(),
+            "w_ace": to_int(row.get("w_ace")),
+            "w_df": to_int(row.get("w_df")),
+            "w_svpt": to_int(row.get("w_svpt")),
+            "w_1stIn": to_int(row.get("w_1stIn")),
+            "w_1stWon": to_int(row.get("w_1stWon")),
+            "w_2ndWon": to_int(row.get("w_2ndWon")),
+            "w_SvGms": to_int(row.get("w_SvGms")),
+            "w_bpSaved": to_int(row.get("w_bpSaved")),
+            "w_bpFaced": to_int(row.get("w_bpFaced")),
+            "l_ace": to_int(row.get("l_ace")),
+            "l_df": to_int(row.get("l_df")),
+            "l_svpt": to_int(row.get("l_svpt")),
+            "l_1stIn": to_int(row.get("l_1stIn")),
+            "l_1stWon": to_int(row.get("l_1stWon")),
+            "l_2ndWon": to_int(row.get("l_2ndWon")),
+            "l_SvGms": to_int(row.get("l_SvGms")),
+            "l_bpSaved": to_int(row.get("l_bpSaved")),
+            "l_bpFaced": to_int(row.get("l_bpFaced")),
         })
 
-    wb.close()
     return matches
 
 
@@ -336,28 +145,28 @@ def save(year, matches):
     os.makedirs(BASE, exist_ok=True)
     path = f"{BASE}/{year}.json"
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"matches": matches}, f, indent=2)
-    print(f"  ✅ Saved {path} ({len(matches)} matches)")
+        json.dump({"matches": matches}, f, indent=2, ensure_ascii=False)
+    print(f"  Saved {path} ({len(matches)} matches)")
 
 
-def build_season(year, name_lookup):
-    print(f"\n📅 Building {year}...")
+def build_season(year):
+    print(f"\nBuilding {year}...")
     urls = make_urls(year)
     all_matches = []
 
     for gender, url in urls.items():
         label = "ATP" if gender == "M" else "WTA"
         print(f"  Fetching {label} {year}...")
-        matches = fetch(url, gender, name_lookup)
-        print(f"    → {len(matches)} matches")
+        matches = fetch(url, gender)
+        print(f"    -> {len(matches)} matches")
         all_matches.extend(matches)
 
     if not all_matches:
-        print(f"  ⚠️  No data found for {year}, skipping.")
+        print(f"  No data found for {year}, skipping.")
         return
 
     filtered = filter_past(all_matches, year)
-    removed  = len(all_matches) - len(filtered)
+    removed = len(all_matches) - len(filtered)
     if removed:
         print(f"  ({removed} future matches removed)")
 
@@ -365,12 +174,9 @@ def build_season(year, name_lookup):
 
 
 def main():
-    print("🔍 Building name lookup...")
-    name_lookup = build_name_lookup()
-
-    build_season(CURRENT_YEAR, name_lookup)
-    build_season(PREV_YEAR, name_lookup)
-    print("\n✅ DONE — files written to", BASE)
+    build_season(CURRENT_YEAR)
+    build_season(PREV_YEAR)
+    print("\nDONE — files written to", BASE)
 
 
 if __name__ == "__main__":
