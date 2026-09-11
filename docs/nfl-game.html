@@ -171,25 +171,11 @@ async function loadGame(){
 
   if(!game){ document.getElementById("heroScore").innerHTML = "Game not found"; return; }
 
-  const boxRes = await fetch('/data/nfl/boxscores/'+season+'/'+gameID+'.json?v='+Date.now());
-  const box = await boxRes.json();
-  const players = box.passing || [];
+  const team1 = game.team1 || "";
+  const team2 = game.team2 || "";
 
-  const allTeams = [...new Set(players.map(p=>(p.stats||{}).team).filter(Boolean))];
-  const team1Code = allTeams[0] || "";
-  const team2Code = allTeams[1] || "";
-  const team1 = tn(team1Code);
-  const team2 = tn(team2Code);
-
-  document.getElementById("passingTeam1").innerText = team1;
-  document.getElementById("passingTeam2").innerText = team2;
-  document.getElementById("rushingTeam1").innerText = team1;
-  document.getElementById("rushingTeam2").innerText = team2;
-  document.getElementById("receivingTeam1").innerText = team1;
-  document.getElementById("receivingTeam2").innerText = team2;
-
-  const score1 = parseInt(game.score1 || game.home_score || 0);
-  const score2 = parseInt(game.score2 || game.away_score || 0);
+  const score1 = parseInt(game.score1 || 0);
+  const score2 = parseInt(game.score2 || 0);
   const winner = score1 >= score2 ? team1 : team2;
   const loser  = score1 >= score2 ? team2 : team1;
   const ws = score1 >= score2 ? score1 : score2;
@@ -207,6 +193,46 @@ async function loadGame(){
   document.getElementById("scoreTable").innerHTML =
     '<tr><td class="team">'+team1+'</td><td><b>'+score1+'</b></td></tr>'+
     '<tr><td class="team">'+team2+'</td><td><b>'+score2+'</b></td></tr>';
+
+  let box = null;
+  try{
+    const boxRes = await fetch('/data/nfl/boxscores/'+season+'/'+gameID+'.json?v='+Date.now());
+    if(boxRes.ok){ box = await boxRes.json(); }
+  }catch(err){
+    console.log(err);
+  }
+
+  if(!box){
+    const notice = '<tr><td class="empty" colspan="7">Boxscore not available yet</td></tr>';
+    document.getElementById("passingTeam1").innerText = team1;
+    document.getElementById("passingTeam2").innerText = team2;
+    document.getElementById("rushingTeam1").innerText = team1;
+    document.getElementById("rushingTeam2").innerText = team2;
+    document.getElementById("receivingTeam1").innerText = team1;
+    document.getElementById("receivingTeam2").innerText = team2;
+    document.getElementById("passingTable1").innerHTML   = notice;
+    document.getElementById("passingTable2").innerHTML   = notice;
+    document.getElementById("rushingTable1").innerHTML   = notice;
+    document.getElementById("rushingTable2").innerHTML   = notice;
+    document.getElementById("receivingTable1").innerHTML = notice;
+    document.getElementById("receivingTable2").innerHTML = notice;
+    return;
+  }
+
+  const players = box.passing || [];
+
+  const allTeams = [...new Set(players.map(p=>(p.stats||{}).team).filter(Boolean))];
+  const team1Code = allTeams[0] || "";
+  const team2Code = allTeams[1] || "";
+  const boxTeam1 = tn(team1Code);
+  const boxTeam2 = tn(team2Code);
+
+  document.getElementById("passingTeam1").innerText = boxTeam1;
+  document.getElementById("passingTeam2").innerText = boxTeam2;
+  document.getElementById("rushingTeam1").innerText = boxTeam1;
+  document.getElementById("rushingTeam2").innerText = boxTeam2;
+  document.getElementById("receivingTeam1").innerText = boxTeam1;
+  document.getElementById("receivingTeam2").innerText = boxTeam2;
 
   let p1='',p2='',ru1='',ru2='',re1='',re2='';
 
