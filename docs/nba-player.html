@@ -146,6 +146,28 @@ tbody tr:hover td{background:#f9fbfd;}
     <div class="stats-grid" id="careerHighs"></div>
   </div>
 
+  <div class="table-wrap" id="collegeStatsWrap" style="display:none;">
+    <div class="table-header">College Stats</div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Season</th>
+            <th>College</th>
+            <th>G</th>
+            <th>PTS<small>per game</small></th>
+            <th>TRB<small>per game</small></th>
+            <th>AST<small>per game</small></th>
+            <th>FG%</th>
+            <th>3P%</th>
+            <th>FT%</th>
+          </tr>
+        </thead>
+        <tbody id="collegeStatsBody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <div class="section-card">
     <div class="section-title">Filtered Results</div>
     <div class="filters-bar">
@@ -325,6 +347,30 @@ function buildSeasonRows(games){
   return Object.values(map).sort((a,b) => b.season - a.season);
 }
 
+function renderCollegeStats(seasons){
+  if(!seasons || !seasons.length) return false;
+
+  const dash = v => (v === null || v === undefined || v === "") ? "—" : v;
+  const pctDisplay = v => (v === null || v === undefined || v === "") ? "—" : `${(v*100).toFixed(1)}%`;
+
+  document.getElementById("collegeStatsBody").innerHTML = seasons.map(s => `
+    <tr>
+      <td>${s.season}</td>
+      <td>${s.college_name || "—"}</td>
+      <td>${dash(s.g)}</td>
+      <td>${dash(s.pts_per_g)}</td>
+      <td>${dash(s.trb_per_g)}</td>
+      <td>${dash(s.ast_per_g)}</td>
+      <td>${pctDisplay(s.fg_pct)}</td>
+      <td>${pctDisplay(s.fg3_pct)}</td>
+      <td>${pctDisplay(s.ft_pct)}</td>
+    </tr>
+  `).join("");
+
+  document.getElementById("collegeStatsWrap").style.display="block";
+  return true;
+}
+
 function renderSeasons(games){
   const rows = buildSeasonRows(games);
   seasonsBody.innerHTML = rows.map(s => `
@@ -428,6 +474,15 @@ async function loadPlayer(){
     renderStats(calcStats(allGames),"careerTotals","careerAverages","careerHighs");
     renderStats(calcStats(allGames),"filteredTotals","filteredAverages","filteredHighs");
     renderSeasons(allGames);
+
+    fetch(`${R2}/basketball/college/${playerId}.json`)
+      .then(r=> r.ok ? r.json() : null)
+      .then(collegeData=>{
+        if(collegeData && collegeData.has_college_stats){
+          renderCollegeStats(collegeData.college_seasons);
+        }
+      })
+      .catch(()=>{});
 
     pageWrap.style.display="block";
 
