@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Rugby League World Cup Match | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#1fa25c;
+  --league:#a8790a;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{color:var(--ink);text-decoration:none;opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+.page-wrap{max-width:1100px;margin:0 auto;padding:26px 20px 70px;}
+
+.back-link{
+  display:inline-flex;align-items:center;gap:6px;margin-bottom:18px;color:var(--muted);
+  font-weight:600;text-decoration:none;font-size:13px;
+}
+.back-link:hover{color:var(--ink);}
+
+/* ── Scorebug ─────────────────────────────────────────── */
+.scorebug{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;
+}
+.scorebug .eyebrow{
+  text-align:center;font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:var(--league);
+  padding:20px 16px 0;
+}
+.bug-grid{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  gap:14px;padding:14px 30px 20px;
+}
+.bug-team{display:flex;align-items:center;gap:14px;min-width:0;}
+.bug-team.home{justify-content:flex-end;text-align:right;}
+.bug-team.away{justify-content:flex-start;text-align:left;}
+.bug-team a.tname{
+  font-family:var(--display);font-weight:600;font-size:clamp(15px,2.4vw,24px);
+  line-height:1.04;letter-spacing:.01em;text-transform:uppercase;color:#fff;text-decoration:none;
+}
+.bug-team a.tname:hover{color:var(--league);}
+.bug-flag{font-size:clamp(24px,3.6vw,38px);line-height:1;flex:0 0 auto;}
+.bug-score{
+  display:flex;align-items:center;gap:12px;font-family:var(--display);font-weight:600;
+  font-size:clamp(32px,6vw,56px);line-height:1;letter-spacing:.01em;white-space:nowrap;
+}
+.bug-score .sc.lose{color:rgba(255,255,255,.42);font-weight:500;}
+.bug-score .dash{color:rgba(255,255,255,.3);font-weight:400;}
+.bug-score .raw{font-size:clamp(24px,4vw,36px);}
+.winner-line{
+  text-align:center;padding:0 16px 22px;font-size:13px;font-weight:600;color:rgba(255,255,255,.65);
+}
+
+@media(max-width:820px){
+  .bug-grid{grid-template-columns:1fr;gap:14px;padding:10px 18px 20px;}
+  .bug-team.home,.bug-team.away{justify-content:center;text-align:center;}
+}
+
+/* ── Sections ─────────────────────────────────────────── */
+.section-title{
+  font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.08em;text-transform:uppercase;
+  margin:26px 0 12px;color:var(--muted);
+}
+.match{
+  border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;
+  background:var(--surface);
+}
+.match h3{margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:16px;color:var(--ink);}
+.small{font-size:12.5px;color:var(--muted);font-weight:600;}
+.og-tag{color:var(--league);font-weight:700;font-size:12px;letter-spacing:.03em;text-transform:uppercase;margin-left:6px;}
+
+.team-link{color:var(--league);text-decoration:none;font-weight:700;}
+.team-link:hover{color:var(--accent);text-decoration:underline;}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="nrl.html">NRL</a>
+<a href="rlwc.html">Rugby League World Cup</a>
+<a href="rlwc-teams.html">Teams</a>
+</nav>
+
+<div class="page-wrap">
+<a class="back-link" href="javascript:history.back()">← Back</a>
+<div id="output"></div>
+</div>
+
+<script>
+const COUNTRY_PAGE="world-cup-country.html";
+
+const params=new URLSearchParams(location.search);
+const yearQ=params.get("year")||"";
+const matchQ=params.get("match")||"";
+const TEAM_PAGE="rlwc-team.html";
+
+if(!yearQ || !matchQ){
+  document.getElementById("output").innerHTML=`<div class="scorebug"><div class="winner-line" style="padding-top:20px;">Match not found.</div></div>`;
+  throw new Error("Missing year or match param");
+}
+
+fetch(`data/rlwc/${yearQ}.json`)
+.then(r=> r.ok ? r.json() : null)
+.then(matches=>{
+  const m = matches ? matches.find(x=>String(x.match_id)===String(matchQ)) : null;
+  render(m);
+})
+.catch(()=>render(null));
+
+function render(m){
+ const out=document.getElementById("output");
+
+ if(!m){
+  out.innerHTML=`
+    <div class="scorebug">
+      <div class="eyebrow">Rugby League World Cup</div>
+      <div class="winner-line" style="padding-top:20px;">Match not found.</div>
+    </div>`;
+  return;
+ }
+
+ const team1 = m.home_team.name;
+ const team2 = m.away_team.name;
+
+ document.title = `${team1} vs ${team2} ${yearQ} | The Sporting Almanac`;
+
+ const winner = m.home_score===m.away_score ? "" :
+   (m.home_score>m.away_score ? team1 : team2);
+ const team1Lost = winner && winner !== team1;
+ const team2Lost = winner && winner !== team2;
+
+ const scoreHTML = `<span class="sc ${team1Lost?'lose':''}">${m.home_score}</span><span class="dash">–</span><span class="sc ${team2Lost?'lose':''}">${m.away_score}</span>`;
+ const winnerLine = winner ? `Winner: ${winner}` : "Draw";
+
+ out.innerHTML=`
+  <div class="scorebug">
+    <div class="eyebrow">${yearQ} Rugby League World Cup · ${m.round}</div>
+    <div class="bug-grid">
+      <div class="bug-team home">
+        <a class="tname" href="${TEAM_PAGE}?team=${encodeURIComponent(team1)}">${team1}</a>
+      </div>
+      <div class="bug-score">${scoreHTML}</div>
+      <div class="bug-team away">
+        <a class="tname" href="${TEAM_PAGE}?team=${encodeURIComponent(team2)}">${team2}</a>
+      </div>
+    </div>
+    <div class="winner-line">${winnerLine}</div>
+  </div>`;
+
+ // ── Scorers ──────────────────────────────────────────────────────
+ function scorerLines(group, label, unitLabel){
+  if(!group || !group[label] || !group[label].length) return "";
+  return group[label].map(e=>{
+   const name = e.full_name || e.player;
+   const countTxt = e.attempts ? `${e.count}/${e.attempts}` : (e.count>1 ? `x${e.count}` : "");
+   return `${name}${countTxt ? ` (${countTxt})` : ""}`;
+  }).join(", ");
+ }
+
+ const sections = [
+  {label:"tries", title:"Tries"},
+  {label:"goals", title:"Goals"},
+  {label:"field_goals", title:"Field Goals"},
+ ];
+
+ let scorersHTML = "";
+ sections.forEach(({label, title})=>{
+  const homeLine = scorerLines(m.home_scorers, label);
+  const awayLine = scorerLines(m.away_scorers, label);
+  if(!homeLine && !awayLine) return;
+  scorersHTML += `
+   <div class="match">
+    <h3>${title}</h3>
+    <div class="small">${team1}: ${homeLine || "—"}</div>
+    <div class="small">${team2}: ${awayLine || "—"}</div>
+   </div>`;
+ });
+
+ if(scorersHTML){
+  out.innerHTML += `<div class="section-title">Scorers</div>` + scorersHTML;
+ }
+
+ // ── Match Details ──────────────────────────────────────────────
+ out.innerHTML+=`<div class="section-title">Match Details</div>`;
+ if(m.venue && m.venue.name){
+  out.innerHTML+=`<div class="match"><h3>${m.venue.name}</h3>${m.attendance ? `<div class="small">Attendance: ${Number(m.attendance).toLocaleString()}</div>` : ''}</div>`;
+ }
+ if(m.referee && m.referee.name){
+  out.innerHTML+=`<div class="match"><h3>Referee: ${m.referee.name}</h3></div>`;
+ }
+ out.innerHTML+=`<div class="match"><h3>${m.date}, ${yearQ}</h3></div>`;
+}
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Rugby League World Cup Team | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0a0a0a;
+  --board-2:#1a1a1a;
+  --board-line:rgba(255,255,255,.10);
+  --accent:#1fa25c;
+  --league:#a8790a;
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{font-family:var(--body);margin:0;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+.navbar{display:flex;justify-content:center;gap:22px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:13.5px;flex-wrap:wrap;}
+.navbar a{color:var(--ink);text-decoration:none;opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+.page-wrap{max-width:1200px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Header hero ──────────────────────────────────────── */
+.header{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:22px;padding:36px 26px;display:flex;align-items:center;justify-content:center;
+  position:relative;
+}
+.header h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(28px,5vw,46px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+
+/* ── Stats ────────────────────────────────────────────── */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:20px;}
+.stat-box{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;
+  text-align:center;font-family:var(--display);font-weight:600;font-size:20px;color:var(--ink);line-height:1.7;
+}
+
+/* ── Leaders ──────────────────────────────────────────── */
+.leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:30px;}
+.leader-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;}
+.leader-box h3{
+  text-align:center;margin:0 0 12px;font-family:var(--display);font-weight:600;font-size:14px;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--league);
+}
+.leader-line{font-size:13.5px;font-weight:600;padding:6px 0;border-bottom:1px solid var(--line);text-align:center;color:var(--ink);}
+.leader-line:last-child{border-bottom:none;}
+
+/* ── Year sections ────────────────────────────────────── */
+.year-section{margin-bottom:30px;}
+.year-section h2{
+  border-bottom:2px solid var(--league);padding-bottom:8px;font-family:var(--display);font-weight:600;
+  font-size:22px;letter-spacing:.01em;color:var(--ink);margin:0 0 14px;
+}
+
+.match{
+  border:1px solid var(--line);border-radius:var(--radius);padding:14px 18px;margin-top:10px;
+  background:var(--surface);transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
+}
+.match:hover{transform:translateY(-2px);box-shadow:0 10px 24px -14px rgba(10,16,24,.18);border-color:var(--faint);}
+.match h3{margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:17px;color:var(--ink);}
+.small{font-size:12.5px;color:var(--muted);font-weight:600;}
+.error{color:#c0362c;font-weight:700;}
+</style>
+</head>
+
+<body>
+
+<nav class="navbar">
+<a href="index.html">Home</a>
+<a href="nrl.html">NRL</a>
+<a href="rlwc.html">Rugby League World Cup</a>
+<a href="rlwc-teams.html">Teams</a>
+</nav>
+
+<div class="page-wrap">
+<div id="content"></div>
+</div>
+
+<script>
+let team=new URLSearchParams(location.search).get("team");
+
+if(!team){
+ document.getElementById("content").innerHTML="<div class='error'>No team selected.</div>";
+ throw new Error("No team");
+}
+
+const YEARS = [1954,1957,1960,1968,1970,1972,1975,1977,1988,1992,1995,2000,2008,2013,2017,2022];
+
+function tryPointValue(year){
+  // Confirmed real: tries were worth 3 points before 1983, 4 from
+  // 1983 onwards. Goals worth 2, field/drop goals worth 1 throughout.
+  return year >= 1983 ? 4 : 3;
+}
+
+Promise.all(YEARS.map(y=>
+  fetch(`data/rlwc/${y}.json`).then(r=> r.ok ? r.json() : []).catch(()=>[]).then(matches=>({year:y, matches}))
+)).then(allTournaments=>{
+  render(team, allTournaments);
+});
+
+function render(team, allTournaments){
+ let appearances=0, titles=0, finals=0, matchesPlayed=0, triesFor=0;
+ const scorers={}, goalKickers={}, fieldGoalKickers={};
+ const yearSections=[];
+
+ allTournaments.forEach(({year, matches})=>{
+  const teamMatches = matches.filter(m=>m.home_team.name===team || m.away_team.name===team);
+  if(!teamMatches.length) return;
+  appearances++;
+
+  const final = matches[matches.length-1];
+  const inFinal = final.home_team.name===team || final.away_team.name===team;
+  if(inFinal){
+   finals++;
+   const won = (final.home_team.name===team && final.home_score>final.away_score) ||
+               (final.away_team.name===team && final.away_score>final.home_score);
+   if(won) titles++;
+  }
+
+  const tryPts = tryPointValue(year);
+
+  teamMatches.forEach(m=>{
+   matchesPlayed++;
+   const isHome = m.home_team.name===team;
+   const myScorers = isHome ? m.home_scorers : m.away_scorers;
+   if(myScorers){
+    myScorers.tries.forEach(e=>{
+     const n=e.full_name||e.player;
+     scorers[n]=(scorers[n]||0)+e.count;
+     triesFor += e.count;
+    });
+    myScorers.goals.forEach(e=>{ const n=e.full_name||e.player; goalKickers[n]=(goalKickers[n]||0)+e.count; });
+    myScorers.field_goals.forEach(e=>{ const n=e.full_name||e.player; fieldGoalKickers[n]=(fieldGoalKickers[n]||0)+e.count; });
+   }
+  });
+
+  yearSections.push({year, matches: teamMatches});
+ });
+
+ const top=o=>Object.entries(o).sort((a,b)=>b[1]-a[1]).slice(0,5);
+
+ let html=`
+ <div class="header"><h1>${team}</h1></div>
+ <div class="stats">
+  <div class="stat-box">Appearances<br>${appearances}</div>
+  <div class="stat-box">Titles<br>${titles}</div>
+  <div class="stat-box">Finals<br>${finals}</div>
+  <div class="stat-box">Matches<br>${matchesPlayed}</div>
+  <div class="stat-box">Tries<br>${triesFor}</div>
+ </div>
+ <div class="leaders">
+  <div class="leader-box"><h3>Top 5 Try Scorers</h3>${top(scorers).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>None on record</div>"}</div>
+  <div class="leader-box"><h3>Top 5 Goal Kickers</h3>${top(goalKickers).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>None on record</div>"}</div>
+  <div class="leader-box"><h3>Top 5 Field Goals</h3>${top(fieldGoalKickers).map(p=>`<div class="leader-line">${p[0]} – ${p[1]}</div>`).join("") || "<div class='leader-line'>None on record</div>"}</div>
+ </div>
+`;
+
+ yearSections.slice().sort((a,b)=>b.year-a.year).forEach(({year, matches})=>{
+  html += `<div class="year-section"><h2>${year}</h2>`;
+  matches.forEach(m=>{
+   const winner = m.home_score===m.away_score ? "" :
+     (m.home_score>m.away_score ? m.home_team.name : m.away_team.name);
+   html += `
+    <a class="match" style="display:block;text-decoration:none;color:inherit;" href="rlwc-match.html?year=${year}&match=${m.match_id}">
+     <h3>${m.home_team.name} ${m.home_score}-${m.away_score} ${m.away_team.name}</h3>
+     <div class="small">${m.round} – ${m.date}</div>
+     <div class="small">${winner ? `Winner: ${winner}` : "Draw"}</div>
+    </a>`;
+  });
+  html += `</div>`;
+ });
+
+ document.getElementById("content").innerHTML=html;
+}
+
+</script>
+
+</body>
+</html>
