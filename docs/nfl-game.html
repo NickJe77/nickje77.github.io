@@ -220,8 +220,19 @@ async function loadGame(){
   }
 
   const passers = box.passing || [];
-  const rushers = box.rushing || [];
-  const receivers = box.receiving || [];
+
+  // Two real boxscore formats exist across different seasons: newer
+  // seasons have genuinely separate, populated rushing/receiving
+  // arrays; older seasons have those arrays present but EMPTY, with
+  // the same rush_*/rec_* fields bundled inside each passing entry
+  // instead (confirmed directly: a real 2023 game has rushing:[] and
+  // receiving:[], with Jared Goff's actual rush_att/rush_yds sitting
+  // inside his passing entry). Only fall back to extracting from
+  // passing when the dedicated array is genuinely empty, so newer
+  // seasons keep using their real separate arrays rather than
+  // re-deriving from passing unnecessarily.
+  const rushers = (box.rushing && box.rushing.length) ? box.rushing : passers;
+  const receivers = (box.receiving && box.receiving.length) ? box.receiving : passers;
 
   const allTeams = [...new Set(passers.map(p=>(p.stats||{}).team).filter(Boolean))];
   const team1Code = allTeams[0] || "";
