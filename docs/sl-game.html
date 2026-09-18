@@ -201,15 +201,16 @@ if(!seasonQ || !matchQ){
   throw new Error("Missing season or match param");
 }
 
-fetch(`data/sl/results/${seasonQ}.json`)
-.then(r => r.ok ? r.json() : null)
-.then(matches => {
+Promise.all([
+  fetch(`data/sl/results/${seasonQ}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
+  fetch(`data/sl/match_detail/${matchQ}.json`).then(r => r.ok ? r.json() : null).catch(() => null),
+])
+.then(([matches, detail]) => {
   const m = matches ? matches.find(x => String(x.match_id) === String(matchQ)) : null;
-  render(m);
-})
-.catch(() => render(null));
+  render(m, detail);
+});
 
-function render(m){
+function render(m, detail){
   const out = document.getElementById("output");
 
   if(!m){
@@ -234,6 +235,8 @@ function render(m){
   const scoreHTML = `<span class="sc ${team1Lost?'lose':''}">${m.home_score}</span><span class="dash">–</span><span class="sc ${team2Lost?'lose':''}">${m.away_score}</span>`;
   const winnerLine = winner ? `Winner: ${winner}` : "Draw";
 
+  const scorersHTML = buildScorersHTML(team1, team2, detail);
+
   out.innerHTML = `
     <div class="scorebug">
       <div class="eyebrow">${seasonQ} Super League &middot; ${m.round || ""}</div>
@@ -249,11 +252,45 @@ function render(m){
       <div class="winner-line">${winnerLine}</div>
     </div>
 
+    ${scorersHTML}
+
     <div class="section-title">Match Details</div>
     ${m.venue && m.venue.name ? `<div class="detail-row"><h3>${m.venue.name}</h3>${m.attendance ? `<div class="small">Attendance: ${Number(m.attendance).toLocaleString()}</div>` : ""}</div>` : ""}
     ${m.referee && m.referee.name ? `<div class="detail-row"><h3>Referee: ${m.referee.name}</h3></div>` : ""}
     <div class="detail-row"><h3>${m.date}${m.day_of_week ? ", " + m.day_of_week : ""}, ${seasonQ}</h3></div>
   `;
+}
+
+function scorerLine(entries){
+  if(!entries || !entries.length) return "—";
+  return entries.map(e => e.count > 1 ? `${e.player_name} (${e.count})` : e.player_name).join(", ");
+}
+
+function buildScorersHTML(team1, team2, detail){
+  if(!detail || !detail.scoresheet) return "";
+
+  const { home, away } = detail.scoresheet;
+  const sections = [
+    { label: "Tries", key: "tries" },
+    { label: "Goals", key: "goals" },
+    { label: "Field Goals", key: "field_goals" },
+  ];
+
+  let rows = "";
+  sections.forEach(({ label, key }) => {
+    const homeLine = scorerLine(home[key]);
+    const awayLine = scorerLine(away[key]);
+    if(homeLine === "—" && awayLine === "—") return;
+    rows += `
+      <div class="detail-row">
+        <h3>${label}</h3>
+        <div class="small">${team1}: ${homeLine}</div>
+        <div class="small">${team2}: ${awayLine}</div>
+      </div>`;
+  });
+
+  if(!rows) return "";
+  return `<div class="section-title">Scorers</div>${rows}`;
 }
 
 </script>
