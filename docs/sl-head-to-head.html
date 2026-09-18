@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <script src="/js/analytics.js"></script>
+<meta charset="UTF-8">
+<title>Super League Head to Head | The Sporting Almanac</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eceff3;
+  --surface:#ffffff;
+  --ink:#0f141a;
+  --muted:#69727c;
+  --faint:#9aa3ad;
+  --line:#e3e8ee;
+  --board:#0c1118;
+  --board-2:#141c26;
+  --board-line:rgba(255,255,255,.10);
+  --win:#ffffff;
+  --lose:rgba(255,255,255,.42);
+  --display:'Oswald',system-ui,sans-serif;
+  --body:'Inter',system-ui,sans-serif;
+  --radius:16px;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;}
+
+.navbar{display:flex;justify-content:center;gap:26px;padding:15px;background:#fff;border-bottom:1px solid var(--line);font-weight:600;font-size:14px;}
+.navbar a{text-decoration:none;color:var(--ink);opacity:.7;transition:opacity .15s;}
+.navbar a:hover{opacity:1;}
+
+.page{max-width:1180px;margin:0 auto;padding:26px 20px 70px;}
+
+/* ── Hero header (matches other pages) ───────────────────── */
+.hero{
+  position:relative;background:linear-gradient(160deg,var(--board-2),var(--board));
+  border-radius:var(--radius);overflow:hidden;color:#fff;
+  box-shadow:0 18px 40px -18px rgba(10,16,24,.55);
+  margin-bottom:26px;padding:22px 26px 26px;
+}
+.hero .eyebrow{
+  font-family:var(--body);font-size:11.5px;font-weight:600;
+  letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);
+  margin-bottom:8px;
+}
+h1{
+  margin:0;font-family:var(--display);font-weight:600;font-size:clamp(26px,4vw,38px);
+  letter-spacing:.01em;text-transform:uppercase;color:#fff;
+}
+
+/* ── Controls ─────────────────────────────────────────── */
+.select-row{display:flex;gap:14px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+select{
+  padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+  font-family:var(--body);font-size:13.5px;font-weight:600;color:var(--ink);cursor:pointer;
+  min-width:220px;flex:1;
+}
+select:hover{border-color:var(--faint);}
+
+button{
+  padding:11px 24px;background:var(--ink);color:#fff;border:none;border-radius:999px;
+  font-family:var(--body);font-size:13.5px;font-weight:600;cursor:pointer;
+  transition:opacity .15s;
+}
+button:hover{opacity:.85;}
+
+/* ── Results card ─────────────────────────────────────── */
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+  padding:22px 24px;margin-top:6px;
+}
+.card h2{
+  margin:0 0 6px;font-family:var(--display);font-weight:600;font-size:22px;
+  letter-spacing:.01em;text-transform:uppercase;
+}
+.card .meta{color:var(--muted);font-size:13.5px;font-weight:600;margin:0 0 4px;}
+.card .avg{color:var(--ink);font-size:13.5px;margin:10px 0 0;}
+.card .avg strong{font-weight:700;}
+
+.table-wrap{overflow-x:auto;margin-top:18px;border:1px solid var(--line);border-radius:var(--radius);}
+table{width:100%;border-collapse:collapse;font-size:13px;min-width:640px;}
+th,td{padding:10px 9px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left;}
+th{
+  background:#f7f9fb;font-family:var(--body);font-weight:600;font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--muted);
+}
+td{color:#27313c;}
+tbody tr:hover{background:#f0f6ff;cursor:pointer;}
+</style>
+</head>
+<body>
+<nav class="navbar">
+  <a href="index.html">Home</a>
+  <a href="rugby-league.html">Rugby League</a>
+  <a href="sl.html">Super League</a>
+</nav>
+<div class="page">
+
+<div class="hero">
+  <div class="eyebrow">Super League</div>
+  <h1>Head to Head</h1>
+</div>
+
+<div class="select-row">
+  <select id="team1"></select>
+  <select id="team2"></select>
+  <button onclick="compare()">Compare</button>
+</div>
+<div id="results"></div>
+</div>
+<script>
+
+function fmtDate(d){ return d ? String(d).split("T")[0] : ""; }
+
+const YEARS = Array.from({length: 2026-1996+1}, (_, i) => 1996+i)
+
+let allMatches = [];
+Promise.all(
+  YEARS.map(y=>
+    fetch("data/sl/results/"+y+".json").then(r=> r.ok ? r.json() : []).catch(()=>[])
+      .then(games=>games.map(g=>({...g, season:y})))
+  )
+).then(results=>{
+  results.forEach(season => allMatches.push(...season));
+  buildTeamDropdowns();
+});
+
+function buildTeamDropdowns(){
+  const teams = [...new Set(
+    allMatches.flatMap(m=>[m.home_team.name, m.away_team.name])
+  )].sort();
+  ["team1","team2"].forEach(id=>{
+    const sel = document.getElementById(id);
+    teams.forEach(t=>{
+      const opt = document.createElement("option");
+      opt.value = opt.textContent = t;
+      sel.appendChild(opt);
+    });
+  });
+}
+
+function getWinner(m){
+  if(m.home_score > m.away_score) return m.home_team.name;
+  if(m.away_score > m.home_score) return m.away_team.name;
+  return null;
+}
+
+function compare(){
+  const team1 = document.getElementById("team1").value;
+  const team2 = document.getElementById("team2").value;
+  if(team1 === team2) return;
+
+  const matches = allMatches.filter(m=>{
+    const h = m.home_team.name, a = m.away_team.name;
+    return (h===team1 && a===team2) || (h===team2 && a===team1);
+  });
+  const team1Wins = matches.filter(m=>getWinner(m)===team1).length;
+  const team2Wins = matches.filter(m=>getWinner(m)===team2).length;
+  const draws     = matches.filter(m=>getWinner(m)===null).length;
+  const totalPts  = matches.reduce((a,m)=>a+(m.home_score||0)+(m.away_score||0),0);
+  const avg       = matches.length ? (totalPts/matches.length).toFixed(1) : 0;
+
+  document.getElementById("results").innerHTML = `
+    <div class="card">
+      <h2>${team1} vs ${team2}</h2>
+      <p class="meta">Games: ${matches.length} &nbsp;|&nbsp;
+         ${team1} wins: ${team1Wins} &nbsp;|&nbsp;
+         ${team2} wins: ${team2Wins} &nbsp;|&nbsp;
+         Draws: ${draws}</p>
+      <p class="avg"><strong>Average total points per game:</strong> ${avg}</p>
+      <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Season</th>
+            <th>Round</th>
+            <th>Date</th>
+            <th>Venue</th>
+            <th>Home</th>
+            <th>Score</th>
+            <th>Away</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${matches
+            .slice()
+            .sort((a,b)=> (a.season-b.season) || String(a.round).localeCompare(String(b.round)))
+            .map(m=>`
+            <tr onclick="window.location='sl-game.html?season=${m.season}&match=${m.match_id}'">
+              <td>${m.season}</td>
+              <td>${m.round||""}</td>
+              <td>${fmtDate(m.date)}</td>
+              <td>${m.venue.name||""}</td>
+              <td>${m.home_team.name}</td>
+              <td>${m.home_score} - ${m.away_score}</td>
+              <td>${m.away_team.name}</td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  `;
+}
+
+</script>
+</body>
+</html>
