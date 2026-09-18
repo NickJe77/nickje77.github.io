@@ -1,0 +1,42 @@
+name: Extract Super League Match Detail Zip
+on:
+  workflow_dispatch:
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Remove broken nested folder
+        run: |
+          rm -rf docs/data/sl/match_detail/match_detail
+      - name: Clear previous extraction
+        run: |
+          # Without this, files from an earlier zip upload that aren't in
+          # the CURRENT zip never get removed -- unzip -o only overwrites
+          # matching filenames, it doesn't delete anything. Confirmed real
+          # case on Ligue 1/MLS: removed/changed matches kept showing up
+          # in the live data because their old extracted files just sat
+          # there untouched across multiple re-extractions.
+          rm -rf docs/data/sl/match_detail
+      - name: Extract Super League match detail zip correctly
+        run: |
+          mkdir -p docs/data/sl
+          unzip -o docs/data/sl/match_detail.zip -d docs/data/sl/
+      - name: Verify structure
+        run: |
+          echo "----- SL ROOT -----"
+          ls docs/data/sl
+          echo "----- MATCH DETAIL -----"
+          find docs/data/sl/match_detail | head
+          echo "----- TOTAL FILES -----"
+          find docs/data/sl/match_detail -name "*.json" | wc -l
+      - name: Commit extracted files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/sl/match_detail/
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Extract Super League match detail"
+          git pull --rebase origin main
+          git push
