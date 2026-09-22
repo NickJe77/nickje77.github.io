@@ -78,40 +78,54 @@ tbody tr:hover td{ background:#f9fbfd; }
 .win td:first-child{ color:var(--win-text); }
 
 .loading{ text-align:center; color:var(--muted); font-style:italic; padding:20px; }
+.win-cell{ background:var(--win-bg) !important; font-weight:700 !important; color:var(--win-text) !important; }
 </style>
 </head>
 
 <body>
 <div id="global-nav"></div>
 
-<div class="page-hero">
-  <div class="hero-text">HORSE VS HORSE — STAKES RACE HEAD TO HEAD</div>
-</div>
+<div class="page">
 
-<div style="text-align:center;margin-top:18px;">
-  <a href="australia-stakes.html" style="display:inline-block;padding:10px 22px;border-radius:999px;background:#0c130f;color:#fff;text-decoration:none;font-family:var(--body);font-weight:600;font-size:13.5px;">← Back to All Results</a>
-</div>
+  <div class="hero">
+    <div class="eyebrow">Australian Stakes Races</div>
+    <h1>Horse vs Horse</h1>
+  </div>
 
-<div style="max-width:800px;margin:26px auto 0;padding:0 20px;display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
-  <input id="horse1Box" placeholder="First horse..." autocomplete="off" style="flex:1;min-width:220px;padding:12px 18px;border-radius:999px;border:1px solid #ccc;font-family:var(--body);font-size:14px;">
-  <input id="horse2Box" placeholder="Second horse..." autocomplete="off" style="flex:1;min-width:220px;padding:12px 18px;border-radius:999px;border:1px solid #ccc;font-family:var(--body);font-size:14px;">
-</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;max-width:700px;margin:0 auto 8px;">
+    <div class="search-wrap" style="flex:1;min-width:220px;margin-bottom:0;">
+      <input id="horse1Box" placeholder="First horse..." autocomplete="off">
+      <div class="suggestions" id="suggestions1" style="display:none;"></div>
+    </div>
+    <div class="search-wrap" style="flex:1;min-width:220px;margin-bottom:0;">
+      <input id="horse2Box" placeholder="Second horse..." autocomplete="off">
+      <div class="suggestions" id="suggestions2" style="display:none;"></div>
+    </div>
+  </div>
 
-<div id="status" style="text-align:center;margin-top:16px;font-family:var(--body);color:#666;font-size:13.5px;">Loading data…</div>
+  <div class="loading" id="status">Loading data…</div>
 
-<div class="table-wrap" style="margin-top:20px;">
-<table>
-  <thead>
-    <tr>
-      <th>Date</th>
-      <th>Race</th>
-      <th>Venue</th>
-      <th id="horse1Header">Horse 1</th>
-      <th id="horse2Header">Horse 2</th>
-    </tr>
-  </thead>
-  <tbody id="results"></tbody>
-</table>
+  <div class="summary" id="summary" style="display:none;">
+    <div>Shared Races<span id="sharedCount">0</span></div>
+    <div id="horse1SummaryLabel">Horse 1 Ahead<span id="horse1Wins">0</span></div>
+    <div id="horse2SummaryLabel">Horse 2 Ahead<span id="horse2Wins">0</span></div>
+  </div>
+
+  <div class="table-wrap" id="tableWrap" style="display:none;">
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Race</th>
+        <th>Venue</th>
+        <th id="horse1Header">Horse 1</th>
+        <th id="horse2Header">Horse 2</th>
+      </tr>
+    </thead>
+    <tbody id="results"></tbody>
+  </table>
+  </div>
+
 </div>
 
 <script>
@@ -132,26 +146,57 @@ function parseCSV(text){
 }
 
 let allData = [];
+let allHorseNames = [];
 
 fetch("/data/Stakes%20races.csv")
   .then(res => res.text())
   .then(text => {
     allData = parseCSV(text);
+    allHorseNames = [...new Set(allData.map(r => r.Horse))].filter(Boolean).sort();
     document.getElementById("status").textContent = "Type two horse names above to compare.";
   });
+
+function buildSuggestions(boxId, listId, otherBoxId){
+  const box = document.getElementById(boxId);
+  const list = document.getElementById(listId);
+
+  box.addEventListener("input", () => {
+    const q = box.value.trim().toLowerCase();
+    if(q.length < 2){ list.style.display = "none"; return; }
+
+    const matches = allHorseNames.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
+    if(!matches.length){ list.style.display = "none"; return; }
+
+    list.innerHTML = matches.map(n => `<div class="suggestion">${n}</div>`).join("");
+    list.style.display = "block";
+
+    list.querySelectorAll(".suggestion").forEach((el, i) => {
+      el.onclick = () => {
+        box.value = matches[i];
+        list.style.display = "none";
+        compareHorses();
+      };
+    });
+  });
+
+  document.addEventListener("click", (e) => {
+    if(!box.contains(e.target) && !list.contains(e.target)) list.style.display = "none";
+  });
+}
+
+buildSuggestions("horse1Box", "suggestions1", "horse2Box");
+buildSuggestions("horse2Box", "suggestions2", "horse1Box");
 
 function compareHorses(){
   const h1 = document.getElementById("horse1Box").value.trim();
   const h2 = document.getElementById("horse2Box").value.trim();
 
   if(!h1 || !h2){
-    document.getElementById("results").innerHTML = "";
+    document.getElementById("summary").style.display = "none";
+    document.getElementById("tableWrap").style.display = "none";
     return;
   }
 
-  // Group every row by its actual race (venue+date+race name is the
-  // real unique race identifier, since one race has many horse rows)
-  // then keep only races where BOTH horses appear.
   const raceMap = {};
   allData.forEach(r => {
     const key = `${r.Track}|${r.Date}|${r["Race Name"]}`;
@@ -166,14 +211,19 @@ function compareHorses(){
 
   document.getElementById("horse1Header").textContent = h1;
   document.getElementById("horse2Header").textContent = h2;
+  document.getElementById("horse1SummaryLabel").innerHTML = `${h1} Ahead<span id="horse1Wins">0</span>`;
+  document.getElementById("horse2SummaryLabel").innerHTML = `${h2} Ahead<span id="horse2Wins">0</span>`;
 
   if(shared.length === 0){
     document.getElementById("status").textContent = `${h1} and ${h2} have never raced against each other in a Group 1.`;
-    document.getElementById("results").innerHTML = "";
+    document.getElementById("status").style.display = "block";
+    document.getElementById("summary").style.display = "none";
+    document.getElementById("tableWrap").style.display = "none";
     return;
   }
 
-  // Sort oldest to newest
+  document.getElementById("status").style.display = "none";
+
   const sorted = shared.slice().sort((a,b) => {
     const [ad,am,ay] = a.info.Date.split("/").map(Number);
     const [bd,bm,by] = b.info.Date.split("/").map(Number);
@@ -195,19 +245,19 @@ function compareHorses(){
         <td>${race.info.Date}</td>
         <td>${race.info["Race Name"]}</td>
         <td>${race.info.Track}</td>
-        <td class="${f1 < f2 ? 'win' : ''}">${r1["Position"]}${f1<f2 ? ' 🏆' : ''}</td>
-        <td class="${f2 < f1 ? 'win' : ''}">${r2["Position"]}${f2<f1 ? ' 🏆' : ''}</td>
+        <td class="${f1 < f2 ? 'win-cell' : ''}">${r1["Position"]}</td>
+        <td class="${f2 < f1 ? 'win-cell' : ''}">${r2["Position"]}</td>
       </tr>
     `;
   }).join("");
 
-  document.getElementById("status").textContent =
-    `${shared.length} shared race${shared.length===1?'':'s'} — ${h1} finished ahead ${h1Wins} time${h1Wins===1?'':'s'}, ${h2} finished ahead ${h2Wins} time${h2Wins===1?'':'s'}.`;
+  document.getElementById("sharedCount").textContent = shared.length;
+  document.getElementById("horse1Wins").textContent = h1Wins;
+  document.getElementById("horse2Wins").textContent = h2Wins;
+  document.getElementById("summary").style.display = "flex";
+  document.getElementById("tableWrap").style.display = "block";
   document.getElementById("results").innerHTML = rowsHtml;
 }
-
-document.getElementById("horse1Box").addEventListener("input", compareHorses);
-document.getElementById("horse2Box").addEventListener("input", compareHorses);
 
 </script>
 </body>
