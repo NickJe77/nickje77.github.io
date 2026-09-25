@@ -255,14 +255,55 @@ fetch(`/data/nascar/nascar_${year}.json`)
     // finishing_position 0 means the scraper picked up a qualifying/heat
     // session instead of the real feature race (confirmed case: the
     // season-opening Clash exhibition event).
+    function extractOldSchemaRaceName(info){
+  const title = (info || {}).title || "";
+  return title.replace(/\s*-\s*The Third Turn\s*$/, "").trim() || null;
+}
+function extractOldSchemaTrackName(info){
+  const venueText = (info || {}).venue_text || "";
+  const m = venueText.match(/at (.+?) in/);
+  return m ? m[1].trim() : null;
+}
+function normalizeRace(race){
+  return {
+    race_name: race.race_name ?? extractOldSchemaRaceName(race.info),
+    track_name: race.track_name ?? extractOldSchemaTrackName(race.info),
+    date: race.race_date ? race.race_date.slice(0,10) : (race.date || ""),
+  };
+}
+
+function normalizeResult(r){
+      return {
+        finishing_position: r.finishing_position ?? (parseInt(r.Fin) || null),
+        starting_position: r.starting_position ?? r.St ?? null,
+        car_number: r.car_number ?? r["#"] ?? null,
+        driver_fullname: r.driver_fullname ?? r.Driver ?? null,
+        team_name: r.team_name ?? null, // confirmed: no equivalent field exists in the old schema
+        car: [r.car_make, r.car_model].filter(Boolean).join(" ") || r.Make || null,
+        laps_completed: r.laps_completed ?? r.Laps ?? null,
+        laps_led: r.laps_led ?? r.Led ?? null,
+        points_earned: r.points_earned ?? r.Pts ?? null,
+      };
+    }
+
     function hasValidResults(race) {
-      const results = race.results || [];
+      const results = (race.results || []).map(normalizeResult);
       if (results.length === 0) return false;
       return results.some(r => r.finishing_position != null && r.finishing_position !== 0);
     }
 
-    const idx = races.findIndex(r => String(r.race_id) === String(raceId));
-    const race = races[idx];
+    const filteredRaces = races.filter(hasValidResults);
+
+    // Matches either a real race_id (2026+) or the "idxN" fallback
+    // built from this race's position in the SAME filtered list the
+    // season page uses -- older seasons have no real race_id at all,
+    // so this must be the array position, not races.findIndex on the
+    // unfiltered list.
+    const idx = filteredRaces.findIndex((r, i) => {
+      const thisId = r.race_id ?? `idx${i}`;
+      return String(thisId) === String(raceId);
+    });
+    const race = filteredRaces[idx];
 
     if(!race){
       document.getElementById("title").textContent = "Race not found";
@@ -270,7 +311,7 @@ fetch(`/data/nascar/nascar_${year}.json`)
     }
 
     if(!hasValidResults(race)){
-      document.getElementById("title").textContent = race.race_name || "Race data unavailable";
+      document.getElementById("title").textContent = normalizeRace(race).race_name || "Race data unavailable";
       document.getElementById("race-meta").textContent =
         "This race's results couldn't be reliably scraped (likely an exhibition/qualifying event) and have been hidden.";
       document.getElementById("results").innerHTML =
@@ -279,26 +320,29 @@ fetch(`/data/nascar/nascar_${year}.json`)
     }
 
     // Prev/next only ever consider races with valid data, so browsing
-    // never lands on a broken one.
-    const validRaces = races.filter(hasValidResults);
-    const validIdx = validRaces.findIndex(r => String(r.race_id) === String(raceId));
-    const prevRace = validRaces[validIdx - 1];
-    const nextRace = validRaces[validIdx + 1];
+    // never lands on a broken one. Reuses filteredRaces (built above)
+    // and the same real-id-or-idx-fallback scheme, since older
+    // seasons have no real race_id to link with at all.
+    const prevRace = filteredRaces[idx - 1];
+    const nextRace = filteredRaces[idx + 1];
     if(prevRace){
       const prev = document.getElementById("prev");
-      prev.textContent = "← " + (prevRace.race_name || "Previous");
-      prev.href = `./nascar-race.html?year=${year}&race_id=${prevRace.race_id}`;
+      prev.textContent = "← " + (normalizeRace(prevRace).race_name || "Previous");
+      const prevId = prevRace.race_id ?? `idx${idx - 1}`;
+      prev.href = `./nascar-race.html?year=${year}&race_id=${prevId}`;
     }
     if(nextRace){
       const next = document.getElementById("next");
-      next.textContent = (nextRace.race_name || "Next") + " →";
-      next.href = `./nascar-race.html?year=${year}&race_id=${nextRace.race_id}`;
+      next.textContent = (normalizeRace(nextRace).race_name || "Next") + " →";
+      const nextId = nextRace.race_id ?? `idx${idx + 1}`;
+      next.href = `./nascar-race.html?year=${year}&race_id=${nextId}`;
     }
 
+    const nr = normalizeRace(race);
     document.getElementById("title").textContent =
-      race.race_name || `${year} Race`;
+      nr.race_name || `${year} Race`;
     document.getElementById("race-meta").textContent =
-      [race.race_date ? race.race_date.slice(0,10) : "", race.track_name].filter(Boolean).join(" — ");
+      [nr.date, nr.track_name].filter(Boolean).join(" — ");
 
     const tbody = document.getElementById("results");
     tbody.innerHTML = "";
@@ -308,14 +352,14 @@ fetch(`/data/nascar/nascar_${year}.json`)
       return;
     }
 
-    const sorted = [...race.results].sort((a,b) => {
+    const normalized = race.results.map(normalizeResult);
+    const sorted = [...normalized].sort((a,b) => {
       const ap = a.finishing_position == null ? 999 : a.finishing_position;
       const bp = b.finishing_position == null ? 999 : b.finishing_position;
       return ap - bp;
     });
 
     sorted.forEach(r => {
-      const car = [r.car_make, r.car_model].filter(Boolean).join(" ");
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.finishing_position ?? ""}</td>
@@ -323,7 +367,7 @@ fetch(`/data/nascar/nascar_${year}.json`)
         <td>${r.car_number ?? ""}</td>
         <td>${driverLink(r.driver_fullname)}</td>
         <td>${r.team_name ?? ""}</td>
-        <td>${car}</td>
+        <td>${r.car ?? ""}</td>
         <td>${r.laps_completed ?? ""}</td>
         <td>${r.laps_led ?? ""}</td>
         <td>${r.points_earned ?? ""}</td>
