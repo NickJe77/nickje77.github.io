@@ -197,10 +197,34 @@ h1{
 const params = new URLSearchParams(window.location.search);
 let year = parseInt(params.get("year"));
 
-if(!year || isNaN(year)){
-  document.getElementById("title").textContent = "No year selected";
-  throw new Error("Missing year parameter");
+function startWithYear(y){
+  year = y;
+  loadNavAndData();
 }
+
+if(!year || isNaN(year)){
+  // No year given (direct navigation via a bookmark or typed URL,
+  // rather than clicking a year tile) -- default to the most recent
+  // real season instead of just stopping, same as other season
+  // pages in this project already do.
+  fetch("/data/nascar/index.json")
+    .then(res => res.json())
+    .then(index => {
+      if(!Array.isArray(index) || !index.length){
+        document.getElementById("title").textContent = "No year selected";
+        return;
+      }
+      const years = index.map(x => x.year).sort((a,b) => a - b);
+      startWithYear(years[years.length - 1]);
+    })
+    .catch(() => {
+      document.getElementById("title").textContent = "No year selected";
+    });
+} else {
+  loadNavAndData();
+}
+
+function loadNavAndData(){
 
 // -------------------------
 // BUILD PREV/NEXT NAV
@@ -282,6 +306,8 @@ fetch(`/data/nascar/nascar_${year}.json`)
     document.getElementById("title").textContent = "Error loading season";
     console.error(err);
   });
+
+}
 
 </script>
 
