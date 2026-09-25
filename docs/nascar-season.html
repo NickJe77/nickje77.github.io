@@ -280,24 +280,55 @@ fetch(`/data/nascar/nascar_${year}.json`)
     // instead of the actual feature race. If EVERY result in a race is
     // like this, skip listing the race entirely rather than showing a
     // table full of zeros.
+    function extractOldSchemaRaceName(info){
+  const title = (info || {}).title || "";
+  return title.replace(/\s*-\s*The Third Turn\s*$/, "").trim() || null;
+}
+function extractOldSchemaTrackName(info){
+  const venueText = (info || {}).venue_text || "";
+  const m = venueText.match(/at (.+?) in/);
+  return m ? m[1].trim() : null;
+}
+function normalizeRace(race){
+  return {
+    race_name: race.race_name ?? extractOldSchemaRaceName(race.info),
+    track_name: race.track_name ?? extractOldSchemaTrackName(race.info),
+    date: race.race_date ? race.race_date.slice(0,10) : (race.date || ""),
+  };
+}
+
+function normalizeResult(r){
+      return {
+        finishing_position: r.finishing_position ?? (parseInt(r.Fin) || null),
+        driver_fullname: r.driver_fullname ?? r.Driver ?? null,
+      };
+    }
+
     function hasValidResults(race) {
-      const results = race.results || [];
+      const results = (race.results || []).map(normalizeResult);
       if (results.length === 0) return false;
       return results.some(r => r.finishing_position != null && r.finishing_position !== 0);
     }
 
-    data.races.filter(hasValidResults).forEach(r => {
-      const winnerEntry = (r.results || []).find(x => x.finishing_position === 1);
+    data.races.filter(hasValidResults).forEach((r, idx) => {
+      const normalizedResults = (r.results || []).map(normalizeResult);
+      const winnerEntry = normalizedResults.find(x => x.finishing_position === 1);
       const winner = winnerEntry ? winnerEntry.driver_fullname : "";
+      const nr = normalizeRace(r);
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.race_name || ""}</td>
-        <td>${r.race_date ? r.race_date.slice(0,10) : ""}</td>
-        <td>${r.track_name || ""}</td>
+        <td>${nr.race_name || ""}</td>
+        <td>${nr.date}</td>
+        <td>${nr.track_name || ""}</td>
         <td>${winner}</td>
       `;
+      // Older seasons have no real race_id at all (confirmed: the key
+      // is entirely absent, not just null, in the pre-2026 schema) --
+      // fall back to this race's position in the season as a stable
+      // identifier instead of literally passing "undefined" through.
+      const raceId = r.race_id ?? `idx${idx}`;
       tr.onclick = () => {
-        window.location.href = `./nascar-race.html?year=${year}&race_id=${r.race_id}`;
+        window.location.href = `./nascar-race.html?year=${year}&race_id=${raceId}`;
       };
       tbody.appendChild(tr);
     });
