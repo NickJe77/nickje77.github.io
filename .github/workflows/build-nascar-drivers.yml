@@ -1,0 +1,31 @@
+name: Rebuild NASCAR Drivers JSON
+on:
+  push:
+    paths:
+      - 'docs/data/nascar/nascar_*.json'
+  workflow_dispatch:
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Run build_nascar_drivers.py
+        run: |
+          python3 build_nascar_drivers.py --data-dir docs/data/nascar --out docs/data/nascar/drivers.json
+
+      - name: Commit updated drivers.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/data/nascar/drivers.json
+          git diff --cached --quiet && echo "No changes" && exit 0
+          git commit -m "Auto-rebuild drivers.json from updated season data"
+          git pull --rebase origin main
+          git push
