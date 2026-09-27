@@ -89,25 +89,33 @@ tbody tr:hover td{ background:#f9fbfd; }
 
   <div class="hero">
     <div class="eyebrow">Australian Stakes Races</div>
-    <h1>Best Trainer-Jockey Days</h1>
+    <h1>Best Single-Day Performances</h1>
   </div>
 
   <div class="loading" id="status">Loading data…</div>
 
-  <div class="table-wrap" id="tableWrap" style="display:none;">
-  <table>
-    <thead>
-      <tr>
-        <th>Rank</th>
-        <th>Date</th>
-        <th>Jockey</th>
-        <th>Trainer</th>
-        <th>Wins</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody id="leaderboard"></tbody>
-  </table>
+  <div id="leaderboardsWrap" style="display:none;">
+
+    <h2 style="font-family:var(--display);font-weight:600;font-size:20px;margin:0 0 12px;">Jockeys</h2>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Rank</th><th>Date</th><th>Jockey</th><th>Wins</th><th></th></tr>
+      </thead>
+      <tbody id="jockeyLeaderboard"></tbody>
+    </table>
+    </div>
+
+    <h2 style="font-family:var(--display);font-weight:600;font-size:20px;margin:32px 0 12px;">Trainers</h2>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Rank</th><th>Date</th><th>Trainer</th><th>Wins</th><th></th></tr>
+      </thead>
+      <tbody id="trainerLeaderboard"></tbody>
+    </table>
+    </div>
+
   </div>
 
   <div id="detailPanel" style="display:none;margin-top:20px;"></div>
@@ -132,64 +140,92 @@ function parseCSV(text){
 }
 
 let allData = [];
-let combos = [];
+let jockeyCombos = [];
+let trainerCombos = [];
 
 fetch("/data/Stakes%20races.csv")
   .then(res => res.text())
   .then(text => {
     allData = parseCSV(text);
-    buildLeaderboard();
+    buildLeaderboards();
   });
 
-function buildLeaderboard(){
-  // Group every WINNING run by (date, jockey, trainer) -- this is the
-  // real combination that matters here, since the same jockey/trainer
-  // pair can win multiple different stakes races on the same day.
-  const groups = {};
+function buildLeaderboards(){
+  // Two genuinely separate leaderboards -- a jockey can win with
+  // several different trainers' horses on the same day (and vice
+  // versa), so grouping by the combined pair understates each
+  // individual's real single-day total. Confirmed real: the top
+  // trainer day (7 wins) is higher than the top combined-pair day
+  // (5 wins), since those 7 wins weren't all with the same jockey.
+  const jockeyGroups = {};
+  const trainerGroups = {};
+
   allData.forEach(r => {
     const pos = parseInt(r.Position);
     if(pos !== 1) return;
-    if(!r.Jockey || !r.Trainer) return;
 
-    const key = `${r.Date}|${r.Jockey}|${r.Trainer}`;
-    if(!groups[key]) groups[key] = { date: r.Date, jockey: r.Jockey, trainer: r.Trainer, races: [] };
-    groups[key].races.push(r);
+    if(r.Jockey){
+      const jKey = `${r.Date}|${r.Jockey}`;
+      if(!jockeyGroups[jKey]) jockeyGroups[jKey] = { date: r.Date, name: r.Jockey, races: [] };
+      jockeyGroups[jKey].races.push(r);
+    }
+
+    if(r.Trainer){
+      const tKey = `${r.Date}|${r.Trainer}`;
+      if(!trainerGroups[tKey]) trainerGroups[tKey] = { date: r.Date, name: r.Trainer, races: [] };
+      trainerGroups[tKey].races.push(r);
+    }
   });
 
-  combos = Object.values(groups)
-    .filter(g => g.races.length >= 2) // only genuinely multi-win days are interesting here
+  jockeyCombos = Object.values(jockeyGroups)
+    .filter(g => g.races.length >= 2)
+    .sort((a,b) => b.races.length - a.races.length)
+    .slice(0, 50);
+
+  trainerCombos = Object.values(trainerGroups)
+    .filter(g => g.races.length >= 2)
     .sort((a,b) => b.races.length - a.races.length)
     .slice(0, 50);
 
   document.getElementById("status").style.display = "none";
-  document.getElementById("tableWrap").style.display = "block";
+  document.getElementById("leaderboardsWrap").style.display = "block";
 
-  document.getElementById("leaderboard").innerHTML = combos.map((c, i) => `
-    <tr onclick="showDetail(${i})" style="cursor:pointer;">
+  document.getElementById("jockeyLeaderboard").innerHTML = jockeyCombos.map((c, i) => `
+    <tr onclick="showDetail('jockey', ${i})" style="cursor:pointer;">
       <td>${i + 1}</td>
       <td>${c.date}</td>
-      <td>${c.jockey}</td>
-      <td>${c.trainer}</td>
+      <td>${c.name}</td>
+      <td class="lead">${c.races.length}</td>
+      <td>→</td>
+    </tr>
+  `).join("");
+
+  document.getElementById("trainerLeaderboard").innerHTML = trainerCombos.map((c, i) => `
+    <tr onclick="showDetail('trainer', ${i})" style="cursor:pointer;">
+      <td>${i + 1}</td>
+      <td>${c.date}</td>
+      <td>${c.name}</td>
       <td class="lead">${c.races.length}</td>
       <td>→</td>
     </tr>
   `).join("");
 }
 
-function showDetail(i){
-  const c = combos[i];
+function showDetail(type, i){
+  const c = type === "jockey" ? jockeyCombos[i] : trainerCombos[i];
+  const label = type === "jockey" ? "Jockey" : "Trainer";
   const panel = document.getElementById("detailPanel");
   panel.style.display = "block";
   panel.innerHTML = `
     <div class="summary" style="display:flex;">
       <div>Date<span>${c.date}</span></div>
-      <div>Jockey<span>${c.jockey}</span></div>
-      <div>Trainer<span>${c.trainer}</span></div>
+      <div>${label}<span>${c.name}</span></div>
+      <div>Wins<span>${c.races.length}</span></div>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Race</th><th>Track</th><th>Horse</th><th>SP</th></tr>
+          <tr><th>Race</th><th>Track</th><th>Horse</th><th>${type === "jockey" ? "Trainer" : "Jockey"}</th><th>SP</th></tr>
         </thead>
         <tbody>
           ${c.races.map(r => `
@@ -197,6 +233,7 @@ function showDetail(i){
               <td>${r["Race Name"]}</td>
               <td>${r.Track}</td>
               <td>${r.Horse}</td>
+              <td>${type === "jockey" ? r.Trainer : r.Jockey}</td>
               <td>${r.SP}</td>
             </tr>
           `).join("")}
