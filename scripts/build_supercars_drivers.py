@@ -31,6 +31,62 @@ import urllib.request
 from collections import defaultdict
 
 
+def extract_old_schema_race_name(info):
+    """'ATCC:1997-01 - The Third Turn' -> 'ATCC:1997-01' (confirmed
+    real title format, same pattern as NASCAR's old schema)."""
+    title = (info or {}).get("title") or ""
+    return re.sub(r"\s*-\s*The Third Turn\s*$", "", title).strip() or None
+
+
+def extract_old_schema_track_name(info):
+    """'Held on March 15, 1997 at Calder Park Raceway in Keilor, VIC,
+    Australia' -> 'Calder Park Raceway' (confirmed real venue_text
+    format)."""
+    venue_text = (info or {}).get("venue_text") or ""
+    m = re.search(r"at (.+?) in", venue_text)
+    return m.group(1).strip() if m else None
+
+
+def normalize_race_and_results(race):
+    """Returns (event_name, race_label, results) regardless of which
+    real schema this race object actually uses -- confirmed both
+    schemas exist across real season files under the identical
+    filename pattern (supercars_{year}.json)."""
+    if "results" in race and race["results"] and "driver_name" in race["results"][0]:
+        # New (supercars.com) schema -- fields are direct.
+        return race.get("event_name"), race.get("race_label"), [
+            {
+                "driver_name": r.get("driver_name"),
+                "finishing_position": r.get("finishing_position"),
+                "starting_position": r.get("starting_position"),
+                "car_number": r.get("car_number"),
+                "team_name": r.get("team_name"),
+                "laps": r.get("laps"),
+                "points": r.get("points"),
+            }
+            for r in race["results"]
+        ]
+    else:
+        # Old (thethirdturn.com) schema -- race name/track nested in
+        # "info", no separate team_name field at all (confirmed real).
+        info = race.get("info", {})
+        event_name = extract_old_schema_race_name(info)
+        race_label = f"Round {race.get('race_num')}" if race.get("race_num") else None
+        results = [
+            {
+                "driver_name": r.get("Driver"),
+                "finishing_position": r.get("Fin"),
+                "starting_position": r.get("St"),
+                "car_number": r.get("#"),
+                "team_name": None,  # confirmed: no equivalent field in this schema
+                "laps": r.get("Laps"),
+                "points": r.get("Pts"),
+            }
+            for r in race.get("results", [])
+        ]
+        return event_name, race_label, results
+
+
 def fetch_url(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -82,7 +138,9 @@ def main():
         races = season_data.get("races", [])
 
         for race in races:
-            for r in race.get("results", []):
+            event_name, race_label, results = normalize_race_and_results(race)
+
+            for r in results:
                 driver_name = r.get("driver_name")
                 if not driver_name:
                     continue
@@ -90,8 +148,8 @@ def main():
                 drivers[driver_name].append({
                     "year": year,
                     "url": race.get("url"),
-                    "event_name": race.get("event_name"),
-                    "race_label": race.get("race_label"),
+                    "event_name": event_name,
+                    "race_label": race_label,
                     "finishing_position": r.get("finishing_position"),
                     "starting_position": r.get("starting_position"),
                     "car_number": r.get("car_number"),
