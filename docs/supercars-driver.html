@@ -242,12 +242,30 @@ fetch("/data/supercars/drivers.json")
     const tbody = document.getElementById("table");
     tbody.innerHTML = "";
 
-    const races = (match.races || []).slice().sort((a,b) => {
+    // The raw race_label (e.g. "R16") is just supercars.com's own
+    // internal URL slug, not a meaningful race number -- confirmed
+    // real: a genuine event like the Sydney 500 only has 3 races
+    // total despite labels going up to R16. The original array order
+    // (before any sorting) already reflects the correct real
+    // chronological discovery order, so the true "Race 1/2/3 of this
+    // event" label and the correct display order are both derived
+    // from that original position, grouped by year+event.
+    const rawRaces = match.races || [];
+    const eventCounts = {};
+    const eventFirstIndex = {};
+    rawRaces.forEach((r, i) => {
+      const key = `${r.year}|${r.event_name || ""}`;
+      eventCounts[key] = (eventCounts[key] || 0) + 1;
+      r._raceNumber = eventCounts[key];
+      if(!(key in eventFirstIndex)) eventFirstIndex[key] = i;
+    });
+
+    const races = rawRaces.slice().sort((a,b) => {
       if(b.year !== a.year) return b.year - a.year;
-      const an = parseInt(String(a.race_label || "").replace(/\D/g, ""), 10);
-      const bn = parseInt(String(b.race_label || "").replace(/\D/g, ""), 10);
-      if(!isNaN(an) && !isNaN(bn)) return an - bn;
-      return String(a.race_label || "").localeCompare(String(b.race_label || ""));
+      const aKey = `${a.year}|${a.event_name || ""}`;
+      const bKey = `${b.year}|${b.event_name || ""}`;
+      if(eventFirstIndex[aKey] !== eventFirstIndex[bKey]) return eventFirstIndex[aKey] - eventFirstIndex[bKey];
+      return a._raceNumber - b._raceNumber;
     });
 
     races.forEach(r => {
@@ -258,7 +276,7 @@ fetch("/data/supercars/drivers.json")
       tr.innerHTML = `
         <td>${r.year}</td>
         <td>${r.event_name || ""}</td>
-        <td>${r.race_label || ""}</td>
+        <td>Race ${r._raceNumber}</td>
         <td>${r.team_name || ""}</td>
         <td>${r.finishing_position ?? ""}</td>
       `;

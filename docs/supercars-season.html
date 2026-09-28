@@ -272,13 +272,27 @@ fetch(`/data/supercars/supercars_${year}.json`)
     const tbody = document.getElementById("races");
     tbody.innerHTML = "";
 
+    // The raw race_label (e.g. "R16") is just supercars.com's own
+    // internal URL slug, not a meaningful race number -- confirmed
+    // real: the Sydney 500 genuinely only has 3 races total, despite
+    // labels going up to R16. The scraper discovers races in the
+    // correct real chronological order already, so the true "Race 1/
+    // 2/3 of this event" label is derived here from position within
+    // each event group instead.
+    const eventCounts = {};
+    data.races.forEach(r => {
+      const key = r.event_name || "";
+      eventCounts[key] = (eventCounts[key] || 0) + 1;
+      r._raceNumber = eventCounts[key];
+    });
+
     data.races.forEach(r => {
       const winnerEntry = (r.results || []).find(x => String(x.finishing_position) === "1");
       const winner = winnerEntry ? winnerEntry.driver_name : "";
       const tr = document.createElement("tr");
       tr.innerHTML = `
         <td>${r.event_name || ""}</td>
-        <td>${r.race_label || ""}</td>
+        <td>Race ${r._raceNumber}</td>
         <td>${winner}</td>
       `;
       tr.onclick = () => {
