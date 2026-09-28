@@ -202,7 +202,15 @@ def main():
 
         print(f"  {fname}: {len(races)} race(s) processed")
 
-    output = [{"name": name, "races": races} for name, races in drivers.items()]
+    output = []
+    for name, races in drivers.items():
+        wins = sum(1 for r in races if str(r.get("finishing_position")) == "1")
+        output.append({
+            "name": name,
+            "starts": len(races),
+            "wins": wins,
+            "races": races,
+        })
     output.sort(key=lambda d: d["name"])
 
     with open(args.out, "w", encoding="utf-8") as f:
