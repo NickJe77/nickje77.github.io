@@ -257,23 +257,46 @@ fetch(`/data/supercars/supercars_${year}.json`)
       return;
     }
 
+    // Pre-2026 seasons have no event_name/race_label fields at all
+    // (confirmed real: completely different schema) -- the real
+    // event name, race number, and venue are instead embedded in
+    // info.title/info.venue_text (e.g. "2025 Thrifty Sydney 500 Race 1
+    // - The Third Turn" / "Held on ... at Sydney Motorsport Park in
+    // Eastern Creek, NSW, Australia").
+    function normalizeRace(r){
+      if(r.event_name) return { eventName: r.event_name, raceLabel: r.race_label, venue: null };
+      const title = (r.info || {}).title || "";
+      const m = title.match(/^(.*?)\s+Race\s+(\d+)\s*-\s*The Third Turn\s*$/);
+      const venueText = (r.info || {}).venue_text || "";
+      const vm = venueText.match(/at (.+?) in/);
+      return {
+        eventName: m ? m[1] : title,
+        raceLabel: m ? `Race ${m[2]}` : null,
+        venue: vm ? vm[1] : null,
+      };
+    }
+
+    const raceInfo = normalizeRace(race);
+
     // Prev/next race within the same season
     const prevRace = races[idx - 1];
     const nextRace = races[idx + 1];
     if(prevRace){
+      const prevInfo = normalizeRace(prevRace);
       const prev = document.getElementById("prev");
-      prev.textContent = "← " + (prevRace.event_name || "Previous") + " " + (prevRace.race_label || "");
+      prev.textContent = "← " + (prevInfo.eventName || "Previous") + " " + (prevInfo.raceLabel || "");
       prev.href = `./supercars-race.html?year=${year}&url=${encodeURIComponent(prevRace.url)}`;
     }
     if(nextRace){
+      const nextInfo = normalizeRace(nextRace);
       const next = document.getElementById("next");
-      next.textContent = (nextRace.event_name || "Next") + " " + (nextRace.race_label || "") + " →";
+      next.textContent = (nextInfo.eventName || "Next") + " " + (nextInfo.raceLabel || "") + " →";
       next.href = `./supercars-race.html?year=${year}&url=${encodeURIComponent(nextRace.url)}`;
     }
 
     document.getElementById("title").textContent =
-      [race.event_name, race.race_label].filter(Boolean).join(" — ") || `${year} Race`;
-    document.getElementById("race-meta").textContent = "";
+      [raceInfo.eventName, raceInfo.raceLabel].filter(Boolean).join(" — ") || `${year} Race`;
+    document.getElementById("race-meta").textContent = raceInfo.venue || "";
 
     const tbody = document.getElementById("results");
     tbody.innerHTML = "";
@@ -283,9 +306,24 @@ fetch(`/data/supercars/supercars_${year}.json`)
       return;
     }
 
+    function normalizeResult(r){
+      if("finishing_position" in r) return r;
+      return {
+        finishing_position: r.Fin,
+        starting_position: r.St,
+        car_number: r["#"],
+        driver_name: r.Driver,
+        team_name: null, // confirmed: no equivalent field in the old schema
+        race_time: null,
+        laps: r.Laps,
+        points: r.Pts,
+      };
+    }
+
     // finishing_position is a string ("1","2",...,"-" for DNF) -- sort
     // numerically, pushing "-"/non-numeric values to the end.
-    const sorted = [...race.results].sort((a,b) => {
+    const normalized = race.results.map(normalizeResult);
+    const sorted = [...normalized].sort((a,b) => {
       const an = parseInt(a.finishing_position, 10);
       const bn = parseInt(b.finishing_position, 10);
       const aVal = isNaN(an) ? 999 : an;
