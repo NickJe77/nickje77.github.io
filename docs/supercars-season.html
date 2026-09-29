@@ -272,26 +272,45 @@ fetch(`/data/supercars/supercars_${year}.json`)
     const tbody = document.getElementById("races");
     tbody.innerHTML = "";
 
+    // Pre-2026 seasons have no event_name field at all (confirmed
+    // real: completely different schema) -- but the real event name
+    // and race number are both directly embedded in info.title
+    // (e.g. "2025 Thrifty Sydney 500 Race 1 - The Third Turn").
+    function normalizeRace(r){
+      if(r.event_name) return { eventName: r.event_name, raceNumber: null };
+      const title = (r.info || {}).title || "";
+      const m = title.match(/^(.*?)\s+Race\s+(\d+)\s*-\s*The Third Turn\s*$/);
+      return m ? { eventName: m[1], raceNumber: parseInt(m[2], 10) } : { eventName: title, raceNumber: null };
+    }
+
     // The raw race_label (e.g. "R16") is just supercars.com's own
     // internal URL slug, not a meaningful race number -- confirmed
     // real: the Sydney 500 genuinely only has 3 races total, despite
-    // labels going up to R16. The scraper discovers races in the
-    // correct real chronological order already, so the true "Race 1/
-    // 2/3 of this event" label is derived here from position within
-    // each event group instead.
+    // labels going up to R16. For the new schema, the scraper
+    // discovers races in the correct real chronological order
+    // already, so the true "Race 1/2/3 of this event" label is
+    // derived from position within each event group. For the old
+    // schema, the real race number is already directly embedded in
+    // info.title, so that's used instead of a computed counter.
     const eventCounts = {};
     data.races.forEach(r => {
-      const key = r.event_name || "";
-      eventCounts[key] = (eventCounts[key] || 0) + 1;
-      r._raceNumber = eventCounts[key];
+      const { eventName, raceNumber } = normalizeRace(r);
+      r._eventName = eventName;
+      if(raceNumber != null){
+        r._raceNumber = raceNumber;
+      } else {
+        const key = eventName || "";
+        eventCounts[key] = (eventCounts[key] || 0) + 1;
+        r._raceNumber = eventCounts[key];
+      }
     });
 
     data.races.forEach(r => {
       const winnerEntry = (r.results || []).find(x => String(x.finishing_position) === "1");
-      const winner = winnerEntry ? winnerEntry.driver_name : "";
+      const winner = winnerEntry ? winnerEntry.driver_name : (r.winner || "");
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td>${r.event_name || ""}</td>
+        <td>${r._eventName || ""}</td>
         <td>Race ${r._raceNumber}</td>
         <td>${winner}</td>
       `;
