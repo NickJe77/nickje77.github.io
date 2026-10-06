@@ -103,6 +103,7 @@ th{
 tbody tr:hover td{background:#f9fbfd;}
 
 .season-points{text-align:center;font-variant-numeric:tabular-nums;}
+.sprint-pts{margin-left:3px;font-size:11px;font-weight:600;opacity:.6;white-space:nowrap;}
 
 /* GREY OUT NON-FINISHERS */
 .dnf-row{color:var(--faint);background:#f7f8fa !important;}
@@ -235,10 +236,13 @@ async function loadSeason(y){
 function renderSeason(data){
   resultsDiv.innerHTML="";
   let totals={},running={};
+  // Race + sprint points. Older seasons have no total_points (their `points`
+  // already includes sprint points), so fall back to `points`.
+  const weekendPts=x=>Number(x.total_points??x.points)||0;
 
   data.races.forEach(r=>{
     r.results.forEach(x=>{
-      totals[x.driver]=(totals[x.driver]||0)+(Number(x.points)||0);
+      totals[x.driver]=(totals[x.driver]||0)+weekendPts(x);
     });
   });
 
@@ -271,11 +275,12 @@ function renderSeason(data){
     });
 
     res.forEach(x=>{
-      running[x.driver]=(running[x.driver]||0)+(Number(x.points)||0);
+      running[x.driver]=(running[x.driver]||0)+weekendPts(x);
       let pos=String(x.position||"").toUpperCase();
 
       const isDNF = (!/^\d+$/.test(pos));
 
+      const sp=Number(x.sprint_points)||0;
       const tr=document.createElement("tr");
       if(isDNF) tr.classList.add("dnf-row");
 
@@ -284,7 +289,7 @@ function renderSeason(data){
         <td>${cleanDriver(x.driver)}</td>
         <td>${x.team||""}</td>
         <td>${x.grid||""}</td>
-        <td>${x.points||0}</td>
+        <td>${x.points||0}${sp?` <span class="sprint-pts">+${sp} sprint</span>`:""}</td>
         <td class="season-points">${running[x.driver]}</td>
       `;
       tb.appendChild(tr);
