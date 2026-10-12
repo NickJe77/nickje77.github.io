@@ -238,16 +238,31 @@ let sortAsc    = false;
 
 document.getElementById("playerName").textContent = player || "Player";
 
+// CHANGED: previously, if ANY season file failed to download or
+// parse (missing file, bad upload, malformed JSON), Promise.all
+// rejected and the page sat on "Loading..." forever with no error.
+// Each season now fails independently: the rest still load, and the
+// failed seasons are named in the status line and the console.
+const failedSeasons = [];
+
 fetch("data/nrl/index.json")
-.then(r=>r.json())
+.then(r=>{
+  if(!r.ok) throw new Error("index.json returned HTTP "+r.status);
+  return r.json();
+})
 .then(index=>{
   document.getElementById("status").textContent = "Loading...";
   return Promise.all(
     index.seasons.map(y=>
       fetch("data/nrl/seasons/"+y+".json")
-      .then(r=>r.json())
+      .then(r=>{
+        if(!r.ok) throw new Error("HTTP "+r.status);
+        return r.json();
+      })
       .then(matches=>{
+        if(!Array.isArray(matches)) throw new Error("file is not a JSON array");
         matches.forEach(match=>{
+          if(!match) return;
 
           // CHANGED: whatever process uploads season JSON (the old
           // zip pipeline, or season files uploaded directly, as
@@ -361,12 +376,25 @@ fetch("data/nrl/index.json")
           });
         });
       })
+      .catch(err=>{
+        failedSeasons.push(y);
+        console.error("Season "+y+" failed to load:", err);
+      })
     )
   );
 })
 .then(()=>{
-  document.getElementById("status").textContent = "";
-  if(!games.length) return;
+  const status = document.getElementById("status");
+  status.textContent = failedSeasons.length
+    ? "Couldn't load season data for: "+failedSeasons.join(", ")+" (stats below may be incomplete)"
+    : "";
+
+  if(!games.length){
+    document.getElementById("teamLabel").textContent = "No games found";
+    status.textContent = (status.textContent ? status.textContent+" · " : "") +
+      "No games found for \""+(player||"")+"\". Check the spelling or use the search box.";
+    return;
+  }
 
   // Team swatch + label
   const teamCount = {};
@@ -390,6 +418,11 @@ fetch("data/nrl/index.json")
 
   buildTabs();
   render();
+})
+.catch(err=>{
+  console.error("Player page failed to load:", err);
+  document.getElementById("teamLabel").textContent = "Error";
+  document.getElementById("status").textContent = "Couldn't load player data: "+err.message;
 });
 
 function buildSelect(id, options, placeholder){
