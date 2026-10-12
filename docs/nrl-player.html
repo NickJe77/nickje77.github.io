@@ -245,15 +245,25 @@ document.getElementById("playerName").textContent = player || "Player";
 // failed seasons are named in the status line and the console.
 const failedSeasons = [];
 
+// CHANGED: the page used to show nothing until all ~29 season files
+// had downloaded. It now redraws after each season arrives (newest
+// seasons requested first), so stats appear quickly and fill in as the
+// older seasons finish loading.
+let totalSeasons  = 0;
+let loadedSeasons = 0;
+let uiReady       = false;
+
 fetch("data/nrl/index.json")
 .then(r=>{
   if(!r.ok) throw new Error("index.json returned HTTP "+r.status);
   return r.json();
 })
 .then(index=>{
-  document.getElementById("status").textContent = "Loading...";
+  const seasonList = [...index.seasons].sort((a,b)=>Number(b)-Number(a));
+  totalSeasons = seasonList.length;
+  refreshView(false);
   return Promise.all(
-    index.seasons.map(y=>
+    seasonList.map(y=>
       fetch("data/nrl/seasons/"+y+".json")
       .then(r=>{
         if(!r.ok) throw new Error("HTTP "+r.status);
@@ -380,30 +390,54 @@ fetch("data/nrl/index.json")
         failedSeasons.push(y);
         console.error("Season "+y+" failed to load:", err);
       })
+      .then(()=>{
+        loadedSeasons++;
+        refreshView(false);
+      })
     )
   );
 })
-.then(()=>{
+.then(()=>refreshView(true))
+.catch(err=>{
+  console.error("Player page failed to load:", err);
+  document.getElementById("teamLabel").textContent = "Error";
+  document.getElementById("status").textContent = "Couldn't load player data: "+err.message;
+});
+
+function refreshView(done){
   const status = document.getElementById("status");
-  status.textContent = failedSeasons.length
-    ? "Couldn't load season data for: "+failedSeasons.join(", ")+" (stats below may be incomplete)"
-    : "";
+  if(done){
+    status.textContent = failedSeasons.length
+      ? "Couldn't load season data for: "+failedSeasons.sort().join(", ")+" (stats below may be incomplete)"
+      : "";
+  } else {
+    status.textContent = "Loading seasons… "+loadedSeasons+" of "+totalSeasons+
+      (games.length ? " (totals will update as older seasons arrive)" : "");
+  }
 
   if(!games.length){
-    document.getElementById("teamLabel").textContent = "No games found";
-    status.textContent = (status.textContent ? status.textContent+" · " : "") +
-      "No games found for \""+(player||"")+"\". Check the spelling or use the search box.";
+    if(done){
+      document.getElementById("teamLabel").textContent = "No games found";
+      status.textContent = (status.textContent ? status.textContent+" · " : "") +
+        "No games found for \""+(player||"")+"\". Check the spelling or use the search box.";
+    }
     return;
   }
+
+  // Keep games in a stable order as seasons arrive in any order
+  if(currentSort) applySort();
+  else games.sort((a,b)=>
+    (Number(a.season)-Number(b.season)) || String(a.date).localeCompare(String(b.date)));
 
   // Team swatch + label
   const teamCount = {};
   games.forEach(g=>{ teamCount[g.team]=(teamCount[g.team]||0)+1; });
   const mainTeam = Object.keys(teamCount).sort((a,b)=>teamCount[b]-teamCount[a])[0];
   document.getElementById("teamSwatch").style.background = teamColours[mainTeam]||"#5a6472";
-  document.getElementById("teamLabel").textContent = mainTeam+"  ·  "+games.length+" games";
+  document.getElementById("teamLabel").textContent =
+    mainTeam+"  ·  "+games.length+" games"+(done?"":"…");
 
-  // Filters
+  // Filters (rebuilt as new teams/opponents/seasons appear, keeping selections)
   const teams   = [...new Set(games.map(g=>g.team))].sort();
   const opps    = [...new Set(games.map(g=>g.opp))].sort();
   const seasons = [...new Set(games.map(g=>String(g.season)))].sort();
@@ -412,23 +446,22 @@ fetch("data/nrl/index.json")
   buildSelect("oppSelect",    opps,    "All Opponents");
   buildSelect("seasonSelect", seasons, "All Seasons");
 
-  document.getElementById("teamSelect").onchange   = render;
-  document.getElementById("oppSelect").onchange    = render;
-  document.getElementById("seasonSelect").onchange = render;
-
-  buildTabs();
+  if(!uiReady){
+    document.getElementById("teamSelect").onchange   = render;
+    document.getElementById("oppSelect").onchange    = render;
+    document.getElementById("seasonSelect").onchange = render;
+    buildTabs();
+    uiReady = true;
+  }
   render();
-})
-.catch(err=>{
-  console.error("Player page failed to load:", err);
-  document.getElementById("teamLabel").textContent = "Error";
-  document.getElementById("status").textContent = "Couldn't load player data: "+err.message;
-});
+}
 
 function buildSelect(id, options, placeholder){
   const sel = document.getElementById(id);
+  const prev = sel.value;
   sel.innerHTML = `<option value="all">${placeholder}</option>` +
     options.map(o=>`<option value="${o}">${o}</option>`).join("");
+  sel.value = options.includes(prev) ? prev : "all";
 }
 
 function buildTabs(){
@@ -517,6 +550,12 @@ function renderTable(data){
 function sortBy(key){
   sortAsc = currentSort===key ? !sortAsc : false;
   currentSort = key;
+  applySort();
+  renderTable(getFiltered());
+}
+
+function applySort(){
+  const key = currentSort;
   games.sort((a,b)=>{
     const av = isNaN(a[key]) ? (a[key]||"") : Number(a[key]);
     const bv = isNaN(b[key]) ? (b[key]||"") : Number(b[key]);
@@ -524,7 +563,6 @@ function sortBy(key){
     if(av>bv) return sortAsc?1:-1;
     return 0;
   });
-  renderTable(getFiltered());
 }
 
 // Search
