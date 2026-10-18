@@ -174,6 +174,22 @@ const STAT_GROUPS = {
     {key:"field_goals",   label:"FGs"},
     {key:"points",        label:"Points"},
   ],
+  // NEW: fantasy scores (2013 onwards). dash:true shows "–" for games with no fantasy data.
+  // This tab only appears for players who have at least one game with a fantasy score.
+  "Fantasy": [
+    {key:"fantasy_points",     label:"Fantasy", dash:true},
+    {key:"minutes_played",     label:"Mins",    dash:true},
+    {key:"receipts",           label:"Rec",     dash:true},
+    {key:"tries",              label:"Tries"},
+    {key:"try_assists",        label:"Try Ass"},
+    {key:"line_breaks",        label:"LBs"},
+    {key:"tackle_breaks",      label:"TB"},
+    {key:"offloads",           label:"Offloads"},
+    {key:"metres_gained",      label:"Metres"},
+    {key:"tackles",            label:"Tackles"},
+    {key:"missed_tackles",     label:"Miss Tkl"},
+    {key:"errors",             label:"Errors"},
+  ],
   "Attack": [
     {key:"runs",               label:"Runs"},
     {key:"metres_gained",      label:"Metres"},
@@ -378,9 +394,14 @@ fetch("data/nrl/index.json")
                 errors:             p.errors||0,
                 handling_errors:    p.handling_errors||0,
                 penalties_conceded: p.penalties_conceded||0,
-                sin_bins_10min:     p.sin_bins_10min||0,
+                // CHANGED: data stores sin bins as "sin_bins"; keep the old name as a fallback
+                sin_bins_10min:     p.sin_bins_10min||p.sin_bins||0,
                 send_offs:          p.send_offs||0,
                 on_reports:         p.on_reports||0,
+                // NEW: fantasy fields (null = no fantasy data for that game, e.g. before 2013)
+                fantasy_points:     (p.fantasy_points ?? null),
+                minutes_played:     (p.minutes_played ?? null),
+                receipts:           (p.receipts ?? null),
               });
             }
           });
@@ -450,9 +471,11 @@ function refreshView(done){
     document.getElementById("teamSelect").onchange   = render;
     document.getElementById("oppSelect").onchange    = render;
     document.getElementById("seasonSelect").onchange = render;
-    buildTabs();
     uiReady = true;
   }
+  // CHANGED: tabs are rebuilt on every refresh so the Fantasy tab appears
+  // as soon as a season with fantasy scores has loaded
+  buildTabs();
   render();
 }
 
@@ -464,10 +487,16 @@ function buildSelect(id, options, placeholder){
   sel.value = options.includes(prev) ? prev : "all";
 }
 
+// NEW: games that have a fantasy score
+const fpGames = data => data.filter(g=>g.fantasy_points!==null && g.fantasy_points!==undefined);
+
 function buildTabs(){
   const div = document.getElementById("statTabs");
   div.innerHTML = "";
-  Object.keys(STAT_GROUPS).forEach(group=>{
+  // NEW: only show the Fantasy tab when this player has fantasy data
+  const groups = Object.keys(STAT_GROUPS).filter(g=>g!=="Fantasy" || fpGames(games).length);
+  if(!groups.includes(activeGroup)) activeGroup = "Scoring";
+  groups.forEach(group=>{
     const tab = document.createElement("div");
     tab.className = "tab"+(group===activeGroup?" active":"");
     tab.textContent = group;
@@ -491,6 +520,15 @@ function sum(data, key){ return data.reduce((a,g)=>a+(g[key]||0),0); }
 function avg(data, key){ return data.length?(sum(data,key)/data.length).toFixed(1):0; }
 function best(data, key){ return data.length?Math.max(...data.map(g=>g[key]||0)):0; }
 
+// NEW: fantasy average / best, counted only over games that have a fantasy score
+function fantasyCards(data){
+  const fp = fpGames(data);
+  if(!fp.length) return "";
+  return `
+    <div class="card"><h2>${avg(fp,"fantasy_points")}</h2><p>Avg Fantasy</p></div>
+    <div class="card"><h2>${best(fp,"fantasy_points")}</h2><p>Best Fantasy</p></div>`;
+}
+
 function render(){
   const filtered = getFiltered();
   renderCareer();
@@ -508,6 +546,7 @@ function renderCareer(){
     <div class="card"><h2>${sum(games,"metres_gained")}</h2><p>Metres</p></div>
     <div class="card"><h2>${sum(games,"tackles")}</h2><p>Tackles</p></div>
     <div class="card"><h2>${sum(games,"offloads")}</h2><p>Offloads</p></div>
+    ${fantasyCards(games)}
   `;
 }
 
@@ -521,6 +560,7 @@ function renderFiltered(data){
     <div class="card"><h2>${sum(data,"runs")}</h2><p>Runs</p></div>
     <div class="card"><h2>${avg(data,"metres_gained")}</h2><p>Avg Metres</p></div>
     <div class="card"><h2>${sum(data,"tackles")}</h2><p>Tackles</p></div>
+    ${fantasyCards(data)}
   `;
 }
 
@@ -542,7 +582,7 @@ function renderTable(data){
       <td>${g.round}</td>
       <td>${g.team}</td>
       <td>${g.opp}</td>
-      ${cols.map(c=>`<td>${g[c.key]}</td>`).join("")}
+      ${cols.map(c=>`<td>${(g[c.key]===null||g[c.key]===undefined) ? (c.dash?"–":0) : g[c.key]}</td>`).join("")}
     </tr>
   `).join("");
 }
