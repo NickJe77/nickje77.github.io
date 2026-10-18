@@ -184,14 +184,19 @@ const fmtDate = d => {
   return `${parseInt(m[3])} ${months[parseInt(m[2])-1]} ${m[1]}`;
 };
 
+/* Fantasy points exist in the data from this season onwards */
+const FANTASY_FROM = 2013;
+
 /* dash:true  -> show "–" when a player has no value (instead of 0)
    alt:"x"    -> fall back to field "x" if the main field is missing */
 const STAT_GROUPS = {
   "Scoring":[
     {key:"tries",label:"T"},{key:"conversions",label:"Con"},{key:"penalty_goals",label:"PG"},
     {key:"field_goals",label:"FG"},{key:"points",label:"Pts",lead:true},
+    /* NEW: fantasy points straight after Pts (only shown for 2013 onwards) */
+    {key:"fantasy_points",label:"FP",lead:true,dash:true,fantasyOnly:true},
   ],
-  /* NEW: fantasy tab — only shown for games that have fantasy_points (2013 onwards) */
+  /* NEW: fantasy tab — always shown for 2013 onwards */
   "Fantasy":[
     {key:"fantasy_points",label:"FP",lead:true,dash:true},{key:"minutes_played",label:"Mins",dash:true},
     {key:"receipts",label:"Rec",dash:true},{key:"tries",label:"T"},{key:"try_assists",label:"TA"},
@@ -223,7 +228,7 @@ const STAT_GROUPS = {
   ],
 };
 
-let game=null, homePlayers=[], awayPlayers=[], availGroups=[], activeGroup="Scoring";
+let game=null, homePlayers=[], awayPlayers=[], availGroups=[], activeGroup="Scoring", hasFantasy=false;
 let sortState={home:{},away:{}};
 
 const params=new URLSearchParams(location.search);
@@ -246,12 +251,11 @@ function dedupePlayers(players){
         const v = p[k];
         /* only add up real numbers (not true/false flags or IDs) */
         if(typeof v === "number" || (typeof v === "string" && v!=="" && !isNaN(v))){
-          if(k!=="jersey" && !k.endsWith("_id")){ // don't sum jersey numbers or IDs, keep the first
+          if(k!=="jersey" && !k.endsWith("_id")){
             existing[k] = (Number(existing[k])||0) + (Number(v)||0);
           }
         }
       });
-      // Prefer a populated jersey number if the first entry lacked one
       if(!existing.jersey && p.jersey) existing.jersey = p.jersey;
     }
   });
@@ -260,7 +264,8 @@ function dedupePlayers(players){
 
 async function loadGame(){
   try{
-    const res=await fetch(`data/nrl/seasons/${season}.json`);
+    /* cache:"no-cache" so the browser always checks for the latest season file */
+    const res=await fetch(`data/nrl/seasons/${season}.json`, {cache:"no-cache"});
     const matches=await res.json();
     game=matches.find(m=>String(m.match_id)===String(matchId));
     if(!game){ document.getElementById("content").innerHTML='<div class="loading">Match not found.</div>'; return; }
@@ -272,8 +277,8 @@ async function loadGame(){
 }
 
 function hasData(group, players){
-  /* Fantasy tab only when this game actually has fantasy points */
-  if(group==="Fantasy") return players.some(p=>p.fantasy_points!==undefined && p.fantasy_points!==null);
+  /* Fantasy tab: always shown for seasons from 2013, so it's obvious whether the data has it */
+  if(group==="Fantasy") return Number(season) >= FANTASY_FROM || hasFantasy;
   return STAT_GROUPS[group].some(c=>players.some(p=>(Number(val(p,c))||0)!==0));
 }
 
@@ -281,10 +286,10 @@ function render(){
   const home=game.home_team, away=game.away_team;
   const players=game.players||[];
 
-  /* FIX: filter as before, then dedupe by player name before anything else uses these arrays */
   homePlayers=dedupePlayers(players.filter(p=>p.played_for===home));
   awayPlayers=dedupePlayers(players.filter(p=>p.played_for===away));
   const all=[...homePlayers,...awayPlayers];
+  hasFantasy = all.some(p=>p.fantasy_points!==undefined && p.fantasy_points!==null);
 
   availGroups=Object.keys(STAT_GROUPS).filter(g=>hasData(g,all));
   if(!availGroups.length) availGroups=["Scoring"];
@@ -323,7 +328,9 @@ function render(){
     </div>
 
     <div class="segment" id="segment"></div>
-    ${detailedMissing ? `<div class="era-note"><span class="dot"></span>Detailed stats are available from 2014. This match shows scoring only.</div>`:""}
+    <div id="notes">
+      ${detailedMissing ? `<div class="era-note"><span class="dot"></span>Detailed stats are available from 2014. This match shows scoring only.</div>`:""}
+    </div>
 
     <div class="teams">
       <div class="team-card">
@@ -342,6 +349,18 @@ function render(){
   renderTable("away");
 }
 
+function updateNotes(){
+  /* When the Fantasy tab is open but this season's file has no fantasy points,
+     say so plainly — that means the season file on the site is the old version. */
+  const notes=document.getElementById("notes");
+  const old=notes.querySelector(".fantasy-note");
+  if(old) old.remove();
+  if(activeGroup==="Fantasy" && !hasFantasy){
+    notes.insertAdjacentHTML("beforeend",
+      `<div class="era-note fantasy-note"><span class="dot"></span>No fantasy points in data/nrl/seasons/${season}.json — this season's file on the site doesn't include them yet.</div>`);
+  }
+}
+
 function buildSegment(){
   const seg=document.getElementById("segment");
   seg.innerHTML="";
@@ -352,11 +371,14 @@ function buildSegment(){
     b.onclick=()=>{ activeGroup=g; buildSegment(); renderTable("home"); renderTable("away"); };
     seg.appendChild(b);
   });
+  updateNotes();
 }
 
 function renderTable(side){
   const players=side==="home"?homePlayers:awayPlayers;
-  const cols=STAT_GROUPS[activeGroup];
+  /* hide the FP column on games from before fantasy data exists */
+  const showFP = Number(season) >= FANTASY_FROM || hasFantasy;
+  const cols=STAT_GROUPS[activeGroup].filter(c=>!c.fantasyOnly || showFP);
   const table=document.getElementById(side+"Table");
   const st=sortState[side];
 
