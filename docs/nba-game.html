@@ -81,6 +81,7 @@ th{
   border-bottom:1px solid var(--line);
 }
 td{padding:9px 8px;border-bottom:1px solid var(--line);text-align:center;color:#27313c;}
+td.fp{font-weight:700;color:var(--ink);}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover td{background:#f9fbfd;}
 .player-name{text-align:left;font-weight:700;}
@@ -140,16 +141,25 @@ function fixName(str){
     for(let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i) & 0xff;
     const decoded = new TextDecoder('utf-8').decode(bytes);
     // If decoding produced replacement chars, return original
-    if(decoded.includes('\ufffd')) return str;
+    if(decoded.includes('�')) return str;
     return decoded;
   }catch(e){
     return str;
   }
 }
 
+// NEW: NBA fantasy points (NBA official scoring, same as Yahoo default):
+// PTS + 1.2×REB + 1.5×AST + 3×STL + 3×BLK − TOV
+function fantasyPoints(p){
+  const n = k => Number(p[k]) || 0;
+  const fp = n("pts") + 1.2*n("trb") + 1.5*n("ast") + 3*n("stl") + 3*n("blk") - n("tov");
+  return Math.round(fp*10)/10;
+}
+
 const STAT_LABELS = {
   mp:         "MIN",
   pts:        "PTS",
+  fp:         "FP",     // NEW: fantasy points, straight after PTS
   ast:        "AST",
   reb:        "REB",
   stl:        "STL",
@@ -258,6 +268,7 @@ function renderGame(data){
           </a>
         </td>
         ${STAT_KEYS.map(k => {
+          if(k === "fp") return `<td class="fp">${fantasyPoints(p)}</td>`;
           const val = k === "reb" ? p["trb"] : p[k];
           return `<td>${val != null ? val : "–"}</td>`;
         }).join("")}
