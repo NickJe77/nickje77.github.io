@@ -1,0 +1,58 @@
+# Builds the NFL season files (games + players + fantasy points) and commits
+# them to the repo. Runs automatically twice a week during the season, and
+# can be run by hand from the Actions tab (with an optional year range).
+
+name: NFL fantasy data
+
+on:
+  schedule:
+    # 22:00 UTC Tue and Fri  (= Wed and Sat morning in Melbourne),
+    # after Monday- and Thursday-night games have had time to be processed
+    - cron: "0 22 * * 2,5"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "First season (blank = current season)"
+        required: false
+        default: ""
+      end_year:
+        description: "Last season (blank = same as first)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nfl-fantasy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      NFL_OUT: docs/data/nfl/seasons   # <-- change if your NFL season files live elsewhere
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: pip install nflreadpy
+
+      - name: Build season files
+        run: python scripts/nfl_build.py ${{ github.event.inputs.start_year }} ${{ github.event.inputs.end_year }}
+
+      - name: Commit changes
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add "$NFL_OUT"
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "NFL: update season files with fantasy points"
+            git push
+          fi
