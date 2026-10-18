@@ -53,7 +53,8 @@ body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-web
 .hero .subtitle{opacity:.6;margin-top:8px;font-size:13.5px;font-weight:500;}
 
 /* ── Controls ─────────────────────────────────────────── */
-.controls{display:flex;justify-content:flex-end;margin-bottom:14px;}
+.controls{display:flex;justify-content:flex-end;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.controls .note{font-size:12.5px;color:var(--muted);margin-right:auto;}
 select{
   padding:10px 16px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
   font-family:var(--body);font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;
@@ -61,7 +62,7 @@ select{
 select:hover{border-color:var(--faint);}
 
 .table-wrap{
-  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow-x:auto;
 }
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th,td{padding:12px 14px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left;}
@@ -94,10 +95,13 @@ tbody tr:hover{background:#f0f6ff;cursor:pointer;}
   </div>
 
   <div class="controls">
+    <span class="note" id="sortNote"></span>
     <select id="sortSelect">
       <option value="points_desc">Most Points</option>
       <option value="tries_desc">Most Tries</option>
       <option value="goals_desc">Most Goals</option>
+      <!-- NEW -->
+      <option value="fantasy_desc">Most Fantasy Points</option>
     </select>
   </div>
 
@@ -113,10 +117,12 @@ tbody tr:hover{background:#f0f6ff;cursor:pointer;}
           <th class="numeric">Tries</th>
           <th class="numeric">Goals</th>
           <th class="numeric">Points</th>
+          <!-- NEW -->
+          <th class="numeric">Fantasy</th>
         </tr>
       </thead>
       <tbody id="gamesTable">
-        <tr><td colspan="8" class="loading">Loading performances...</td></tr>
+        <tr><td colspan="9" class="loading">Loading performances...</td></tr>
       </tbody>
     </table>
   </div>
@@ -128,6 +134,7 @@ tbody tr:hover{background:#f0f6ff;cursor:pointer;}
 const startYear = 1998;
 const currentYear = new Date().getFullYear();
 let allPerformances = [];
+let currentSort = "points_desc";
 
 // season files store full ISO timestamps for recent games — show just the date
 function fmtDate(d){ return d ? String(d).split("T")[0] : ""; }
@@ -183,7 +190,9 @@ async function loadAllSeasons(){
           opponent: opponent,
           tries:    pl.tries  || 0,
           goals:    goals,
-          points:   computePoints(pl)
+          points:   computePoints(pl),
+          // NEW: fantasy points (null for games without fantasy data, i.e. before 2013)
+          fantasy:  (pl.fantasy_points ?? null)
         });
 
       });
@@ -192,10 +201,12 @@ async function loadAllSeasons(){
 
   });
 
-  sortPerformances("points_desc");
+  sortPerformances(currentSort);
 }
 
 function sortPerformances(type){
+
+  currentSort = type;
 
   if(type === "points_desc"){
     allPerformances.sort((a,b)=>b.points - a.points || b.tries - a.tries);
@@ -206,6 +217,13 @@ function sortPerformances(type){
   if(type === "goals_desc"){
     allPerformances.sort((a,b)=>b.goals - a.goals || b.points - a.points);
   }
+  // NEW: games without a fantasy score go to the bottom
+  if(type === "fantasy_desc"){
+    allPerformances.sort((a,b)=>(b.fantasy ?? -Infinity) - (a.fantasy ?? -Infinity) || b.points - a.points);
+  }
+
+  document.getElementById("sortNote").textContent =
+    type === "fantasy_desc" ? "Fantasy points are available from 2013." : "";
 
   renderTable();
 }
@@ -215,9 +233,15 @@ function renderTable(){
   const tbody = document.getElementById("gamesTable");
   tbody.innerHTML = "";
 
-  allPerformances.slice(0,200).forEach(p => {
+  // NEW: when ranking by fantasy, only list games that have a fantasy score
+  const list = currentSort === "fantasy_desc"
+    ? allPerformances.filter(p => p.fantasy !== null)
+    : allPerformances;
+
+  list.slice(0,200).forEach(p => {
 
     const tr = document.createElement("tr");
+    const byFantasy = currentSort === "fantasy_desc";
 
     tr.innerHTML = `
       <td>${p.season}</td>
@@ -227,7 +251,8 @@ function renderTable(){
       <td>${p.opponent}</td>
       <td class="numeric">${p.tries}</td>
       <td class="numeric">${p.goals}</td>
-      <td class="numeric"><strong>${p.points}</strong></td>
+      <td class="numeric">${byFantasy ? p.points : `<strong>${p.points}</strong>`}</td>
+      <td class="numeric">${p.fantasy === null ? "–" : (byFantasy ? `<strong>${p.fantasy}</strong>` : p.fantasy)}</td>
     `;
 
     tr.onclick = () => {
