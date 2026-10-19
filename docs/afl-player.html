@@ -83,7 +83,8 @@ select:hover{border-color:var(--faint);}
 .top8-card .t8-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
 .top8-card.top8 .t8-label{color:#2a7a2a;}
 .top8-card.non-top8 .t8-label{color:#a05a10;}
-.top8-mini{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;}
+.top8-mini{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;text-align:center;}
+@media(max-width:420px){.top8-mini{grid-template-columns:repeat(3,1fr);row-gap:10px;}}
 .top8-mini strong{display:block;font-family:var(--display);font-size:20px;font-weight:600;margin-bottom:2px;}
 .top8-card.top8 .top8-mini strong{color:#1a5c1a;}
 .top8-card.non-top8 .top8-mini strong{color:#7a4010;}
@@ -110,6 +111,14 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 }
 .reset-sort:hover{opacity:.85;}
 .loading{color:var(--muted);font-style:italic;padding:20px;font-size:13.5px;}
+/* Fantasy (AFL Fantasy / SuperCoach) */
+th.fp,td.fp{background:var(--accent-soft);}
+td.fp{font-weight:700;color:var(--ink);}
+tbody tr:hover td.fp{background:rgba(201,154,61,.30);}
+.stat-box.fp{background:var(--board);border-color:var(--board);}
+.stat-box.fp strong{color:#fff;}
+.stat-box.fp span{color:var(--accent);}
+.stat-box.fp .sub{color:rgba(255,255,255,.55);}
 
 /* ── Disambiguation ───────────────────────────────────── */
 .disambig{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:26px;margin-bottom:20px;}
@@ -229,6 +238,8 @@ td.top8-badge{font-size:11px;color:#2a7a2a;font-weight:700;}
 <th onclick="sortTable('G')">G</th>
 <th onclick="sortTable('B')">B</th>
 <th onclick="sortTable('BR')">BR</th>
+<th class="fp" title="AFL Fantasy points" onclick="sortTable('AF')">AF</th>
+<th class="fp" title="SuperCoach points" onclick="sortTable('SC')">SC</th>
 </tr></thead>
 <tbody id="rows"></tbody>
 </table>
@@ -880,6 +891,35 @@ function renderTeammateStats(name, sharedGames) {
   document.getElementById("teammateTable").style.display = "";
 }
 
+// ── Fantasy helpers ─────────────────────────────────────────────
+// AF = official AFL Fantasy score; falls back to AF_calc (worked out from
+// the raw stats) for seasons where the official score isn't available.
+// SC = SuperCoach. Missing values are null (shown as "–"), never 0, so
+// averages only count games that actually have a score.
+function fpNum(v){ if (v===undefined||v===null||v==='') return null; const n=+v; return isNaN(n)?null:n; }
+function afOf(g){ return fpNum(g.AF ?? g.AF_calc); }
+function scOf(g){ return fpNum(g.SC); }
+function fpCell(v){ return v===null ? '–' : v; }
+function fpSummary(g, getter){
+  const withVal = g.filter(x => getter(x) !== null);
+  if (!withVal.length) return null;
+  const total = withVal.reduce((a,x) => a+getter(x), 0);
+  const best = Math.max(...withVal.map(getter));
+  return { n: withVal.length, avg: total/withVal.length, best, bestGames: withVal.filter(x => getter(x)===best) };
+}
+function fantasyBoxes(g, games, bestDetail){
+  const af = fpSummary(g, afOf), sc = fpSummary(g, scOf);
+  const over = s => s.n < games ? '<div class="sub">over '+s.n+' game'+(s.n===1?'':'s')+'</div>' : '';
+  let html = '';
+  if (af) html +=
+    '<div class="stat-box fp"><strong>'+af.avg.toFixed(1)+'</strong><span>Avg Fantasy</span>'+over(af)+'</div>'+
+    '<div class="stat-box fp"><strong>'+af.best+'</strong><span>Best Fantasy</span>'+bestDetail(af.bestGames)+'</div>';
+  if (sc) html +=
+    '<div class="stat-box fp"><strong>'+sc.avg.toFixed(1)+'</strong><span>Avg SuperCoach</span>'+over(sc)+'</div>'+
+    '<div class="stat-box fp"><strong>'+sc.best+'</strong><span>Best SuperCoach</span>'+bestDetail(sc.bestGames)+'</div>';
+  return html;
+}
+
 function renderCareer(g)   { renderStats(g, "careerStats"); }
 function renderOpponent(g) { renderStats(g, "opponentStats"); }
 function renderStats(g, id) {
@@ -905,19 +945,23 @@ function renderStats(g, id) {
     '<div class="stat-box"><strong>'+(gTotal/games).toFixed(2)+'</strong><span>Avg Goals</span></div>'+
     '<div class="stat-box"><strong>'+brTotal+'</strong><span>Brownlow Votes</span></div>'+
     '<div class="stat-box"><strong>'+(brTotal/games).toFixed(2)+'</strong><span>Avg Brownlow</span></div>'+
-    '<div class="stat-box"><strong>'+br3+'</strong><span>3 Vote Games</span></div>';
+    '<div class="stat-box"><strong>'+br3+'</strong><span>3 Vote Games</span></div>'+
+    fantasyBoxes(g, games, bestDetail);
 }
 function renderTop8Split(games) {
   const t8  = games.filter(g => isTop8(g));
   const nt8 = games.filter(g => !isTop8(g));
   const el = document.getElementById("top8Split");
   function miniStats(g) {
-    if (!g.length) return { d:'—', goals:'—', br:'—', n:0 };
+    if (!g.length) return { d:'—', goals:'—', br:'—', af:'—', sc:'—', n:0 };
     const n = g.length;
+    const afS = fpSummary(g, afOf), scS = fpSummary(g, scOf);
     return {
       d: (g.reduce((a,x)=>a+(+x.D||0),0)/n).toFixed(1),
       goals: (g.reduce((a,x)=>a+(+x.G||0),0)/n).toFixed(2),
       br: (g.reduce((a,x)=>a+(+x.BR||0),0)/n).toFixed(2),
+      af: afS ? afS.avg.toFixed(1) : '—',
+      sc: scS ? scS.avg.toFixed(1) : '—',
       n
     };
   }
@@ -927,11 +971,15 @@ function renderTop8Split(games) {
     '<div><strong>'+s1.d+'</strong><span>Avg disposals</span></div>'+
     '<div><strong>'+s1.goals+'</strong><span>Avg goals</span></div>'+
     '<div><strong>'+s1.br+'</strong><span>Avg Brownlow</span></div>'+
+    '<div><strong>'+s1.af+'</strong><span>Avg fantasy</span></div>'+
+    '<div><strong>'+s1.sc+'</strong><span>Avg SuperCoach</span></div>'+
     '</div><div class="top8-games">'+s1.n+' game'+(s1.n===1?'':'s')+'</div></div>'+
     '<div class="top8-card non-top8"><div class="t8-label">▽ vs non-top 8 opponents</div><div class="top8-mini">'+
     '<div><strong>'+s2.d+'</strong><span>Avg disposals</span></div>'+
     '<div><strong>'+s2.goals+'</strong><span>Avg goals</span></div>'+
     '<div><strong>'+s2.br+'</strong><span>Avg Brownlow</span></div>'+
+    '<div><strong>'+s2.af+'</strong><span>Avg fantasy</span></div>'+
+    '<div><strong>'+s2.sc+'</strong><span>Avg SuperCoach</span></div>'+
     '</div><div class="top8-games">'+s2.n+' game'+(s2.n===1?'':'s')+'</div></div>';
 }
 function gameLink(p) {
@@ -944,13 +992,14 @@ function renderTable(g) {
     const tr = document.createElement("tr");
     if (t8) tr.style.background = "#eef7ee";
     tr.onclick = () => location.href = gameLink(p);
-    tr.innerHTML = '<td>'+p.season+'</td><td>'+p.round+'</td><td class="left">'+p.played_for+'</td><td>'+p.played_against+'</td><td class="'+(t8?'top8-badge':'')+'">'+(t8?'Top 8':'')+'</td><td>'+(p.D||0)+'</td><td>'+(p.G||0)+'</td><td>'+(p.B||0)+'</td><td>'+(p.BR||0)+'</td>';
+    tr.innerHTML = '<td>'+p.season+'</td><td>'+p.round+'</td><td class="left">'+p.played_for+'</td><td>'+p.played_against+'</td><td class="'+(t8?'top8-badge':'')+'">'+(t8?'Top 8':'')+'</td><td>'+(p.D||0)+'</td><td>'+(p.G||0)+'</td><td>'+(p.B||0)+'</td><td>'+(p.BR||0)+'</td><td class="fp">'+fpCell(afOf(p))+'</td><td class="fp">'+fpCell(scOf(p))+'</td>';
     rows.appendChild(tr);
   });
 }
 function sortTable(key) {
   if (sortKey===key) sortDir*=-1; else { sortKey=key; sortDir=-1; }
-  currentGames.sort((a,b) => ((a[key]||0)-(b[key]||0))*sortDir);
+  const val = key==='AF' ? (x => afOf(x) ?? -1) : key==='SC' ? (x => scOf(x) ?? -1) : (x => x[key]||0);
+  currentGames.sort((a,b) => (val(a)-val(b))*sortDir);
   applyFilters();
 }
 function resetSort() {
