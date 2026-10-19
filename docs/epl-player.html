@@ -96,6 +96,14 @@ tr:last-child td{border-bottom:none;}
   .stat-value{font-size:26px;}
   table{display:block;overflow-x:auto;white-space:nowrap;}
 }
+/* Fantasy Premier League */
+.stat-card.fp{background:#0c130f;border-color:#0c130f;}
+.stat-card.fp .stat-value{color:#fff;}
+.stat-card.fp .stat-label{color:#c99a3d;}
+.stat-card .stat-sub{font-size:12px;color:rgba(255,255,255,.55);margin-top:6px;}
+th.fp,td.fp{background:rgba(201,154,61,.14);}
+td.fp{font-weight:700;}
+.fp-note{font-size:12px;color:var(--muted);margin-top:10px;}
 </style>
 </head>
 
@@ -226,6 +234,32 @@ async function loadPlayer(){
             return;
         }
 
+        // Official FPL points by season (2016-17 on): {season: [pts, games, best, bestVs, bestDate]}
+        let fpl = {};
+        try{
+            const fr = await fetch("/data/epl/fantasy/players.json");
+            if(fr.ok) fpl = (await fr.json())[player.name] || {};
+        }catch(e){ fpl = {}; }
+        const fplSeasons = Object.entries(fpl);
+        const fplTotal = fplSeasons.reduce((a,[,v]) => a + v[0], 0);
+        const fplGames = fplSeasons.reduce((a,[,v]) => a + v[1], 0);
+        const fplBest  = fplSeasons.reduce((b,[,v]) => (!b || v[2] > b[2]) ? v : b, null);
+        const fplCards = fplGames ? `
+                        <div class="stat-card fp">
+                            <div class="stat-value">${fplTotal.toLocaleString()}</div>
+                            <div class="stat-label">FPL Points</div>
+                        </div>
+                        <div class="stat-card fp">
+                            <div class="stat-value">${(fplTotal / fplGames).toFixed(1)}</div>
+                            <div class="stat-label">FPL Avg / Game</div>
+                            <div class="stat-sub">${fplGames} games</div>
+                        </div>
+                        <div class="stat-card fp">
+                            <div class="stat-value">${fplBest[2]}</div>
+                            <div class="stat-label">Best FPL Game</div>
+                            <div class="stat-sub">vs ${fplBest[3]}${fplBest[4] ? ' · ' + fplBest[4] : ''}</div>
+                        </div>` : '';
+
         const playerDisplayName = player.name;
         const currentTeam       = (player.teams && player.teams[player.teams.length - 1]) || "Unknown";
         const heroGradient      = TEAM_COLOURS[currentTeam] || 'linear-gradient(135deg,#111,#444)';
@@ -271,6 +305,7 @@ async function loadPlayer(){
                             <div class="stat-value">${player.red_cards || 0}</div>
                             <div class="stat-label">Red Cards</div>
                         </div>
+                        ${fplCards}
                     </div>
                 </div>
 
@@ -285,6 +320,7 @@ async function loadPlayer(){
                                 <th>Penalties</th>
                                 <th>Yellow Cards</th>
                                 <th>Red Cards</th>
+                                ${fplGames ? '<th class="fp" title="Official Fantasy Premier League points">FPL Pts</th>' : ''}
                             </tr>
                         </thead>
                         <tbody>
@@ -296,10 +332,12 @@ async function loadPlayer(){
                                     <td>${s.penalties || 0}</td>
                                     <td>${s.yellow_cards || 0}</td>
                                     <td>${s.red_cards || 0}</td>
+                                    ${fplGames ? `<td class="fp">${fpl[s.season] ? fpl[s.season][0] : '–'}</td>` : ''}
                                 </tr>
                             `).join('')}
                         </tbody>
                     </table>
+                    ${fplGames ? '<div class="fp-note">FPL = official Fantasy Premier League points, available from 2016-17.</div>' : ''}
                 </div>
 
             </div>

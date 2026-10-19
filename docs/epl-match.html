@@ -100,6 +100,20 @@ body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-web
 
 .loading{text-align:center;padding:50px;font-size:14px;color:var(--muted);}
 .empty{color:var(--muted);padding:12px 0;font-size:13px;}
+/* ── Lineups + Fantasy Premier League points ─────────────────── */
+.lineups{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
+@media(max-width:900px){.lineups{grid-template-columns:1fr;}}
+.lu-table{width:100%;border-collapse:collapse;font-size:14px;}
+.lu-table th{text-align:center;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line);}
+.lu-table th:first-child,.lu-table td:first-child{text-align:left;}
+.lu-table td{text-align:center;padding:8px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;}
+.lu-table tr:last-child td{border-bottom:none;}
+.lu-table th.fp,.lu-table td.fp{background:rgba(201,154,61,.14);}
+.lu-table td.fp{font-weight:700;}
+.lu-table a{color:var(--ink);text-decoration:none;font-weight:600;}
+.lu-table a:hover{color:var(--accent);}
+.lu-mins{color:var(--faint);font-size:12px;font-weight:500;margin-left:4px;}
+.lu-note{font-size:12px;color:var(--muted);margin-top:10px;}
 </style>
 </head>
 <body>
@@ -206,7 +220,14 @@ async function loadMatch(){
 
         const match = await response.json();
 
-        renderMatch(match);
+        // Official FPL points for this season (2016-17 on); missing = no points shown
+        let fantasy = null;
+        try{
+            const fr = await fetch(`/data/epl/fantasy/${season}.json`);
+            if(fr.ok) fantasy = (await fr.json())[matchId] || null;
+        }catch(e){ fantasy = null; }
+
+        renderMatch(match, fantasy);
 
     }catch(err){
 
@@ -229,7 +250,7 @@ function renderEvents(events, label){
                 <div class="event">
                     <div>
                         <a class="player-link"
-                           href="/epl-player.html?player=${slugify(event.player)}">
+                           href="/epl-player.html?player=${encodeURIComponent(playerSlug(event.player))}">
                            ${event.player || ''}
                         </a>
                         ${event.penalty ? ' (P)' : ''}
@@ -243,7 +264,42 @@ function renderEvents(events, label){
 
 }
 
-function renderMatch(match){
+// Same slug as epl-player.html, so accented names (Raúl Jiménez) open correctly
+function playerSlug(name){
+    return (name || '').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+}
+
+function lineupTable(match, side, fantasy){
+    const team = side === "home" ? match.home_team : match.away_team;
+    const names = (match[`${side}_lineup`] || []).map(p => typeof p === "string" ? p : p.name).filter(Boolean);
+    const fp = {};
+    ((fantasy && fantasy[side]) || []).forEach(([n, pts, mins]) => { fp[n] = {pts, mins}; });
+    const goals = {}, yc = {}, rc = {};
+    (match.scorers || []).forEach(e => { if(!e.own_goal && e.player) goals[e.player] = (goals[e.player]||0) + 1; });
+    (match.yellow_cards || []).forEach(e => { if(e.player) yc[e.player] = (yc[e.player]||0) + 1; });
+    (match.red_cards || []).forEach(e => { if(e.player) rc[e.player] = (rc[e.player]||0) + 1; });
+    const hasFp = !!fantasy;
+    // highest FPL score first when we have points, otherwise the scraped order
+    const rows = names.map((n, i) => ({n, i, f: fp[n]}));
+    if(hasFp) rows.sort((a,b) => ((b.f ? b.f.pts : -99) - (a.f ? a.f.pts : -99)) || a.i - b.i);
+    if(!rows.length) return `<div class="card"><h2>${team}</h2><div class="empty">No lineup recorded</div></div>`;
+    return `
+        <div class="card">
+            <h2>${team}</h2>
+            <table class="lu-table">
+                <thead><tr><th>Player</th><th>G</th><th>YC</th><th>RC</th>${hasFp ? '<th class="fp" title="Official Fantasy Premier League points">FPL</th>' : ''}</tr></thead>
+                <tbody>${rows.map(r => `
+                    <tr>
+                        <td><a href="/epl-player.html?player=${encodeURIComponent(playerSlug(r.n))}">${r.n}</a>${r.f ? `<span class="lu-mins">${r.f.mins}'</span>` : ''}</td>
+                        <td>${goals[r.n] || ''}</td><td>${yc[r.n] || ''}</td><td>${rc[r.n] || ''}</td>
+                        ${hasFp ? `<td class="fp">${r.f ? r.f.pts : '–'}</td>` : ''}
+                    </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>`;
+}
+
+function renderMatch(match, fantasy){
 
     document.title = `${match.home_team} vs ${match.away_team} | EPL Match`;
 
@@ -292,6 +348,12 @@ function renderMatch(match){
             </div>
 
         </div>
+
+        <div class="lineups">
+            ${lineupTable(match, "home", fantasy)}
+            ${lineupTable(match, "away", fantasy)}
+        </div>
+        ${fantasy ? '<div class="lu-note">FPL = official Fantasy Premier League points for this match (available from 2016-17). The small number is minutes played.</div>' : ''}
     `;
 
 }
