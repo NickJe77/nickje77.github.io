@@ -79,6 +79,10 @@ body{margin:0;font-family:var(--body);background:var(--bg);color:var(--ink);-web
   margin-bottom:6px;color:var(--ink);
 }
 .stat-box small{color:var(--muted);font-size:11px;display:block;margin-top:4px;}
+/* NEW: fantasy boxes stand out slightly */
+.stat-box.fp{background:var(--ink);color:#fff;}
+.stat-box.fp span{color:var(--accent);}
+.stat-box.fp small{color:rgba(255,255,255,.6);}
 
 .filters-bar{display:flex;flex-wrap:wrap;gap:14px;align-items:center;margin-bottom:18px;}
 .filter-group{display:flex;align-items:center;gap:8px;font-weight:600;color:var(--muted);font-size:13.5px;}
@@ -102,10 +106,13 @@ th{
   font-size:10.5px;letter-spacing:.03em;text-transform:uppercase;
 }
 th small{display:block;font-size:9px;font-weight:500;color:var(--faint);margin-top:2px;text-transform:none;letter-spacing:0;}
+th.fp,td.fp{background:var(--accent-soft);}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover td{background:#f9fbfd;}
+tbody tr:hover td.fp{background:rgba(201,154,61,.24);}
 .season-total{font-weight:700;color:var(--ink);}
 .season-avg{color:var(--muted);font-size:11.5px;}
+.fp-note{font-size:12px;color:var(--muted);margin:12px 2px 0;}
 .loading{text-align:center;padding:60px;font-size:15px;color:var(--muted);font-style:italic;}
 .error{text-align:center;padding:60px;font-size:15px;color:#c0362c;}
 @media(max-width:800px){
@@ -195,6 +202,7 @@ tbody tr:hover td{background:#f9fbfd;}
             <th>Team</th>
             <th>GP</th>
             <th>PTS<small>per game</small></th>
+            <th class="fp">FP<small>per game</small></th>
             <th>REB<small>per game</small></th>
             <th>AST<small>per game</small></th>
             <th>STL<small>per game</small></th>
@@ -215,6 +223,7 @@ tbody tr:hover td{background:#f9fbfd;}
       </table>
     </div>
   </div>
+  <div class="fp-note">FP = fantasy points (NBA scoring): PTS + 1.2 × REB + 1.5 × AST + 3 × STL + 3 × BLK − TOV.</div>
 
 </div>
 
@@ -278,28 +287,38 @@ function num(v){ return v != null ? Number(v) : 0; }
 function pct(made, att){ return att > 0 ? (made/att).toFixed(3) : "–"; }
 function avg(total, games){ return games > 0 ? (total/games).toFixed(1) : "–"; }
 
+// NEW: NBA fantasy points for one game — same formula as the game page:
+// PTS + 1.2×REB + 1.5×AST + 3×STL + 3×BLK − TOV
+function fantasyPoints(g){
+  const reb = g.reb != null ? g.reb : g.trb;
+  return num(g.pts) + 1.2*num(reb) + 1.5*num(g.ast) + 3*num(g.stl) + 3*num(g.blk) - num(g.tov);
+}
+const fp1 = v => (Math.round(v*10)/10).toFixed(1);
+
 function calcStats(games){
-  let pts=0,reb=0,ast=0,stl=0,blk=0,tov=0,triples=0;
-  let hPts=0,hReb=0,hAst=0,hStl=0,hBlk=0;
-  let hPtsGame="",hRebGame="",hAstGame="",hStlGame="",hBlkGame="";
+  let pts=0,reb=0,ast=0,stl=0,blk=0,tov=0,triples=0,fp=0;
+  let hPts=0,hReb=0,hAst=0,hStl=0,hBlk=0,hFp=null;
+  let hPtsGame="",hRebGame="",hAstGame="",hStlGame="",hBlkGame="",hFpGame="";
   games.forEach(g => {
     const p=num(g.pts),r=num(g.reb),a=num(g.ast),s=num(g.stl),b=num(g.blk),t=num(g.tov);
-    pts+=p;reb+=r;ast+=a;stl+=s;blk+=b;tov+=t;
+    const f=fantasyPoints(g);
+    pts+=p;reb+=r;ast+=a;stl+=s;blk+=b;tov+=t;fp+=f;
     if(p>hPts){hPts=p;hPtsGame=`vs ${g.opp} (${g.date})`;}
     if(r>hReb){hReb=r;hRebGame=`vs ${g.opp} (${g.date})`;}
     if(a>hAst){hAst=a;hAstGame=`vs ${g.opp} (${g.date})`;}
     if(s>hStl){hStl=s;hStlGame=`vs ${g.opp} (${g.date})`;}
     if(b>hBlk){hBlk=b;hBlkGame=`vs ${g.opp} (${g.date})`;}
+    if(hFp===null||f>hFp){hFp=f;hFpGame=`vs ${g.opp} (${g.date})`;}
     let cats=0;
     if(p>=10)cats++;if(r>=10)cats++;if(a>=10)cats++;
     if(cats>=3)triples++;
   });
-  return {games:games.length,pts,reb,ast,stl,blk,tov,triples,
-          hPts,hReb,hAst,hStl,hBlk,hPtsGame,hRebGame,hAstGame,hStlGame,hBlkGame};
+  return {games:games.length,pts,reb,ast,stl,blk,tov,triples,fp,
+          hPts,hReb,hAst,hStl,hBlk,hFp:hFp||0,hPtsGame,hRebGame,hAstGame,hStlGame,hBlkGame,hFpGame};
 }
 
-function statBox(val,label,note=""){
-  return `<div class="stat-box"><span>${val}</span>${label}${note?`<small>${note}</small>`:""}</div>`;
+function statBox(val,label,note="",cls=""){
+  return `<div class="stat-box ${cls}"><span>${val}</span>${label}${note?`<small>${note}</small>`:""}</div>`;
 }
 
 function renderStats(stats,totalsId,avgsId,highsId){
@@ -307,15 +326,18 @@ function renderStats(stats,totalsId,avgsId,highsId){
   document.getElementById(totalsId).innerHTML=
     statBox(stats.games,"Games")+statBox(stats.pts,"PTS")+statBox(stats.reb,"REB")+
     statBox(stats.ast,"AST")+statBox(stats.stl,"STL")+statBox(stats.blk,"BLK")+
-    statBox(stats.tov,"TOV")+statBox(stats.triples,"Triple Doubles");
+    statBox(stats.tov,"TOV")+statBox(stats.triples,"Triple Doubles")+
+    statBox(Math.round(stats.fp).toLocaleString(),"Fantasy Pts","","fp");
   document.getElementById(avgsId).innerHTML=
     statBox((stats.pts/g).toFixed(1),"Avg PTS")+statBox((stats.reb/g).toFixed(1),"Avg REB")+
     statBox((stats.ast/g).toFixed(1),"Avg AST")+statBox((stats.stl/g).toFixed(1),"Avg STL")+
-    statBox((stats.blk/g).toFixed(1),"Avg BLK");
+    statBox((stats.blk/g).toFixed(1),"Avg BLK")+
+    statBox(fp1(stats.fp/g),"Avg Fantasy","","fp");
   document.getElementById(highsId).innerHTML=
     statBox(stats.hPts,"Best PTS",stats.hPtsGame)+statBox(stats.hReb,"Best REB",stats.hRebGame)+
     statBox(stats.hAst,"Best AST",stats.hAstGame)+statBox(stats.hStl,"Best STL",stats.hStlGame)+
-    statBox(stats.hBlk,"Best BLK",stats.hBlkGame);
+    statBox(stats.hBlk,"Best BLK",stats.hBlkGame)+
+    statBox(fp1(stats.hFp),"Best Fantasy",stats.hFpGame,"fp");
 }
 
 function buildSeasonRows(games){
@@ -325,13 +347,14 @@ function buildSeasonRows(games){
     if(!map[key]){
       map[key] = {
         season: g.season, team: g.team||"",
-        gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, tov:0,
+        gp:0, pts:0, reb:0, ast:0, stl:0, blk:0, tov:0, fp:0,
         fg:0, fga:0, fg3:0, fg3a:0, ft:0, fta:0
       };
     }
     const s = map[key];
     s.gp++;
     s.pts  += num(g.pts);
+    s.fp   += fantasyPoints(g);
     s.reb  += num(g.reb);
     s.ast  += num(g.ast);
     s.stl  += num(g.stl);
@@ -381,6 +404,7 @@ function renderSeasons(games){
       <td>${s.team}</td>
       <td>${s.gp}</td>
       <td><span class="season-total">${s.pts}</span> <span class="season-avg">(${avg(s.pts,s.gp)})</span></td>
+      <td class="fp"><span class="season-total">${Math.round(s.fp)}</span> <span class="season-avg">(${avg(s.fp,s.gp)})</span></td>
       <td><span class="season-total">${s.reb}</span> <span class="season-avg">(${avg(s.reb,s.gp)})</span></td>
       <td><span class="season-total">${s.ast}</span> <span class="season-avg">(${avg(s.ast,s.gp)})</span></td>
       <td><span class="season-total">${s.stl}</span> <span class="season-avg">(${avg(s.stl,s.gp)})</span></td>
