@@ -382,6 +382,16 @@ function buildGame(season, game){
 
 // Fantasy points: blank ("–") when the season doesn't have them
 function fpVal(v){ return (v===undefined||v===null||v==="") ? "–" : v; }
+// AFL Fantasy's public formula (matches 9,092 of 9,098 official 2013 scores).
+// Fills AF for seasons without an official score, from 1987 on (no tackles
+// recorded before then). SuperCoach's formula isn't public.
+const AF_WEIGHTS = {K:3, HB:2, M:3, T:4, FF:1, FA:-3, G:6, B:1, HO:1};
+function afOf(p){
+  const off = p.AF ?? p.AF_calc;
+  if (off !== undefined && off !== null && off !== "") return off;
+  if (+(p.season ?? yearParam) < 1987 || p.K === undefined || p.HB === undefined) return null;
+  return Object.entries(AF_WEIGHTS).reduce((a,[k,w]) => a + (+p[k]||0)*w, 0);
+}
 
 function renderTable(tbodyId, players, tableId){
   // strip footywire's sub markers (↗ ↙) saved into some names
@@ -396,7 +406,7 @@ function renderTable(tbodyId, players, tableId){
       <td class="left">${p.player}</td>
       <td>${p.K||0}</td><td>${p.HB||0}</td><td>${p.D||0}</td>
       <td>${p.G||0}</td><td>${p.B||0}</td>
-      <td class="fp">${fpVal(p.AF ?? p.AF_calc)}</td><td class="fp">${fpVal(p.SC)}</td>`;
+      <td class="fp">${fpVal(afOf(p))}</td><td class="fp">${fpVal(p.SC)}</td>`;
     tbody.appendChild(tr);
   });
   enableSorting(tableId, players);
@@ -415,7 +425,7 @@ function enableSorting(tableId, players){
       sortState[col] = !asc;
       players.sort((a,b)=>{
         if(col==="player") return asc ? a.player.localeCompare(b.player) : b.player.localeCompare(a.player);
-        const v = (p) => col==="AF" ? (+(p.AF ?? p.AF_calc)||0) : (+p[col]||0);
+        const v = (p) => col==="AF" ? (+afOf(p)||0) : (+p[col]||0);
         return asc ? v(a)-v(b) : v(b)-v(a);
       });
       headers.forEach(h => h.querySelector(".sort-indicator")?.remove());

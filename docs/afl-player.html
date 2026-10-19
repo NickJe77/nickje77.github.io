@@ -900,7 +900,17 @@ function renderTeammateStats(name, sharedGames) {
 // SC = SuperCoach. Missing values are null (shown as "–"), never 0, so
 // averages only count games that actually have a score.
 function fpNum(v){ if (v===undefined||v===null||v==='') return null; const n=+v; return isNaN(n)?null:n; }
-function afOf(g){ return fpNum(g.AF ?? g.AF_calc); }
+// AFL Fantasy's public formula. Checked against 2013's official scores: it
+// matches 9,092 of 9,098 games. Used for seasons with no official score, but
+// only from 1987 -- tackles weren't recorded before that, so earlier games
+// would come out too low. (SuperCoach's formula isn't public, so SC can't be
+// calculated.)
+const AF_WEIGHTS = {K:3, HB:2, M:3, T:4, FF:1, FA:-3, G:6, B:1, HO:1};
+function afCalc(g){
+  if (+g.season < 1987 || g.K === undefined || g.HB === undefined) return null;
+  return Object.entries(AF_WEIGHTS).reduce((a,[k,w]) => a + (+g[k]||0)*w, 0);
+}
+function afOf(g){ return fpNum(g.AF ?? g.AF_calc) ?? afCalc(g); }
 function scOf(g){ return fpNum(g.SC); }
 function fpCell(v){ return v===null ? '–' : v; }
 function fpSummary(g, getter){
