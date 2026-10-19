@@ -70,7 +70,7 @@ body{
 }
 
 /* ── Career cards ─────────────────────────────────────── */
-.cards{display:grid;grid-template-columns:repeat(8,1fr);gap:12px;}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:12px;}
 .card{
   background:var(--bg);border:1px solid var(--line);border-radius:12px;
   padding:16px 10px;text-align:center;
@@ -83,6 +83,12 @@ body{
   margin-top:6px;font-size:11px;color:var(--muted);font-weight:600;
   letter-spacing:.05em;text-transform:uppercase;
 }
+.card .sub{margin-top:4px;font-size:10.5px;color:var(--faint);font-weight:500;}
+/* NEW: fantasy cards stand out */
+.card.fp{background:var(--ink);border-color:var(--ink);}
+.card.fp .value{color:#fff;}
+.card.fp .label{color:rgba(255,255,255,.7);}
+.card.fp .sub{color:rgba(255,255,255,.5);}
 
 /* ── Controls ─────────────────────────────────────────── */
 .controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px;}
@@ -109,8 +115,11 @@ td{
   font-size:13.5px;color:#27313c;font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 td.left{text-align:left;}
+th.fp,td.fp{background:var(--accent-soft);}
+td.fp{font-weight:700;color:var(--ink);}
 tbody tr:last-child td{border-bottom:none;}
 tbody tr:hover td{background:#f0f6ff;}
+tbody tr:hover td.fp{background:rgba(200,16,46,.18);}
 
 .badge{
   display:inline-block;padding:4px 10px;border-radius:999px;
@@ -118,13 +127,7 @@ tbody tr:hover td{background:#f0f6ff;}
 }
 
 .empty{padding:26px;text-align:center;font-size:14px;font-weight:600;color:var(--muted);}
-
-@media(max-width:1000px){
-  .cards{grid-template-columns:repeat(4,1fr);}
-}
-@media(max-width:640px){
-  .cards{grid-template-columns:repeat(2,1fr);}
-}
+.fp-note{font-size:12px;color:var(--muted);margin:14px 2px 0;line-height:1.5;}
 </style>
 </head>
 
@@ -165,24 +168,14 @@ tbody tr:hover td{background:#f0f6ff;}
 
     <div class="table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>Date</th>
-            <th>Season</th>
-            <th>Team</th>
-            <th>Opponent</th>
-            <th>AB</th>
-            <th>R</th>
-            <th>H</th>
-            <th>RBI</th>
-            <th>HR</th>
-            <th>BB</th>
-            <th>SO</th>
-            <th>AVG</th>
-          </tr>
-        </thead>
+        <thead id="gameHead"></thead>
         <tbody id="gameBody"></tbody>
       </table>
+    </div>
+
+    <div class="fp-note">
+      FP = fantasy points (DraftKings hitter scoring): 1B 3 · 2B 5 · 3B 8 · HR 10 · RBI 2 · R 2 · BB 2 · HBP 2 · SB 5.
+      “–” means that game doesn’t record the doubles and triples needed to score it.
     </div>
 
   </div>
@@ -266,7 +259,7 @@ function slugify(name){
   return String(name||"")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/[̀-ͯ]/g,"")
     .replace(/[^\w\s-]/g,"")
     .trim()
     .replace(/\s+/g,"-");
@@ -284,6 +277,19 @@ async function safeFetch(url){
     if(!r.ok) return null;
     return await r.json();
   }catch(e){ return null; }
+}
+
+// NEW: is a stat actually recorded in this game's data (not just missing)?
+const has=(g,k)=>g&&g[k]!==undefined&&g[k]!==null&&g[k]!=="";
+// accept a few spellings for the extra-base / running stats
+const pickKey=(g,keys)=>keys.find(k=>has(g,k));
+
+// NEW: DraftKings hitter fantasy points — only when doubles and triples are recorded,
+// otherwise singles can't be told apart from extra-base hits.
+function fantasyPoints(g){
+  if(!g.hasDetail) return null;
+  const singles=g.H-g.D-g.T-g.HR;
+  return 3*singles+5*g.D+8*g.T+10*g.HR+2*g.RBI+2*g.R+2*g.BB+2*g.HBP+5*g.SB;
 }
 
 const qs=new URLSearchParams(location.search);
@@ -304,21 +310,39 @@ document.getElementById("playerName").textContent=player.name||rawPlayer;
 let games=[];
 if(Array.isArray(player.games)) games=player.games.slice();
 
-games=games.map(g=>({
-  date:g.date,
-  season:g.season,
-  team:teamName(g.team),
-  opponent:teamName(g.opponent),
-  AB:n(g.AB),
-  R:n(g.R),
-  H:n(g.H),
-  RBI:n(g.RBI),
-  HR:n(g.HR),
-  BB:n(g.BB),
-  SO:n(g.SO)
-}));
+games=games.map(g=>{
+  const kD=pickKey(g,["2B","D","doubles"]);
+  const kT=pickKey(g,["3B","T","triples"]);
+  const kSB=pickKey(g,["SB","stolenBases"]);
+  const kHBP=pickKey(g,["HBP","hitByPitch"]);
+  const row={
+    date:g.date,
+    season:g.season,
+    team:teamName(g.team),
+    opponent:teamName(g.opponent),
+    AB:n(g.AB),
+    R:n(g.R),
+    H:n(g.H),
+    RBI:n(g.RBI),
+    HR:n(g.HR),
+    BB:n(g.BB),
+    SO:n(g.SO),
+    D:kD?n(g[kD]):0,
+    T:kT?n(g[kT]):0,
+    SB:kSB?n(g[kSB]):0,
+    HBP:kHBP?n(g[kHBP]):0,
+    hasD:!!kD, hasSB:!!kSB,
+    hasDetail:!!(kD&&kT)&&["R","RBI","HR"].every(k=>has(g,k)),
+  };
+  row.FP=fantasyPoints(row);
+  return row;
+});
 
 games.sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+
+// show 2B / 3B / SB columns only if the data has them
+const showXBH=games.some(g=>g.hasD);
+const showSB=games.some(g=>g.hasSB);
 
 const seasonFilter=document.getElementById("seasonFilter");
 const teamFilter=document.getElementById("teamFilter");
@@ -340,11 +364,33 @@ const searchBox=document.getElementById("searchBox");
     teamFilter.appendChild(o);
   });
 
+const COLS=[
+  ["AB","AB"],["R","R"],["H","H"],
+  ...(showXBH?[["D","2B"],["T","3B"]]:[]),
+  ["HR","HR"],["RBI","RBI"],["BB","BB"],["SO","SO"],
+  ...(showSB?[["SB","SB"]]:[]),
+];
+
+document.getElementById("gameHead").innerHTML=`
+  <tr>
+    <th>Date</th>
+    <th>Season</th>
+    <th>Team</th>
+    <th>Opponent</th>
+    ${COLS.map(c=>`<th>${c[1]}</th>`).join("")}
+    <th>AVG</th>
+    <th class="fp" title="Fantasy points">FP</th>
+  </tr>`;
+
 function totalsFor(list){
-  const t={games:list.length,AB:0,R:0,H:0,RBI:0,HR:0,BB:0,SO:0};
+  const t={games:list.length,AB:0,R:0,H:0,RBI:0,HR:0,BB:0,SO:0,FP:0,fpGames:0,bestFP:null,bestGame:null};
   list.forEach(g=>{
     t.AB+=n(g.AB); t.R+=n(g.R); t.H+=n(g.H);
     t.RBI+=n(g.RBI); t.HR+=n(g.HR); t.BB+=n(g.BB); t.SO+=n(g.SO);
+    if(g.FP!=null){
+      t.FP+=g.FP; t.fpGames++;
+      if(t.bestFP===null||g.FP>t.bestFP){ t.bestFP=g.FP; t.bestGame=g; }
+    }
   });
   t.AVG=avg(t.H,t.AB);
   return t;
@@ -352,6 +398,10 @@ function totalsFor(list){
 
 function renderCards(list){
   const t=totalsFor(list);
+  const fpCards=t.fpGames?`
+    <div class="card fp"><div class="value">${t.FP.toLocaleString()}</div><div class="label">Fantasy Pts</div></div>
+    <div class="card fp"><div class="value">${(t.FP/t.fpGames).toFixed(1)}</div><div class="label">Avg Fantasy</div>${t.fpGames<t.games?`<div class="sub">over ${t.fpGames} games</div>`:""}</div>
+    <div class="card fp"><div class="value">${t.bestFP}</div><div class="label">Best Fantasy</div><div class="sub">${t.bestGame?`vs ${t.bestGame.opponent} ${t.bestGame.date||""}`:""}</div></div>`:"";
   document.getElementById("careerCards").innerHTML=`
     <div class="card"><div class="value">${t.games}</div><div class="label">Games</div></div>
     <div class="card"><div class="value">${t.AB}</div><div class="label">AB</div></div>
@@ -361,6 +411,7 @@ function renderCards(list){
     <div class="card"><div class="value">${t.HR}</div><div class="label">HR</div></div>
     <div class="card"><div class="value">${t.BB}</div><div class="label">Walks</div></div>
     <div class="card"><div class="value">${t.AVG}</div><div class="label">AVG</div></div>
+    ${fpCards}
   `;
 }
 
@@ -379,7 +430,7 @@ function renderTable(){
   renderCards(filtered);
 
   if(!filtered.length){
-    document.getElementById("gameBody").innerHTML=`<tr><td colspan="12" class="empty">No games found.</td></tr>`;
+    document.getElementById("gameBody").innerHTML=`<tr><td colspan="${COLS.length+6}" class="empty">No games found.</td></tr>`;
     return;
   }
 
@@ -389,14 +440,9 @@ function renderTable(){
       <td><span class="badge">${g.season||""}</span></td>
       <td class="left">${g.team}</td>
       <td class="left">${g.opponent}</td>
-      <td>${n(g.AB)}</td>
-      <td>${n(g.R)}</td>
-      <td>${n(g.H)}</td>
-      <td>${n(g.RBI)}</td>
-      <td>${n(g.HR)}</td>
-      <td>${n(g.BB)}</td>
-      <td>${n(g.SO)}</td>
+      ${COLS.map(c=>`<td>${n(g[c[0]])}</td>`).join("")}
       <td>${avg(n(g.H),n(g.AB))}</td>
+      <td class="fp">${g.FP==null?"–":g.FP}</td>
     </tr>
   `).join("");
 }
