@@ -410,7 +410,7 @@ def build_racing():
             # "inline:" = no separate page; the homepage search shows this
             # jockey/trainer's summary right under the search box
             add(label, f"inline:{kind}", name, None,
-                f"{wins:,} win{'s' if wins != 1 else ''} · {g1:,} G1 · {where}")
+                f"{wins:,} stakes win{'s' if wins != 1 else ''} · {g1:,} G1 · {where}")
         for L, d in shards.items():
             with open(f"{OUT}/racing/{kind}_{L}.json", "w", encoding="utf-8") as f:
                 json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
