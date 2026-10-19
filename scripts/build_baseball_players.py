@@ -285,8 +285,10 @@ def extra_bat(p):
 
 
 def process_boxscore_game(game, source_label=""):
-    season = str(game.get("season", ""))
     date = game.get("date", "")
+    # 2026 box scores (straight from the scraper) have no "season" field,
+    # which left the season blank on player pages -- fall back to the year.
+    season = str(game.get("season", "") or (date[:4] if date else ""))
     raw_home = game.get("home_team", "") or game.get("home_code", "")
     if isinstance(raw_home, dict): raw_home = raw_home.get("name", "") or raw_home.get("code", "")
     home_team = TEAM_MAP.get(raw_home, raw_home)
