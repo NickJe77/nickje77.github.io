@@ -308,8 +308,8 @@
   function shardFor(letter){
     if (!shardCache[letter]) {
       shardCache[letter] = fetch(`/data/search/people_${letter}.json`)
-        .then(r => r.ok ? r.json() : {src:[], p:[]})
-        .catch(() => ({src:[], p:[]}));
+        .then(r => r.ok ? r.json() : {src:[], p:[], missing:true})
+        .catch(() => ({src:[], p:[], missing:true}));
     }
     return shardCache[letter];
   }
@@ -336,6 +336,13 @@
     pPanel.innerHTML = '<div class="hs-msg">Searching…</div>'; pPanel.classList.add("open");
     const data = await shardFor(letterOf(key));
     if (pIn.value.trim() !== raw) return;   // user kept typing
+    if (data.missing) {
+      // index file not there (not built yet / failed to load) -- say so,
+      // rather than wrongly telling the visitor nobody matches
+      delete shardCache[letterOf(key)];   // try again next time
+      pPanel.innerHTML = '<div class="hs-msg">Search is temporarily unavailable. Please try again shortly.</div>';
+      pPanel.classList.add("open"); return;
+    }
     const src = data.src || [], full = norm(raw).replace(/\s+/g," ");
     const hits = [];
     for (const p of data.p || []) {
@@ -413,12 +420,21 @@
     const partners = {};
     wins.forEach(r => { if (r[8]) partners[r[8]] = (partners[r[8]]||0) + 1; });
     const top = Object.entries(partners).sort((a,b) => b[1]-a[1]).slice(0,6);
-    const horsePage = r => (isG1(r[3]) ? "australia-g1s-horse.html" : "australia-stakes-horse.html") + "?horse=" + encodeURIComponent(r[4]);
-    const big = (g1.length ? g1 : wins).slice(0, 12);
+    // r[9] = country ("" = Australia). Only Australian horses have horse pages.
+    const horseCell = r => r[9] ? esc(r[4])
+      : `<a href="${(isG1(r[3]) ? "australia-g1s-horse.html" : "australia-stakes-horse.html") + "?horse=" + encodeURIComponent(r[4])}">${esc(r[4])}</a>`;
+    const trackCell = r => esc(r[1]) + (r[9] ? `<span style="color:#999">, ${esc(r[9])}</span>` : "");
+    const ctry = {};
+    rows.forEach(r => { const c = r[9] || "Australia"; ctry[c] = (ctry[c]||0) + 1; });
+    const countries = Object.keys(ctry).sort((a,b) => ctry[b]-ctry[a]);
+    const where = countries.slice(0,3).join(" · ") + (countries.length > 3 ? ` +${countries.length-3}` : "");
+    // latest first; year-only overseas dates sort as the start of that year
+    const sortKey = r => String(r[0]).length === 4 ? r[0] + "-00-00" : r[0];
+    const big = (g1.length ? g1 : wins).slice().sort((a,b) => sortKey(b).localeCompare(sortKey(a))).slice(0, 12);
 
     cardIn.innerHTML = `
       <div class="hs-card-top">
-        <div><div class="hs-sub">${type === "jockey" ? "Jockey" : "Trainer"} · ${span} · Group &amp; Listed races</div><h2>${esc(name)}</h2></div>
+        <div><div class="hs-sub">${type === "jockey" ? "Jockey" : "Trainer"} · ${span} · ${esc(where)}</div><h2>${esc(name)}</h2></div>
         <button class="hs-x" id="racingClose" aria-label="Close">×</button>
       </div>
       <div class="hs-stats">
@@ -428,6 +444,7 @@
         <div class="hs-stat"><strong>${rows.filter(r => r[5]==="2").length.toLocaleString()}</strong><span>Seconds</span></div>
         <div class="hs-stat"><strong>${rows.filter(r => r[5]==="3").length.toLocaleString()}</strong><span>Thirds</span></div>
       </div>
+      ${rows.some(r => r[9]) ? '<div style="font-size:12px;color:#888;margin:-6px 0 14px">Overseas results list winners only, so rides, seconds and thirds cover Australian races.</div>' : ""}
       <div class="hs-cols">
         <div>
           <div class="hs-h3">Most wins with ${other}</div>
@@ -437,7 +454,7 @@
           <div class="hs-h3">${g1.length ? "Latest Group 1 wins" : "Latest wins"}</div>
           <div class="hs-tablewrap"><table class="hs-table">
             <thead><tr><th>Date</th><th>Race</th><th>Track</th><th>Horse</th><th>${other === "trainer" ? "Trainer" : "Jockey"}</th></tr></thead>
-            <tbody>${big.map(r => `<tr><td>${esc(fmtDate(r[0]))}</td><td>${esc(r[2])} ${isG1(r[3]) ? '<span class="hs-g1">G1</span>' : ""}</td><td>${esc(r[1])}</td><td><a href="${horsePage(r)}">${esc(r[4])}</a></td><td>${esc(r[8]||"–")}</td></tr>`).join("") || '<tr><td colspan="5">No wins recorded.</td></tr>'}</tbody>
+            <tbody>${big.map(r => `<tr><td>${esc(fmtDate(r[0]))}</td><td>${esc(r[2])} ${isG1(r[3]) ? '<span class="hs-g1">G1</span>' : ""}</td><td>${trackCell(r)}</td><td>${horseCell(r)}</td><td>${esc(r[8]||"–")}</td></tr>`).join("") || '<tr><td colspan="5">No wins recorded.</td></tr>'}</tbody>
           </table></div>
         </div>
       </div>`;
