@@ -67,9 +67,53 @@ select{
 }
 select:hover{border-color:var(--faint);}
 
+/* ── NEW: selected-match panel beside the dropdowns (phones only) ── */
+.quick{display:none;}
+.quick-inner{
+  position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;gap:8px;
+}
+.qcard{
+  background:linear-gradient(160deg,var(--board-2),var(--board));color:#fff;
+  border-radius:14px;padding:12px 14px;cursor:pointer;flex:1 0 auto;
+  display:flex;flex-direction:column;justify-content:center;
+  border-left:4px solid transparent;
+  box-shadow:0 12px 26px -16px rgba(10,16,24,.55);
+}
+.qcard .qround{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:8px;}
+.qcard .qrow{display:flex;align-items:center;gap:8px;min-width:0;}
+.qcard .qrow + .qrow{margin-top:6px;}
+.qcard .qrow .sw{width:8px;height:8px;border-radius:2px;flex:0 0 auto;}
+.qcard .qrow .nm{font-family:var(--display);font-weight:600;font-size:15px;text-transform:uppercase;letter-spacing:.01em;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0;}
+.qcard .qrow .pts{font-family:var(--display);font-weight:600;font-size:20px;font-variant-numeric:tabular-nums;}
+.qcard .qrow.lose .nm,.qcard .qrow.lose .pts{color:var(--lose);}
+.qcard .qmeta{font-size:10.5px;color:rgba(255,255,255,.55);margin-top:9px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qcard .qgo{font-size:10.5px;color:var(--accent);font-weight:700;margin-top:6px;letter-spacing:.04em;}
+/* several matches: compact rows */
+.qcard.mini{padding:9px 12px;flex:0 0 auto;}
+.qcard.mini .qround{margin-bottom:5px;font-size:9.5px;}
+.qcard.mini .qrow .nm{font-size:13px;}
+.qcard.mini .qrow .pts{font-size:15px;}
+.qcard.mini .qrow + .qrow{margin-top:3px;}
+.qempty{
+  flex:1;display:flex;align-items:center;justify-content:center;text-align:center;
+  border:1px dashed var(--line);border-radius:14px;color:var(--muted);font-size:12px;font-weight:600;padding:12px;
+  background:var(--surface);
+}
+
 /* ── Layout ───────────────────────────────────────────── */
 .main-layout{display:grid;grid-template-columns:380px 1fr;gap:20px;align-items:start;}
-@media(max-width:900px){ .main-layout{grid-template-columns:1fr;} }
+@media(max-width:900px){
+  .main-layout{grid-template-columns:1fr;}
+
+  /* dropdowns on the left, selected match on the right */
+  .top-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:stretch;margin-bottom:16px;}
+  .top-row .controls{flex-direction:column;align-items:stretch;flex-wrap:nowrap;gap:10px;margin:0;}
+  .top-row select{min-width:0;width:100%;}
+  .quick{display:block;position:relative;min-height:150px;}
+}
 
 .card{
   background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;
@@ -136,10 +180,14 @@ tbody tr:hover td{background:#f0f6ff;}
   <h1 id="heroTitle">AFL Season</h1>
 </div>
 
-<div class="controls">
-  <select id="yearSelect"></select>
-  <select id="roundSelect"><option value="ALL">All Rounds</option></select>
-  <select id="teamSelect"><option value="ALL">All teams</option></select>
+<div class="top-row">
+  <div class="controls">
+    <select id="yearSelect"></select>
+    <select id="roundSelect"><option value="ALL">All Rounds</option></select>
+    <select id="teamSelect"><option value="ALL">All teams</option></select>
+  </div>
+  <!-- NEW: on phones, the selected match shows here beside the dropdowns -->
+  <div class="quick" id="quickMatch"><div class="quick-inner" id="quickInner"></div></div>
 </div>
 
 <div class="main-layout">
@@ -206,6 +254,7 @@ const roundSelect= document.getElementById("roundSelect");
 const matchesDiv = document.getElementById("matches");
 const ladderDiv  = document.getElementById("ladder");
 const heroTitle  = document.getElementById("heroTitle");
+const quickInner = document.getElementById("quickInner");
 
 let rawData = [], matches = [], currentRound = "ALL", currentYear = endYear;
 
@@ -379,6 +428,34 @@ function swatch(team){
   return `<span class="swatch" style="background:${teamColour(team)}"></span>`;
 }
 
+/* NEW: the selected match (or matches) in the panel beside the dropdowns on phones.
+   One match -> a full scorecard; several -> compact cards you can scroll; none -> a hint. */
+function renderQuick(rows){
+  const filtering = teamSelect.value!=="ALL" || currentRound!=="ALL";
+  if(!filtering){
+    quickInner.innerHTML = `<div class="qempty">Pick a round or team to see the match here</div>`;
+    return;
+  }
+  if(!rows.length){
+    quickInner.innerHTML = `<div class="qempty">No match found</div>`;
+    return;
+  }
+  const mini = rows.length > 1;
+  const sorted = [...rows].sort((a,b)=>roundNum(a.round)-roundNum(b.round) || String(a.date).localeCompare(String(b.date)));
+  quickInner.innerHTML = sorted.map(g=>{
+    const hp=+g.home_points, ap=+g.away_points;
+    const hWin=hp>ap, aWin=ap>hp;
+    const accent = hp===ap ? "transparent" : teamColour(hWin ? g.home_team : g.away_team);
+    return `
+      <div class="qcard ${mini?"mini":""}" style="border-left-color:${accent}" onclick="location.href='${gameLink(g)}'">
+        <div class="qround">${g.round}</div>
+        <div class="qrow ${aWin?"lose":""}"><span class="sw" style="background:${teamColour(g.home_team)}"></span><span class="nm">${g.home_team}</span><span class="pts">${g.home_points}</span></div>
+        <div class="qrow ${hWin?"lose":""}"><span class="sw" style="background:${teamColour(g.away_team)}"></span><span class="nm">${g.away_team}</span><span class="pts">${g.away_points}</span></div>
+        ${mini ? "" : `<div class="qmeta">${[g.date,g.venue].filter(Boolean).join(" · ")}</div><div class="qgo">Match centre →</div>`}
+      </div>`;
+  }).join("");
+}
+
 function renderMatches(){
   matchesDiv.innerHTML = "";
   ladderDiv.innerHTML  = "";
@@ -388,6 +465,8 @@ function renderMatches(){
     rows = rows.filter(r=>r.home_team===teamSelect.value||r.away_team===teamSelect.value);
   if(currentRound!=="ALL")
     rows = rows.filter(r=>canonicalRound(r.round)===currentRound);
+
+  renderQuick(rows);
 
   if(!finalsRounds.includes(currentRound))
     buildLadder(getRunningLadderMatches());
