@@ -250,17 +250,39 @@ for ef in event_files:
                     except (ValueError, IndexError):
                         continue
 
-                    add_game(players, name, {
+                    row = {
                         "date": date,
                         "season": season,
                         "team": team,
                         "opponent": opponent,
                         "AB": ab, "R": r, "H": h,
                         "RBI": rbi, "HR": hr, "BB": bb, "SO": so
-                    })
+                    }
+                    # Extra stats for fantasy points (Retrosheet bline:
+                    # 9=2B 10=3B 15=HBP 19=SB; -1 means not recorded)
+                    for key, col in (("2B", 9), ("3B", 10), ("HBP", 15), ("SB", 19)):
+                        try:
+                            v = int(parts_line[col])
+                            if v >= 0:
+                                row[key] = v
+                        except (ValueError, IndexError):
+                            pass
+                    add_game(players, name, row)
 
     except Exception as e:
         print(f"FAILED EVENT FILE {ef}: {e}")
+
+def extra_bat(p):
+    """2B/3B/SB/HBP for fantasy points, only when the source records them."""
+    out = {}
+    for key, alts in (("2B", ("2B", "D", "doubles")), ("3B", ("3B", "T", "triples")),
+                      ("SB", ("SB", "stolenBases")), ("HBP", ("HBP", "hitByPitch"))):
+        for a in alts:
+            if p.get(a) not in (None, ""):
+                out[key] = p.get(a)
+                break
+    return out
+
 
 def process_boxscore_game(game, source_label=""):
     season = str(game.get("season", ""))
@@ -285,7 +307,9 @@ def process_boxscore_game(game, source_label=""):
                     "AB": stats.get("atBats", 0), "R": stats.get("runs", 0),
                     "H": stats.get("hits", 0), "RBI": stats.get("rbi", 0),
                     "HR": stats.get("homeRuns", 0), "BB": stats.get("baseOnBalls", 0),
-                    "SO": stats.get("strikeOuts", 0)
+                    "SO": stats.get("strikeOuts", 0),
+                    "2B": stats.get("doubles", 0), "3B": stats.get("triples", 0),
+                    "SB": stats.get("stolenBases", 0), "HBP": stats.get("hitByPitch", 0)
                 })
             for pid, pdata in box.get("away", {}).get("players", {}).items():
                 person = pdata.get("person", {})
@@ -297,7 +321,9 @@ def process_boxscore_game(game, source_label=""):
                     "AB": stats.get("atBats", 0), "R": stats.get("runs", 0),
                     "H": stats.get("hits", 0), "RBI": stats.get("rbi", 0),
                     "HR": stats.get("homeRuns", 0), "BB": stats.get("baseOnBalls", 0),
-                    "SO": stats.get("strikeOuts", 0)
+                    "SO": stats.get("strikeOuts", 0),
+                    "2B": stats.get("doubles", 0), "3B": stats.get("triples", 0),
+                    "SB": stats.get("stolenBases", 0), "HBP": stats.get("hitByPitch", 0)
                 })
         except Exception as e:
             print(f"FAILED {source_label}: {e}")
@@ -311,7 +337,7 @@ def process_boxscore_game(game, source_label=""):
                     "AB": p.get("AB", 0), "R": p.get("R", 0),
                     "H": p.get("H", 0), "RBI": p.get("RBI", 0),
                     "HR": p.get("HR", 0), "BB": p.get("BB", 0),
-                    "SO": p.get("SO", 0)
+                    "SO": p.get("SO", 0), **extra_bat(p)
                 })
             for p in game.get("away_batting", []):
                 add_game(players, p.get("player"), {
@@ -320,7 +346,7 @@ def process_boxscore_game(game, source_label=""):
                     "AB": p.get("AB", 0), "R": p.get("R", 0),
                     "H": p.get("H", 0), "RBI": p.get("RBI", 0),
                     "HR": p.get("HR", 0), "BB": p.get("BB", 0),
-                    "SO": p.get("SO", 0)
+                    "SO": p.get("SO", 0), **extra_bat(p)
                 })
         except Exception:
             pass
