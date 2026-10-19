@@ -149,9 +149,71 @@ def get_client():
         endpoint_url=endpoint,
         aws_access_key_id=access_key,
         aws_secret_access_key=secret_key,
-        config=Config(signature_version="s3v4"),
+        config=Config(signature_version="s3v4", max_pool_connections=CHECK_WORKERS * 2),
         region_name="auto",
     )
+
+
+# ── Existing box score check (speed fix) ─────────────────────────────────────
+# Previously every run downloaded EVERY already-saved box score from R2 (each
+# ~1-3 MB of play-by-play), one at a time and silently, just to confirm it
+# wasn't an empty pre-game capture. With ~2,400+ games that is gigabytes per
+# run and took hours (and never printed anything while doing it).
+# Now: box scores that pass the check are recorded in a small file in R2, so
+# each one is only ever checked once; the ones not yet checked are done in
+# parallel with progress printed.
+CHECK_WORKERS = 16
+VERIFIED_KEY = f"baseball/verified/{SEASON}.json"
+EMPTY_CACHE = {}   # r2 key -> True (empty / needs re-fetch) / False (good)
+
+
+def load_verified(client):
+    try:
+        obj = client.get_object(Bucket=BUCKET_NAME, Key=VERIFIED_KEY)
+        return set(json.loads(obj["Body"].read()))
+    except Exception:
+        return set()
+
+
+def precheck_existing(client, keys, verified):
+    """Fill EMPTY_CACHE for every existing key. Verified keys are trusted
+    without downloading; the rest are downloaded and checked in parallel."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    for k in keys & verified:
+        EMPTY_CACHE[k] = False
+    todo = sorted(keys - verified)
+    print(f"Box scores already verified: {len(keys & verified)} | to check now: {len(todo)}", flush=True)
+    if not todo:
+        return verified
+    start = time.time()
+    done = 0
+    with ThreadPoolExecutor(max_workers=CHECK_WORKERS) as pool:
+        futures = {pool.submit(existing_boxscore_is_empty, client, k): k for k in todo}
+        for fut in as_completed(futures):
+            k = futures[fut]
+            try:
+                empty = fut.result()
+            except Exception:
+                empty = True
+            EMPTY_CACHE[k] = empty
+            if not empty:
+                verified.add(k)
+            done += 1
+            if done % 200 == 0 or done == len(todo):
+                print(f"  checked {done}/{len(todo)} ({time.time() - start:.0f}s)", flush=True)
+    try:
+        put_json(client, VERIFIED_KEY, sorted(verified))
+    except Exception as e:
+        print(f"  (couldn't save verified list: {e} -- next run will just re-check)")
+    bad = sum(1 for k in todo if EMPTY_CACHE.get(k))
+    print(f"  {bad} existing box score(s) are empty and will be re-fetched", flush=True)
+    return verified
+
+
+def is_empty_cached(client, key):
+    if key not in EMPTY_CACHE:
+        EMPTY_CACHE[key] = existing_boxscore_is_empty(client, key)
+    return EMPTY_CACHE[key]
 
 
 def get_existing_boxscore_keys(client):
@@ -250,6 +312,9 @@ def main():
     print("Checking R2 for games already uploaded...")
     existing_keys = get_existing_boxscore_keys(client)
     print(f"{len(existing_keys)} game(s) already in R2 for {SEASON}.")
+    verified = load_verified(client)
+    if not FORCE_REFRESH_SINCE:
+        precheck_existing(client, set(existing_keys), verified)
     if FORCE_REFRESH_SINCE:
         print(f"FORCE REFRESH ACTIVE: every Final game on/after {FORCE_REFRESH_SINCE} "
               f"will be freshly re-fetched and overwritten this run, ignoring skip-cache.")
@@ -267,22 +332,43 @@ def main():
         ("2026-03-25", "2026-03-31"), ("2026-04-01", "2026-04-30"),
         ("2026-05-01", "2026-05-31"), ("2026-06-01", "2026-06-30"),
         ("2026-07-01", "2026-07-31"), ("2026-08-01", "2026-08-31"),
-        ("2026-09-01", "2026-09-30"), ("2026-10-01", "2026-10-05"),
+        ("2026-09-01", "2026-09-30"), ("2026-10-01", "2026-10-31"),
+        ("2026-11-01", "2026-11-30"),
     ]
 
     all_dates = {}
     schedule_fetch_failures = []
+    # Regular season PLUS the postseason: R = regular season, F = Wild Card,
+    # D = Division Series, L = League Championship Series, W = World Series.
+    # Previously only gameType=R was requested (and the range stopped at
+    # Oct 5), so no playoff game was ever picked up.
+    GAME_TYPES = ["R", "F", "D", "L", "W"]
+    seen_pks = set()
     for start, end in month_ranges:
-        url = (f"https://statsapi.mlb.com/api/v1/schedule?"
-               f"sportId=1&season={SEASON}&gameType=R&startDate={start}&endDate={end}")
-        data, ok = fetch_json(url)
-        if not ok:
-            schedule_fetch_failures.append((start, end))
-            print(f"  {start} to {end}: FAILED to fetch -- 0 dates recorded (see errors above)")
-            continue
-        for date_block in data.get("dates", []):
-            all_dates[date_block["date"]] = date_block
-        print(f"  {start} to {end}: {len(data.get('dates', []))} dates")
+        dates_this_range = 0
+        for gt in GAME_TYPES:
+            url = (f"https://statsapi.mlb.com/api/v1/schedule?"
+                   f"sportId=1&season={SEASON}&gameType={gt}&startDate={start}&endDate={end}")
+            data, ok = fetch_json(url)
+            if not ok:
+                schedule_fetch_failures.append((start, end, gt))
+                print(f"  {start} to {end} [{gt}]: FAILED to fetch (see errors above)")
+                continue
+            for date_block in data.get("dates", []):
+                d = date_block["date"]
+                if d not in all_dates:
+                    all_dates[d] = {**date_block, "games": []}
+                    dates_this_range += 1
+                for g in date_block.get("games", []):
+                    pk = g.get("gamePk") if isinstance(g, dict) else None
+                    if pk in seen_pks:
+                        continue
+                    seen_pks.add(pk)
+                    all_dates[d]["games"].append(g)
+            if gt != "R" and data.get("dates"):
+                n = sum(len(b.get("games", [])) for b in data["dates"])
+                print(f"    postseason [{gt}] {start} to {end}: {n} game(s)")
+        print(f"  {start} to {end}: {dates_this_range} dates")
 
     print(f"Total date blocks: {len(all_dates)}")
     if schedule_fetch_failures:
@@ -411,7 +497,7 @@ def main():
 
                 if not force_refresh:
                     if r2_key in existing_keys:
-                        if existing_boxscore_is_empty(client, r2_key):
+                        if is_empty_cached(client, r2_key):
                             print(f"  New-format file {r2_key} exists but has no real "
                                   f"player data -- re-fetching instead of trusting it.")
                             stale_legacy_refetched.append(r2_key)
@@ -420,7 +506,7 @@ def main():
                     elif (old_style_id in old_style_to_key
                             and old_style_id not in ambiguous_old_style_ids):
                         legacy_key = old_style_to_key[old_style_id]
-                        if existing_boxscore_is_empty(client, legacy_key):
+                        if is_empty_cached(client, legacy_key):
                             print(f"  Legacy file {legacy_key} exists but has no real "
                                   f"player data -- re-fetching instead of trusting it.")
                             stale_legacy_refetched.append(legacy_key)
@@ -443,7 +529,8 @@ def main():
                         "home_team": home_team, "away_team": away_team,
                         "home_code": home_code, "away_code": away_code,
                         "home_score": home_score, "away_score": away_score,
-                        "venue": venue, "status": status, "game_file": effective_filename
+                        "venue": venue, "status": status, "game_file": effective_filename,
+                        "game_type": game.get("gameType", "R")
                     })
                     continue
 
@@ -480,6 +567,7 @@ def main():
                     "game_id": game_pk, "date": game_date, "status": status, "venue": venue,
                     "home_team": {"name": home_team, "code": home_code, "score": home_score},
                     "away_team": {"name": away_team, "code": away_code, "score": away_score},
+                    "game_type": game.get("gameType", "R"),
                     "liveData": live_data.get("liveData", {})
                 }
 
@@ -492,7 +580,8 @@ def main():
                     "home_team": home_team, "away_team": away_team,
                     "home_code": home_code, "away_code": away_code,
                     "home_score": home_score, "away_score": away_score,
-                    "venue": venue, "status": status, "game_file": filename
+                    "venue": venue, "status": status, "game_file": filename,
+                    "game_type": game.get("gameType", "R")
                 })
 
             except Exception as e:
