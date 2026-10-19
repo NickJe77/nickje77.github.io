@@ -419,6 +419,15 @@ print(f"FOUND {r2_game_count} JSON BOXSCORES (R2)")
 # BUILD PLAYER FILES
 # ======================================================
 
+# Safety net: if the historical sources weren't found, the result would be a
+# 2026-only build that overwrites every player's career on the site with
+# just this season. Stop instead so nothing gets committed or uploaded.
+MIN_PLAYERS = 5000
+if len(players) < MIN_PLAYERS:
+    print(f"ONLY {len(players)} PLAYERS FOUND (expected {MIN_PLAYERS}+). "
+          f"Historical box scores are missing - stopping without writing files.")
+    raise SystemExit(1)
+
 count = 0
 
 for player_name, games in players.items():
