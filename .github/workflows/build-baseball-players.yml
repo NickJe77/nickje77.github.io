@@ -19,7 +19,132 @@ jobs:
           R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-        run: python scripts/fetch_baseball_sources_from_r2.py
+        run: |
+          cat > /tmp/fetch_r2.py <<'PYEOF'
+          """
+          fetch_baseball_sources_from_r2.py
+
+          The historical baseball source data (box scores for every season,
+          Retrosheet event files, biofile0.csv) was moved out of git into R2.
+          build_baseball_players.py reads those from docs/data/baseball/ on the
+          runner, so without them it only ever saw the 2026 games and built
+          2026-only player files.
+
+          This downloads just the SOURCE files from R2 into docs/data/baseball/
+          before the build runs. It skips the derived outputs (players/,
+          season_leaders/, players.json), because the build regenerates those.
+
+          Uses the repo's existing secrets: R2_ENDPOINT, R2_ACCESS_KEY_ID,
+          R2_SECRET_ACCESS_KEY.
+          """
+
+          import os
+          import sys
+          import time
+          from concurrent.futures import ThreadPoolExecutor, as_completed
+
+          import boto3
+          from botocore.config import Config
+
+          BUCKET_NAME = "sporting-almanac-data"
+          R2_PREFIX = "baseball/"
+          LOCAL_ROOT = "docs/data/baseball"
+          NUM_WORKERS = 64
+
+
+          def wanted(rel):
+              """Source files only."""
+              if rel.endswith(".DS_Store"):
+                  return False
+              if rel.startswith("boxscores/") and rel.endswith(".json"):
+                  return True
+              if rel.startswith("events/"):
+                  return True
+              if rel == "biofile0.csv" or rel.startswith("boxes.zip.part"):
+                  return True
+              return False
+
+
+          def get_client():
+              endpoint = os.environ.get("R2_ENDPOINT")
+              key = os.environ.get("R2_ACCESS_KEY_ID")
+              secret = os.environ.get("R2_SECRET_ACCESS_KEY")
+              if not (endpoint and key and secret):
+                  print("Missing R2_ENDPOINT / R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY")
+                  sys.exit(1)
+              return boto3.client(
+                  "s3",
+                  endpoint_url=endpoint,
+                  aws_access_key_id=key,
+                  aws_secret_access_key=secret,
+                  config=Config(signature_version="s3v4",
+                                max_pool_connections=NUM_WORKERS * 2,
+                                retries={"max_attempts": 8, "mode": "adaptive"}),
+                  region_name="auto",
+              )
+
+
+          def main():
+              client = get_client()
+
+              print("Listing R2 baseball/ ...", flush=True)
+              keys = []
+              paginator = client.get_paginator("list_objects_v2")
+              for page in paginator.paginate(Bucket=BUCKET_NAME, Prefix=R2_PREFIX):
+                  for obj in page.get("Contents", []):
+                      rel = obj["Key"][len(R2_PREFIX):]
+                      if wanted(rel):
+                          keys.append((obj["Key"], rel))
+              print(f"{len(keys)} source file(s) to download", flush=True)
+
+              # quick summary by season so the log shows what was found
+              seasons = {}
+              for _, rel in keys:
+                  parts = rel.split("/")
+                  if parts[0] == "boxscores" and len(parts) > 2:
+                      seasons[parts[1]] = seasons.get(parts[1], 0) + 1
+              if seasons:
+                  print("Box scores per season: " +
+                        ", ".join(f"{s}:{n}" for s, n in sorted(seasons.items())), flush=True)
+
+              def dl(item):
+                  key, rel = item
+                  dest = os.path.join(LOCAL_ROOT, rel)
+                  os.makedirs(os.path.dirname(dest), exist_ok=True)
+                  for attempt in range(4):
+                      try:
+                          client.download_file(BUCKET_NAME, key, dest)
+                          return None
+                      except Exception as e:
+                          err = e
+                          time.sleep(2 * (attempt + 1))
+                  return f"{key}: {err}"
+
+              failed = []
+              start = time.time()
+              with ThreadPoolExecutor(max_workers=NUM_WORKERS) as ex:
+                  futures = [ex.submit(dl, k) for k in keys]
+                  for i, f in enumerate(as_completed(futures), 1):
+                      r = f.result()
+                      if r:
+                          failed.append(r)
+                      if i % 5000 == 0:
+                          rate = i / max(time.time() - start, 1)
+                          print(f"  {i}/{len(keys)} ({rate:.0f}/sec)", flush=True)
+
+              print(f"Downloaded {len(keys) - len(failed)}, failed {len(failed)}", flush=True)
+              for r in failed[:20]:
+                  print("  FAILED", r)
+              # A handful of failures is tolerable; a large share means something is wrong
+              if keys and len(failed) > len(keys) * 0.01:
+                  print("Too many failures - stopping so a partial build isn't published.")
+                  sys.exit(1)
+
+
+          if __name__ == "__main__":
+              main()
+          PYEOF
+          python /tmp/fetch_r2.py
       - name: Build player files
         run: |
           python scripts/build_baseball_players.py
