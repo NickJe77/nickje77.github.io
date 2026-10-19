@@ -1,0 +1,37 @@
+name: Build EPL Fantasy Points
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 19 * * *"   # daily, 5-6am Melbourne
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Build FPL points (2016-17 to now)
+        run: python -u scripts/build_epl_fantasy.py
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add docs/data/epl/fantasy/
+          git commit -m "Update EPL fantasy points" || echo "No changes"
+          # never --force: rebase onto whatever is newest so nothing gets wiped
+          for i in 1 2 3; do
+            git pull --rebase -X theirs && git push && break
+            echo "push rejected, retrying ($i)"; sleep 10
+          done
