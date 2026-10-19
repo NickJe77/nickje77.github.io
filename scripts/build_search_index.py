@@ -367,13 +367,32 @@ def build_racing():
                           h, fin.strip(), (r.get(sc) or "").strip() if sc else "",
                           (r.get(spc) or "").strip(), (r.get(jc) or "").strip(), (r.get(trc) or "").strip()]
 
+    # Worldwide Group & Listed winners (USA, England, France, Japan, Ireland,
+    # Germany, Hong Kong, UAE ...). Winners only, year only, no Australian
+    # races in it -- so nothing double-counts with the Australian files above.
+    COUNTRY_FIX = {"republic of ireland": "Ireland", "korea": "South Korea"}
+    for r in read_csv(f"{DATA}/worldwide_stakes_races.csv"):
+        country = (r.get("COUNTRY") or "").strip()
+        country = COUNTRY_FIX.get(country.lower(), country)
+        race = (r.get("RACE NAME") or "").strip()
+        h = (r.get("WINNER") or "").strip()
+        year = (r.get("YEAR") or "").strip()
+        key = (year, race.lower(), h.lower(), country)
+        if not h or key in races:
+            continue
+        # "HK G1" / "JPN G1" -> "G1" so Group 1 counts include them
+        grade = re.sub(r"^(HK|JPN)\s+", "", (r.get("RACE GRADE") or "").strip(), flags=re.I)
+        races[key] = [year, (r.get("COURSE") or "").strip(), race, grade, h, "1", "", "",
+                      (r.get("JOCKEY") or "").strip(), (r.get("TRAINER") or "").strip(), country]
+
     by_person = {"jockey": defaultdict(list), "trainer": defaultdict(list)}
     for row in races.values():
-        date, track, race, grade, horse, fin, starters, sp, jockey, trainer = row
+        date, track, race, grade, horse, fin, starters, sp, jockey, trainer = row[:10]
+        country = row[10] if len(row) > 10 else ""   # "" = Australia
         if jockey:
-            by_person["jockey"][jockey].append([date, track, race, grade, horse, fin, starters, sp, trainer])
+            by_person["jockey"][jockey].append([date, track, race, grade, horse, fin, starters, sp, trainer, country])
         if trainer:
-            by_person["trainer"][trainer].append([date, track, race, grade, horse, fin, starters, sp, jockey])
+            by_person["trainer"][trainer].append([date, track, race, grade, horse, fin, starters, sp, jockey, country])
 
     os.makedirs(f"{OUT}/racing", exist_ok=True)
     for kind, people in by_person.items():
@@ -383,12 +402,15 @@ def build_racing():
             t = norm_token(name)
             shards[t[0] if t and "a" <= t[0] <= "z" else "0"][name] = rows
             wins = sum(1 for x in rows if x[5] == "1")
+            g1 = sum(1 for x in rows if x[5] == "1" and re.match(r"^g(roup)?\s*1$", x[3].strip(), re.I))
+            countries = sorted({x[9] or "Australia" for x in rows},
+                               key=lambda c: -sum(1 for x in rows if (x[9] or "Australia") == c))
+            where = ", ".join(countries[:2]) + (f" +{len(countries) - 2}" if len(countries) > 2 else "")
             label = "Jockey" if kind == "jockey" else "Trainer"
-            noun = "ride" if kind == "jockey" else "runner"
             # "inline:" = no separate page; the homepage search shows this
             # jockey/trainer's summary right under the search box
             add(label, f"inline:{kind}", name, None,
-                f"{len(rows):,} {noun}{'s' if len(rows) != 1 else ''} · {wins:,} win{'s' if wins != 1 else ''}")
+                f"{wins:,} win{'s' if wins != 1 else ''} · {g1:,} G1 · {where}")
         for L, d in shards.items():
             with open(f"{OUT}/racing/{kind}_{L}.json", "w", encoding="utf-8") as f:
                 json.dump(d, f, ensure_ascii=False, separators=(",", ":"))
