@@ -232,6 +232,18 @@ async function loadMatch(){
     }catch(err){
 
         console.error(err);
+        // Match file not uploaded yet (e.g. the latest round): still show the
+        // teams and score from the season file instead of a bare error.
+        try{
+            const sr = await fetch(`/data/epl/seasons/${season}.json`);
+            const g = sr.ok ? ((await sr.json()).games || []).find(x => x.match_id === matchId) : null;
+            if(g){
+                renderMatch({home_team: g.home, away_team: g.away, home_score: g.score_home,
+                             away_score: g.score_away, date: g.date, venue: g.venue}, null);
+                content.innerHTML = '<div class="card"><div class="empty">Full match details (scorers, cards, lineups) haven\'t been added for this game yet.</div></div>';
+                return;
+            }
+        }catch(e){ /* fall through */ }
         showNotFound("Failed to load match");
 
     }
