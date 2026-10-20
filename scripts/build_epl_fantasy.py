@@ -137,6 +137,64 @@ def load_fpl(fpl_season):
     return list(csv.DictReader(io.StringIO(decode(r.content))))
 
 
+FPL_API = "https://fantasy.premierleague.com/api"
+
+
+def load_fpl_api():
+    """Current season straight from the official FPL API, in the same row
+    shape as merged_gw.csv. The archived CSVs often lag weeks behind for the
+    season in progress (2026-27 only had gameweek 1), so this is used for
+    the current season. Returns (rows, web_names) or ([], {}) on failure.
+
+    bootstrap-static -> players (id, names, team) and gameweeks
+    fixtures         -> fixture id, kickoff, home/away team ids
+    event/<gw>/live  -> every player's points PER FIXTURE ("explain"), which
+                        also splits double gameweeks correctly
+    """
+    s = requests.Session()
+    s.headers["User-Agent"] = "Mozilla/5.0 (sporting-almanac)"
+    try:
+        boot = s.get(f"{FPL_API}/bootstrap-static/", timeout=60).json()
+        fixtures = {f["id"]: f for f in s.get(f"{FPL_API}/fixtures/", timeout=60).json()}
+    except Exception as e:
+        print(f"  FPL API not reachable ({e})")
+        return [], {}
+    players = {p["id"]: p for p in boot.get("elements", [])}
+    web = {str(pid): p.get("web_name") for pid, p in players.items()}
+    rows = []
+    for ev in boot.get("events", []):
+        if not (ev.get("finished") or ev.get("is_current")):
+            continue
+        try:
+            live = s.get(f"{FPL_API}/event/{ev['id']}/live/", timeout=60).json()
+        except Exception as e:
+            print(f"  GW{ev['id']} live data failed: {e}")
+            continue
+        for el in live.get("elements", []):
+            p = players.get(el.get("id"))
+            if not p:
+                continue
+            for ex in el.get("explain", []):
+                fx = fixtures.get(ex.get("fixture"))
+                if not fx:
+                    continue
+                pts = sum(st.get("points", 0) for st in ex.get("stats", []))
+                mins = next((st.get("value", 0) for st in ex.get("stats", []) if st.get("identifier") == "minutes"), 0)
+                rows.append({
+                    "name": f"{p.get('first_name', '')} {p.get('second_name', '')}".strip(),
+                    "element": str(p["id"]),
+                    "fixture": str(fx["id"]),
+                    "kickoff_time": fx.get("kickoff_time") or "",
+                    # side from the player's current club; anyone who has since
+                    # moved clubs is re-checked against the other lineup below
+                    "was_home": "True" if p.get("team") == fx.get("team_h") else "False",
+                    "minutes": mins,
+                    "total_points": pts,
+                })
+    print(f"  FPL API: {len(rows):,} player-fixture rows")
+    return rows, web
+
+
 def load_web_names(fpl_season):
     """element id -> FPL short display name, from that season's players_raw.csv."""
     url = FPL_URL.format(s=fpl_season).replace("gws/merged_gw.csv", "players_raw.csv")
@@ -155,10 +213,15 @@ def build_season(fpl_season, site_season, players_out):
         print(f"  [{site_season}] no site season file, skipping")
         return
     games = json.load(open(season_file, encoding="utf-8")).get("games", [])
-    rows = load_fpl(fpl_season)
+    rows, web = [], {}
+    if site_season == season_pairs()[-1][1]:
+        # season in progress: official API first (the archive lags behind)
+        rows, web = load_fpl_api()
+    if not rows:
+        rows = load_fpl(fpl_season)
+        web = load_web_names(fpl_season)
     if not rows:
         return
-    web = load_web_names(fpl_season)
 
     # site games by date, with their lineups
     by_date = defaultdict(list)
@@ -211,6 +274,18 @@ def build_season(fpl_season, site_season, players_out):
             unmatched_fx += 1
             continue
         matched_fx += 1
+        # A player who changed clubs mid-season can be filed on the wrong side
+        # (FPL only gives their current club) -- if they're not in this side's
+        # lineup but are in the other one, move them across.
+        for side, other in (("home", "away"), ("away", "home")):
+            keep = []
+            for item in f[side]:
+                n, _, _, w = item
+                if not match_name(n, best[f"_{side}"], w) and match_name(n, best[f"_{other}"], w):
+                    f[other].append(item)
+                else:
+                    keep.append(item)
+            f[side] = keep
         entry = {}
         for side, opp_side in (("home", "away"), ("away", "home")):
             lst = []
@@ -238,6 +313,72 @@ def build_season(fpl_season, site_season, players_out):
           f"{named}/{total_players} player-games matched to site names ({pct:.1f}%)")
 
 
+def build_player_games():
+    """Every player's individual EPL games, for the player page's game log.
+    Built from the site's own match files (all seasons, not just FPL ones),
+    with FPL points and minutes added where available. Written as shards:
+        docs/data/epl/player_games/<first two letters>.json
+        {name: [[season, match_id, date, team, opponent, home(1/0), goals_for,
+                 goals_against, G, YC, RC, fpl_pts or null, mins or null], ...]}
+    """
+    games_by_player = defaultdict(list)
+    for season_file in sorted(os.listdir(f"{DATA}/seasons")):
+        if not season_file.endswith(".json"):
+            continue
+        season = season_file[:-5]
+        try:
+            games = json.load(open(f"{DATA}/seasons/{season_file}", encoding="utf-8")).get("games", [])
+        except Exception:
+            continue
+        fpl = {}
+        fp_path = f"{OUT}/{season}.json"
+        if os.path.exists(fp_path):
+            fpl = json.load(open(fp_path, encoding="utf-8"))
+        for g in games:
+            path = f"{DATA}/matches/{season}/{g['match_id']}.json"
+            if not os.path.exists(path):
+                continue
+            try:
+                m = json.load(open(path, encoding="utf-8"))
+            except Exception:
+                continue
+            ht, at = m.get("home_team") or g.get("home"), m.get("away_team") or g.get("away")
+            hs = m.get("home_score", g.get("score_home"))
+            as_ = m.get("away_score", g.get("score_away"))
+            goals, yc, rc = defaultdict(int), defaultdict(int), defaultdict(int)
+            for e in m.get("scorers") or []:
+                if not e.get("own_goal") and e.get("player"):
+                    goals[e["player"]] += 1
+            for e in m.get("yellow_cards") or []:
+                if e.get("player"):
+                    yc[e["player"]] += 1
+            for e in m.get("red_cards") or []:
+                if e.get("player"):
+                    rc[e["player"]] += 1
+            fx = fpl.get(g["match_id"], {})
+            for side in ("home", "away"):
+                fp = {n: (pts, mins) for n, pts, mins in fx.get(side, [])}
+                team, opp = (ht, at) if side == "home" else (at, ht)
+                gf, ga = (hs, as_) if side == "home" else (as_, hs)
+                for n in lineup_names(m, side):
+                    pts, mins = fp.get(n, (None, None))
+                    games_by_player[n].append([season, g["match_id"], g.get("date", ""), team, opp,
+                                               1 if side == "home" else 0, gf, ga,
+                                               goals[n], yc[n], rc[n], pts, mins])
+    shards = defaultdict(dict)
+    for n, lst in games_by_player.items():
+        lst.sort(key=lambda x: (x[2], x[1]), reverse=True)
+        # split by the first TWO letters ("ja", "mo") so no file gets big
+        t = "".join(norm(n))[:2]
+        shards[t if len(t) == 2 else "0"][n] = lst
+    os.makedirs(f"{DATA}/player_games", exist_ok=True)
+    for L, d in shards.items():
+        with open(f"{DATA}/player_games/{L}.json", "w", encoding="utf-8") as fh:
+            json.dump(d, fh, ensure_ascii=False, separators=(",", ":"))
+    print(f"player_games: {len(games_by_player):,} players, "
+          f"{sum(len(v) for v in games_by_player.values()):,} player-games")
+
+
 def main():
     if not os.path.isdir(DATA):
         sys.exit("Run from the repo root (docs/data/epl not found).")
@@ -260,6 +401,7 @@ def main():
     with open(players_path, "w", encoding="utf-8") as fh:
         json.dump(players_out, fh, ensure_ascii=False, separators=(",", ":"))
     print(f"players.json: {len(players_out):,} players")
+    build_player_games()
 
 
 if __name__ == "__main__":
