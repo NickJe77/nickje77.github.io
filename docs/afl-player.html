@@ -266,6 +266,8 @@ const DISAMBIG_GROUPS = {
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
   "Cooper D-Tytler": "Cooper Duff-Tytler",
+  // Same person: played 1987-1997 as Dean Laidley, now Dani Laidley.
+  "Dean Laidley": "Dani Laidley",
   // "Bailey Williams": "Bailey J. Williams" REMOVED as a flat alias --
   // confirmed via audit these are two different real players (Western
   // Bulldogs vs West Coast). Raw data is inconsistent though: the West
@@ -303,7 +305,7 @@ const yearSelect      = document.getElementById("yearSelect");
 const rows           = document.getElementById("rows");
 const loadingMsg     = document.getElementById("loadingMsg");
 const params     = new URLSearchParams(location.search);
-const playerName = normalizeName(params.get("name") || "");
+const playerName = (n => PLAYER_NAME_ALIASES[n] || n)(normalizeName(params.get("name") || ""));
 const playerTeam = params.get("team") || "";
 document.getElementById("playerName").textContent = playerName || "Select a player";
 let allGames = [], currentGames = [], sortDir = -1, sortKey = null;
@@ -637,10 +639,12 @@ async function loadAllYears() {
       // under a nickname ("Mick Martyn" next to "Michael Martyn").
       const realId = r => Number.isInteger(r.match_id) && r.match_id !== 0;
       const gk = r => r.season + '|' + r.round + '|' + r.home_team + '|' + r.away_team;
+      // normalise first so "Footscray"/"Western Bulldogs" and "QF"/"Qualifying
+      // Final" are recognised as the same game
+      d.forEach(g => normalizeGame(g));
       const proper = new Set(d.filter(realId).map(gk));
       d.forEach(g => {
         if (!realId(g) && proper.has(gk(g))) return;
-        normalizeGame(g);
         allYearGames.push(g);
         allGames.push(g);
       });
