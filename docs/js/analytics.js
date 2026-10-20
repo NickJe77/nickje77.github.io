@@ -1,15 +1,12 @@
 (function(){
-  var script1 = document.createElement('script');
-  script1.async = true;
-  script1.src = "https://www.googletagmanager.com/gtag/js?id=G-N8J9ZPKDDH";
-  document.head.appendChild(script1);
+  var GA_ID = "G-EW21Y55NMJ";
+  var s = document.createElement('script');
+  s.async = true;
+  s.src = "https://www.googletagmanager.com/gtag/js?id=" + GA_ID;
+  document.head.appendChild(s);
 
-  var script2 = document.createElement('script');
-  script2.innerHTML = `
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-N8J9ZPKDDH');
-  `;
-  document.head.appendChild(script2);
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function(){ window.dataLayer.push(arguments); };
+  window.gtag('js', new Date());
+  window.gtag('config', GA_ID);
 })();
