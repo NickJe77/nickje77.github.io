@@ -289,6 +289,10 @@ function lineupTable(match, side, fantasy){
     const names = (match[`${side}_lineup`] || []).map(p => typeof p === "string" ? p : p.name).filter(Boolean);
     const fp = {};
     ((fantasy && fantasy[side]) || []).forEach(([n, pts, mins]) => { fp[n] = {pts, mins}; });
+    // minutes saved by the scraper (newer matches); FPL minutes used otherwise
+    const lmins = {};
+    (match[`${side}_lineup`] || []).forEach(p => { if(p && typeof p === "object" && p.minutes != null) lmins[p.name] = p.minutes; });
+    const minsOf = n => lmins[n] != null ? lmins[n] : (fp[n] ? fp[n].mins : null);
     const goals = {}, yc = {}, rc = {};
     (match.scorers || []).forEach(e => { if(!e.own_goal && e.player) goals[e.player] = (goals[e.player]||0) + 1; });
     (match.yellow_cards || []).forEach(e => { if(e.player) yc[e.player] = (yc[e.player]||0) + 1; });
@@ -305,7 +309,7 @@ function lineupTable(match, side, fantasy){
                 <thead><tr><th>Player</th><th>G</th><th>YC</th><th>RC</th>${hasFp ? '<th class="fp" title="Official Fantasy Premier League points">FPL</th>' : ''}</tr></thead>
                 <tbody>${rows.map(r => `
                     <tr>
-                        <td><a href="/aleague-player.html?player=${encodeURIComponent(playerSlug(r.n))}">${r.n}</a>${r.f ? `<span class="lu-mins">${r.f.mins}'</span>` : ''}</td>
+                        <td><a href="/aleague-player.html?player=${encodeURIComponent(playerSlug(r.n))}">${r.n}</a>${minsOf(r.n) != null ? `<span class="lu-mins">${minsOf(r.n)}'</span>` : ''}</td>
                         <td>${goals[r.n] || ''}</td><td>${yc[r.n] || ''}</td><td>${rc[r.n] || ''}</td>
                         ${hasFp ? `<td class="fp">${r.f ? r.f.pts : '–'}</td>` : ''}
                     </tr>`).join('')}
@@ -369,6 +373,7 @@ function renderMatch(match, fantasy){
             ${lineupTable(match, "away", fantasy)}
         </div>
         ${fantasy ? '<div class="lu-note">FPL = official Fantasy Premier League points for this match (available from 2016-17). The small number is minutes played.</div>' : ''}
+        ${!fantasy && [...(match.home_lineup||[]), ...(match.away_lineup||[])].some(p => p && p.minutes != null) ? '<div class="lu-note">The small number after each name is minutes played.</div>' : ''}
     `;
 
 }
