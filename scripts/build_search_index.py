@@ -125,7 +125,8 @@ def years(seasons):
 # ── AFL ──────────────────────────────────────────────────────────────────────
 # Mirrors afl-player.html's normalizeGame() so the link opens the same
 # player the page itself would show.
-AFL_ALIASES = {"Luke D-Uniacke": "Luke Davies-Uniacke", "Cooper D-Tytler": "Cooper Duff-Tytler"}
+AFL_ALIASES = {"Luke D-Uniacke": "Luke Davies-Uniacke", "Cooper D-Tytler": "Cooper Duff-Tytler",
+               "Dean Laidley": "Dani Laidley"}  # same person (played as Dean)
 AFL_TEAMS = {"footscray": "Western Bulldogs", "south melbourne": "Sydney", "brisbane lions": "Brisbane",
              "brisbane bears": "Brisbane", "kangaroos": "North Melbourne", "gws giants": "GWS",
              "greater western sydney": "GWS"}
