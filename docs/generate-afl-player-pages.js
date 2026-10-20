@@ -31,6 +31,8 @@ const DISAMBIG_GROUPS = {
 const PLAYER_NAME_ALIASES = {
   "Luke D-Uniacke": "Luke Davies-Uniacke",
   "Cooper D-Tytler": "Cooper Duff-Tytler",
+  // Same person: played 1987-1997 as Dean Laidley, now Dani Laidley.
+  "Dean Laidley": "Dani Laidley",
   // "Bailey Williams": "Bailey J. Williams" REMOVED -- confirmed WRONG:
   // two different real players (Western Bulldogs vs West Coast), proven
   // by a head-to-head match between them on 2026-07-12 with different
@@ -40,8 +42,12 @@ const PLAYER_NAME_ALIASES = {
 const TEAM_NAME_CANONICAL = {
   "footscray": "Western Bulldogs",
   "south melbourne": "Sydney",
+  "brisbane lions": "Brisbane",
   "brisbane bears": "Brisbane",
   "kangaroos": "North Melbourne",
+  "north melb": "North Melbourne",
+  "gws giants": "GWS",
+  "greater western sydney": "GWS",
 };
 const ROUND_NAME_CANONICAL = {
   "ef": "Elimination Final", "round ef": "Elimination Final", "elimination final": "Elimination Final",
@@ -180,7 +186,18 @@ for (let year = START_YEAR; year <= END_YEAR; year++) {
   const file = path.join(DATA_DIR, `afl_${year}.json`);
   if (!fs.existsSync(file)) continue;
   const rows = JSON.parse(fs.readFileSync(file, "utf8"));
-  rows.forEach(r => allGames.push(normaliseGame({ ...r, season: year })));
+  // Drop leftover rows from an old scraper version (broken match_id) in
+  // games that also have proper rows -- same rule as the live afl-player.html.
+  const realId = r => Number.isInteger(r.match_id) && r.match_id !== 0;
+  const gk = r => r.round + "|" + r.home_team + "|" + r.away_team;
+  // Compared after normalising, so "Footscray"/"Western Bulldogs" and
+  // "QF"/"Qualifying Final" count as the same game.
+  const norm = rows.map(r => normaliseGame({ ...r, season: year }));
+  const proper = new Set(norm.filter(realId).map(gk));
+  norm.forEach(g => {
+    if (!realId(g) && proper.has(gk(g))) return;
+    allGames.push(g);
+  });
 }
 console.log(`Loaded ${allGames.length} player-game rows across all seasons.`);
 
