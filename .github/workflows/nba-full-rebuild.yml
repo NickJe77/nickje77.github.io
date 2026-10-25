@@ -23,21 +23,39 @@ jobs:
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install requests beautifulsoup4 lxml pandas boto3
+          python -m pip install requests beautifulsoup4 lxml boto3
 
-      - name: Run NBA rebuild
+      - name: Check R2 configuration
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
         run: |
-          python scripts/nba_full_rebuild.py
+          for name in R2_ENDPOINT R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing GitHub secret: $name"
+              exit 1
+            fi
+          done
 
-      - name: Commit rebuilt indexes
+      - name: Run NBA rebuild - 2026/27
+        env:
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          python scripts/nba_full_rebuild.py --start 2027 --end 2027
+
+      - name: Commit updated schedules
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add docs/data/nba/**/index.json
+          git add docs/data/basketball/schedules/2027.json
 
-          git commit -m "Rebuild NBA indexes" || echo "No changes"
-
-          git pull --rebase origin main || echo "Nothing to pull"
-
-          git push
+          if git diff --cached --quiet; then
+            echo "No schedule changes to commit"
+          else
+            git commit -m "Update NBA 2026-27 schedule"
+            git push
+          fi
