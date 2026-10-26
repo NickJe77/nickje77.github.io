@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Noto+Sans+Condensed:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
 :root{
@@ -23,7 +23,7 @@
   --board-2:#161f16;
   --accent:#c99a3d;
   --accent-soft:rgba(201,154,61,.16);
-  --display:'Oswald','Noto Sans Condensed',system-ui,sans-serif;
+  --display:'Oswald',system-ui,sans-serif;
   --body:'Inter',system-ui,sans-serif;
   --radius:16px;
 }
@@ -432,6 +432,34 @@ function updateFiltered(){
   renderSeasons(filtered);
 }
 
+// Repair UTF-8 names that were previously read as Windows-1252/Latin-1.
+// This affects display only; player IDs and statistics remain unchanged.
+function repairPlayerName(value){
+  if(typeof value !== "string") return value;
+  let result = value;
+  const cp1252 = {8364:128,8218:130,402:131,8222:132,8230:133,8224:134,8225:135,710:136,8240:137,352:138,8249:139,338:140,381:142,8216:145,8217:146,8220:147,8221:148,8226:149,8211:150,8212:151,732:152,8482:153,353:154,8250:155,339:156,382:158,376:159};
+  for(let pass=0;pass<2;pass++){
+    if(!/[ÃÂÄÅÐ]/.test(result)) break;
+    const bytes=[];
+    let convertible=true;
+    for(const ch of result){
+      const n=ch.codePointAt(0);
+      if(n<=255) bytes.push(n);
+      else if(cp1252[n]!==undefined) bytes.push(cp1252[n]);
+      else {convertible=false;break;}
+    }
+    if(!convertible) break;
+    const decoded=new TextDecoder("utf-8",{fatal:true});
+    try {result=decoded.decode(new Uint8Array(bytes));}
+    catch(e){break;}
+  }
+  // Some source names contain already-lost control/replacement glyphs.
+  // Restore these two confirmed names when decoding cannot recover them.
+  if(/^Luka Don/i.test(result) && result !== "Luka Dončić") return "Luka Dončić";
+  if(/^Nikola Joki/i.test(result) && result !== "Nikola Jokić") return "Nikola Jokić";
+  return result;
+}
+
 function buildSearch(){
   const searchInput  = document.getElementById("playerSearch");
   const searchResults= document.getElementById("searchResults");
@@ -465,7 +493,7 @@ async function loadPlayer(){
     if(!res.ok) throw new Error("Player not found");
     const data=await res.json();
 
-    const name=data.name||playerId;
+    const name=repairPlayerName(data.name||playerId);
     document.title=`${name} | NBA Player`;
 
     allGames=(data.games||[]).slice().reverse();
@@ -485,7 +513,7 @@ async function loadPlayer(){
 
     fetch(`${R2}/basketball/players/index.json`)
       .then(r=>r.json())
-      .then(idx=>{playerIndex=idx;buildSearch();})
+      .then(idx=>{playerIndex=idx.map(p=>({...p,name:repairPlayerName(p.name)}));buildSearch();})
       .catch(()=>{});
 
     const teams=[...new Set(allGames.map(g=>g.team).filter(Boolean))].sort();
