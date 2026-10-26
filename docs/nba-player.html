@@ -496,9 +496,20 @@ async function loadPlayer(){
     const name=repairPlayerName(data.name||playerId);
     document.title=`${name} | NBA Player`;
 
-    allGames=(data.games||[]).slice().reverse();
+    // Order games by season and date, rather than assuming the R2 array order.
+    // The most recent game determines the player's displayed team and colours.
+    function gameTimestamp(g){
+      const parsed=Date.parse(g.date || "");
+      if(Number.isFinite(parsed)) return parsed;
+      const idDate=String(g.game_id || "").match(/^(\d{4})(\d{2})(\d{2})/);
+      return idDate ? Date.UTC(+idDate[1],+idDate[2]-1,+idDate[3]) : 0;
+    }
+    allGames=(data.games||[]).slice().sort((a,b)=>
+      (Number(b.season)||0)-(Number(a.season)||0) ||
+      gameTimestamp(b)-gameTimestamp(a)
+    );
 
-    const lastTeam = allGames.length ? allGames[0].team : "";
+    const lastTeam = allGames.find(g=>g.team)?.team || "";
     const gradient = TEAM_COLOURS[lastTeam] || "linear-gradient(90deg,#1D428A,#C8102E)";
 
     heroEl.style.background=gradient;
