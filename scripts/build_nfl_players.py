@@ -44,8 +44,45 @@ TEAM_MAP = {
     "SF":"San Francisco 49ers",
     "TB":"Tampa Bay Buccaneers",
     "TEN":"Tennessee Titans",
-    "WAS":"Washington Commanders"
+    "WAS":"Washington Commanders",
+    # nflverse / Pro-Football-Reference codes for the same franchises
+    "LA":"Los Angeles Rams", "STL":"Los Angeles Rams", "RAM":"Los Angeles Rams",
+    "OAK":"Las Vegas Raiders", "LVR":"Las Vegas Raiders", "RAI":"Las Vegas Raiders",
+    "SD":"Los Angeles Chargers", "SDG":"Los Angeles Chargers",
+    "GNB":"Green Bay Packers", "KAN":"Kansas City Chiefs", "NWE":"New England Patriots",
+    "NOR":"New Orleans Saints", "SFO":"San Francisco 49ers", "TAM":"Tampa Bay Buccaneers",
+    "JAC":"Jacksonville Jaguars", "PHO":"Arizona Cardinals", "HTX":"Houston Texans",
+    "CLT":"Indianapolis Colts", "OTI":"Tennessee Titans", "RAV":"Baltimore Ravens",
+    "CRD":"Arizona Cardinals", "WSH":"Washington Commanders"
 }
+
+# Season files rebuilt from nflverse (1999 onwards) use game ids like
+# "2023_01_DET_KC", but the old boxscore files for those years are named
+# "2023_0001.json", so they no longer line up. Those season files carry each
+# player's stats inside the game, so when there is no matching boxscore the
+# player rows are built from there instead.
+SECTION_FIELDS = {
+    "passing":   (lambda p: (p.get("attempts") or 0) > 0,
+                  {"pass_cmp": "completions", "pass_att": "attempts", "pass_yds": "passing_yards",
+                   "pass_td": "passing_tds", "pass_int": "interceptions"}),
+    "rushing":   (lambda p: (p.get("carries") or 0) > 0,
+                  {"rush_att": "carries", "rush_yds": "rushing_yards", "rush_td": "rushing_tds"}),
+    "receiving": (lambda p: (p.get("targets") or 0) > 0 or (p.get("receptions") or 0) > 0,
+                  {"rec": "receptions", "targets": "targets", "rec_yds": "receiving_yards",
+                   "rec_td": "receiving_tds"}),
+}
+
+def box_from_season_players(plist):
+    box = {"passing": [], "rushing": [], "receiving": []}
+    for p in plist or []:
+        if not p.get("player"):
+            continue
+        for sec, (has, fields) in SECTION_FIELDS.items():
+            if has(p):
+                stats = {"team": p.get("team", "")}
+                stats.update({k: p.get(src, 0) or 0 for k, src in fields.items()})
+                box[sec].append({"player": p["player"], "stats": stats})
+    return box
 
 def slugify(name):
     return (
@@ -100,15 +137,18 @@ for season_file in season_files:
 
         box_path = f"{BOXSCORE_DIR}/{season}/{game_id}.json"
 
-        if not os.path.exists(box_path):
-            continue
+        box = None
+        if os.path.exists(box_path):
+            try:
+                with open(box_path, "r", encoding="utf-8") as f:
+                    box = json.load(f)
+            except Exception:
+                box = None
 
-        try:
+        if box is None and game.get("players"):
+            box = box_from_season_players(game["players"])
 
-            with open(box_path, "r", encoding="utf-8") as f:
-                box = json.load(f)
-
-        except:
+        if box is None:
             continue
 
         sections = {
