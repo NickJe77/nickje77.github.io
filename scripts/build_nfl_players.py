@@ -168,6 +168,16 @@ for season_file in season_files:
             if (p.get("stats") or {}).get("team")
         ]))
 
+        # Fantasy points from the season file (nflverse), keyed by player name
+        fantasy_by_name = {}
+        for sp in game.get("players") or []:
+            if sp.get("player") and sp.get("fantasy_points_ppr") is not None:
+                fantasy_by_name[sp["player"]] = {
+                    "std":  sp.get("fantasy_points_std"),
+                    "half": sp.get("fantasy_points_half"),
+                    "ppr":  sp.get("fantasy_points_ppr"),
+                }
+
         for section_name, section_players in sections.items():
 
             for p in section_players:
@@ -216,6 +226,9 @@ for season_file in season_files:
                     "section": section_name,
                     "stats": stats
                 }
+
+                if name in fantasy_by_name:
+                    obj["fantasy"] = fantasy_by_name[name]
 
                 player_obj["games"].append(obj)
 
