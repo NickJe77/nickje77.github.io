@@ -127,6 +127,13 @@ tbody tr:hover td{background:#f9fbfd;}
   <h3 id="receivingTeam2"></h3>
   <table><thead><tr><th class="team">Player</th><th>REC</th><th>YDS</th><th>TD</th><th>LONG</th></tr></thead>
   <tbody id="receivingTable2"></tbody></table>
+  <h2>Fantasy Points</h2>
+  <h3 id="fantasyTeam1"></h3>
+  <table><thead><tr><th class="team">Player</th><th>POS</th><th>PPR</th><th>HALF</th><th>STD</th></tr></thead>
+  <tbody id="fantasyTable1"></tbody></table>
+  <h3 id="fantasyTeam2"></h3>
+  <table><thead><tr><th class="team">Player</th><th>POS</th><th>PPR</th><th>HALF</th><th>STD</th></tr></thead>
+  <tbody id="fantasyTable2"></tbody></table>
 </div>
 
 <script>
@@ -202,6 +209,13 @@ async function loadGame(){
     console.log(err);
   }
 
+  // 1999 onwards: the season file holds every player's stats for the game
+  // (its game ids no longer match the old boxscore file names), so build the
+  // box score from that when there is no boxscore file.
+  if(!box && Array.isArray(game.players) && game.players.length){
+    box = boxFromSeasonPlayers(game.players);
+  }
+
   if(!box){
     const notice = '<tr><td class="empty" colspan="7">Boxscore not available yet</td></tr>';
     document.getElementById("passingTeam1").innerText = team1;
@@ -216,6 +230,10 @@ async function loadGame(){
     document.getElementById("rushingTable2").innerHTML   = notice;
     document.getElementById("receivingTable1").innerHTML = notice;
     document.getElementById("receivingTable2").innerHTML = notice;
+    document.getElementById("fantasyTeam1").innerText = team1;
+    document.getElementById("fantasyTeam2").innerText = team2;
+    document.getElementById("fantasyTable1").innerHTML = notice;
+    document.getElementById("fantasyTable2").innerHTML = notice;
     return;
   }
 
@@ -288,6 +306,64 @@ async function loadGame(){
   document.getElementById("rushingTable2").innerHTML   = ru2 || emptyRow(5);
   document.getElementById("receivingTable1").innerHTML = re1 || emptyRow(5);
   document.getElementById("receivingTable2").innerHTML = re2 || emptyRow(5);
+
+  renderFantasy(game, [passers, box.rushing || [], box.receiving || []], team1Code, team2Code, boxTeam1, boxTeam2);
+}
+
+function boxFromSeasonPlayers(plist){
+  const box = {passing:[], rushing:[], receiving:[]};
+  plist.forEach(function(p){
+    if(!p.player) return;
+    if((p.attempts||0) > 0) box.passing.push({player:p.player, stats:{team:p.team,
+      pass_cmp:p.completions||0, pass_att:p.attempts||0, pass_yds:p.passing_yards||0,
+      pass_td:p.passing_tds||0, pass_int:p.interceptions||0}});
+    if((p.carries||0) > 0) box.rushing.push({player:p.player, stats:{team:p.team,
+      rush_att:p.carries||0, rush_yds:p.rushing_yards||0, rush_td:p.rushing_tds||0}});
+    if((p.receptions||0) > 0 || (p.targets||0) > 0) box.receiving.push({player:p.player, stats:{team:p.team,
+      rec:p.receptions||0, targets:p.targets||0, rec_yds:p.receiving_yards||0, rec_td:p.receiving_tds||0}});
+  });
+  // the team list is read from passers; make sure both teams appear
+  if(!box.passing.length) box.passing = box.rushing.concat(box.receiving);
+  return box;
+}
+
+function renderFantasy(game, sections, team1Code, team2Code, name1, name2){
+  let rows = [];
+  if(Array.isArray(game.players) && game.players.some(p => p.fantasy_points_ppr != null)){
+    rows = game.players.map(p => ({player:p.player, pos:p.position||"", team:p.team,
+      ppr:+p.fantasy_points_ppr||0, half:+p.fantasy_points_half||0, std:+p.fantasy_points_std||0}));
+  } else {
+    // Older games: work it out from the box score with standard scoring.
+    // A player can appear in several sections (and older box scores repeat
+    // the full stat line in each), so take the highest value of each stat.
+    const merged = {};
+    sections.forEach(list => list.forEach(e => {
+      const s = e.stats || {}, k = e.player + "|" + (s.team||"");
+      const m = merged[k] = merged[k] || {player:e.player, team:s.team, st:{}};
+      ["pass_yds","pass_td","pass_int","rush_yds","rush_td","rec","rec_yds","rec_td","fumbles_lost"].forEach(f => {
+        const v = Number(s[f]||0); if(Math.abs(v) > Math.abs(m.st[f]||0)) m.st[f] = v;
+      });
+    }));
+    rows = Object.values(merged).map(m => {
+      const t = m.st, n = f => t[f]||0;
+      const std = n("pass_yds")*0.04 + n("pass_td")*4 - n("pass_int")*2 + n("rush_yds")*0.1 + n("rush_td")*6 +
+                  n("rec_yds")*0.1 + n("rec_td")*6 - n("fumbles_lost")*2;
+      return {player:m.player, pos:"", team:m.team, std:std, half:std + n("rec")*0.5, ppr:std + n("rec")};
+    });
+  }
+  rows.sort((a,b) => b.ppr - a.ppr);
+  const fmt = v => (Math.round(v*10)/10).toFixed(1);
+  let f1 = "", f2 = "";
+  rows.forEach(r => {
+    if(!r.ppr && !r.std) return;
+    const row = '<tr><td class="team">'+makePlayerLink(r.player)+'</td><td>'+r.pos+'</td>'+
+      '<td><b>'+fmt(r.ppr)+'</b></td><td>'+fmt(r.half)+'</td><td>'+fmt(r.std)+'</td></tr>';
+    if(r.team === team1Code) f1 += row; else if(r.team === team2Code) f2 += row;
+  });
+  document.getElementById("fantasyTeam1").innerText = name1;
+  document.getElementById("fantasyTeam2").innerText = name2;
+  document.getElementById("fantasyTable1").innerHTML = f1 || emptyRow(5);
+  document.getElementById("fantasyTable2").innerHTML = f2 || emptyRow(5);
 }
 
 loadGame();
