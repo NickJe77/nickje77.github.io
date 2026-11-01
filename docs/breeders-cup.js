@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return res.json();
     })
     .then(data => {
+      // Accept "Year"/"year" etc. — lowercase every field name
+      data = data.map(r => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.toLowerCase(), v])));
       // Sort newest → oldest
       allRows = data.sort((a, b) => (b.year || 0) - (a.year || 0));
 
