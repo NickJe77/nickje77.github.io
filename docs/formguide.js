@@ -72,6 +72,14 @@
     return main.replace(/^Group (\d)$/i, "G$1").replace(/^Listed$/i, "LR");
   }
   const dist = (r) => num(r.distance);
+  // race time for display: 1-40.00 -> 1:40.00, and Excel's "Jan-40" -> 1:40.00
+  const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  function runTime(v) {
+    let t = String(v || "").trim(), m;
+    if ((m = t.match(/^([A-Za-z]{3})[-:\s]?(\d{1,2})(\.\d+)?$/)) && MON.includes(m[1].toLowerCase())) t = `${MON.indexOf(m[1].toLowerCase()) + 1}:${m[2].padStart(2, "0")}${m[3] || ".00"}`;
+    else if ((m = t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})$/)) && MON.includes(m[2].toLowerCase())) t = `${MON.indexOf(m[2].toLowerCase()) + 1}:${m[1].padStart(2, "0")}.00`;
+    return dash(t.replace("-", ":"));
+  }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
   const meetingURL = (t, d) => `meeting.html?track=${encodeURIComponent(t)}&date=${d}`;
   // ---- same name, different horses (Lady Catalina in Australia and another in the USA)
@@ -345,7 +353,7 @@
       <div class="stat"><small>Winner</small><b style="font-size:17px">${esc(win.horse)}</b></div>
       <div class="stat"><small>Winning barrier</small><b>${dash(win.barrier)}</b></div>
       <div class="stat"><small>Winner's SP</small><b>${dash(win.starting_odds)}</b></div>
-      <div class="stat"><small>Winning time</small><b>${dash(String(win.finish_time || "").replace("-", ":"))}</b></div>
+      <div class="stat"><small>Winning time</small><b>${runTime(win.finish_time)}</b></div>
       <div class="stat"><small>Favourite</small><b style="font-size:17px">${fav ? esc(fav.horse) + " (" + posLabel(fav) + ")" : "—"}</b></div>
       <div class="stat"><small>Second's margin</small><b>${dash((runs.find((r) => pos(r) === 2) || {}).margin)}${(runs.find((r) => pos(r) === 2) || {}).margin ? "L" : ""}</b></div>
     </div>`;
@@ -359,7 +367,7 @@
       const byDate = groupBy(d.runs.filter((x) => x.date !== r.date), (x) => x.date);
       const rows = Object.keys(byDate).sort().reverse().map((dt) => {
         const w = byDate[dt].find((x) => pos(x) === 1) || byDate[dt][0];
-        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${dash(String(w.finish_time || "").replace("-", ":"))}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
+        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${runTime(w.finish_time)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
       });
       el.innerHTML = rows.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th class="name">Winner</th><th>Barrier</th><th>Jockey</th><th>Trainer</th><th>SP</th><th>Time</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`
         : `<div class="pad note">No earlier runnings of "${esc(r.race_name)}" at ${esc(track(r.track).name)} in the database.</div>`;
@@ -531,7 +539,7 @@
     speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
     $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
     $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
-      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${dash(String(r.finish_time || "").replace("-", ":"))}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`).join("")}</tbody></table></div>
+      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${runTime(r.finish_time)}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
     tabs("#racetabs");
@@ -642,7 +650,7 @@
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">R${r.race} ${esc(r.race_name)}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
-          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${dash(String(r.finish_time || "").replace("-", ":"))}</td><td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
+          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${runTime(r.finish_time)}</td><td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`;
       }).join("") || `<tr><td colspan="18">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
