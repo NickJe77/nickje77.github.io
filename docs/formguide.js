@@ -34,12 +34,23 @@
   // ------------------------------------------------------------ tracks, horses, races
   const TRACKS = window.TRACKS || {};
   const AU = new Set(["NSW", "VIC", "QLD", "WA", "SA", "TAS", "NT", "ACT"]);
+  const TYPE_ORDER = ["Metro", "Provincial", "Country", "Picnic", "International", ""];
+  // track names -> codes, so venue names from the fields feed ("Pakenham") find your entry (PAKM)
+  const nameKey = (n) => String(n || "").toLowerCase().replace(/\(.*?\)/g, "").replace(/[^a-z0-9]/g, "");
+  const BY_NAME = {};
+  Object.entries(TRACKS).forEach(([c, t]) => { const k = nameKey(t[0]); if (k) (BY_NAME[k] ||= []).push(c); });
+  // same name in two countries (Ascot WA / Ascot UK): pick the one in the right country
+  const byName = (n, intl) => { const l = BY_NAME[nameKey(n)] || []; return l.find((c) => AU.has(TRACKS[c][1]) !== intl) || (l.length === 1 && TRACKS[l[0]][2] !== "International" && !intl ? l[0] : null); };
+  const shortCode = (c) => /^[A-Z0-9 .]{2,5}$/.test(c || "");
   function track(code, extra) {
-    const t = TRACKS[code] || TRACKS[(code || "").toUpperCase()];
-    if (t) return { code, name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
     const x = extra || {};
-    const intl = x.venue_country && !/^AU/i.test(x.venue_country);
-    return { code, name: x.venue_name || code, state: intl ? x.venue_country : (x.venue_state || ""), type: intl ? "International" : "", aus: !intl };
+    const intl = x.venue_country ? !/^AU/i.test(x.venue_country) : false;
+    const c = TRACKS[code] ? code : TRACKS[(code || "").toUpperCase()] ? (code || "").toUpperCase()
+      : byName(x.venue_name, intl) || byName(String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus|can|brz|saf)$/i, "").replace(/-/g, " "), intl);
+    const t = c && TRACKS[c];
+    if (t) return { code, show: shortCode(c) ? c : "", name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
+    const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+    return { code, show: shortCode(code) ? code : "", name, state: intl ? x.venue_country : (x.venue_state || ""), type: intl ? "International" : "Country", aus: !intl };
   }
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
   const isScr = (r) => Number(r.scratched) === 1;
@@ -310,9 +321,9 @@
       const list = data.meetings.map((m) => ({ ...m, t: track(m.track, m) }))
         .filter((m) => state === "ALL" || (state === "INT" ? !m.t.aus : m.t.state === state))
         .filter((m) => (m.t.name + " " + m.track).toLowerCase().includes(q))
-        .sort((a, b) => ["Metro", "Provincial", "Country", "International", ""].indexOf(a.t.type) - ["Metro", "Provincial", "Country", "International", ""].indexOf(b.t.type) || a.t.name.localeCompare(b.t.name));
+        .sort((a, b) => (b.t.aus - a.t.aus) || (TYPE_ORDER.indexOf(a.t.type) - TYPE_ORDER.indexOf(b.t.type)) || a.t.name.localeCompare(b.t.name));
       $("#count").textContent = list.length + " meetings · " + fmtDate(data.date, true) + (data.date === data.today ? " (today)" : "");
-      rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a> <span class="mini">${esc(m.track)}</span></td>
+      rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a> <span class="mini">${esc(m.t.show)}</span></td>
         <td>${esc(m.t.state) || "—"}</td><td>${esc(m.t.type) || "—"}</td><td>${m.races}</td><td>${m.runners}</td>
         <td>${esc(goingLabel(m)) || "—"}</td><td>${m.upcoming ? esc(fmtTime(m.first_race)) || "—" : '<span class="pill">Results</span>'}</td>
         <td><a class="btn" href="${meetingURL(m.track, data.date)}">${m.upcoming ? "Form Guide →" : "View Meeting →"}</a></td></tr>`).join("")
