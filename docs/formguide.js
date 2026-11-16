@@ -74,9 +74,41 @@
   const dist = (r) => num(r.distance);
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
   const meetingURL = (t, d) => `meeting.html?track=${encodeURIComponent(t)}&date=${d}`;
-  const horseURL = (n) => `horse.html?horse=${encodeURIComponent(n)}`;
+  // ---- same name, different horses (Lady Catalina in Australia and another in the USA)
+  // Runs are grouped by the country they were run in (Australia + NZ count as one, so do Britain + Ireland),
+  // and two countries are joined when the same trainer had the horse in both (an Irish raider in the Melbourne Cup).
+  const CC = { NZL: "NZ", UK: "GBR", GB: "GBR", ENG: "GBR", IRL: "IRE", RSA: "SAF", ZAF: "SAF", US: "USA", HKG: "HK", JAP: "JPN" };
+  const countryOf = (r) => { const t = track(r.track, r); if (t.aus) return "AUS"; const c = String(t.state || "").toUpperCase().replace(/[^A-Z]/g, ""); return CC[c] || c || "INT"; };
+  const regionOf = (r) => { const c = countryOf(r); return c === "AUS" || c === "NZ" ? "ANZ" : c === "GBR" || c === "IRE" ? "GBI" : c; };
+  const trainerKeys = (t) => String(t || "").toLowerCase().split(/\s*(?:&|\/|,|\band\b)\s*/).map((x) => {
+    const w = x.replace(/[^a-z\s]/g, " ").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length > 1 ? w[0][0] : "") + w[w.length - 1] : ""; }).filter((k) => k.length > 2);
+  function horseGroups(runs) {
+    const regions = [...new Set(runs.map(regionOf))], parent = Object.fromEntries(regions.map((g) => [g, g]));
+    const find = (g) => parent[g] === g ? g : (parent[g] = find(parent[g]));
+    const byTrainer = {};
+    runs.forEach((r) => trainerKeys(r.trainer).forEach((k) => (byTrainer[k] ||= new Set()).add(regionOf(r))));
+    Object.values(byTrainer).forEach((set) => { const l = [...set]; l.slice(1).forEach((g) => { parent[find(g)] = find(l[0]); }); });
+    const groups = {};
+    runs.forEach((r) => { const g = find(regionOf(r)); (groups[g] ||= { regions: new Set(), runs: [] }).runs.push(r); groups[g].regions.add(regionOf(r)); });
+    return Object.values(groups).map((g) => {
+      const n = {}; g.runs.forEach((r) => { const c = countryOf(r); n[c] = (n[c] || 0) + 1; });
+      const country = Object.entries(n).sort((a, b) => b[1] - a[1])[0][0];
+      const latest = [...g.runs].sort((a, b) => b.date.localeCompare(a.date))[0];
+      return { ...g, country, latest, id: country };
+    }).sort((a, b) => (b.regions.has("ANZ") - a.regions.has("ANZ")) || b.latest.date.localeCompare(a.latest.date));
+  }
+  // the runs that belong to the same horse as "ref" (a run or a field entry)
+  function sameHorse(runs, ref) {
+    if (!runs || !runs.length || !ref) return runs || [];
+    const gs = horseGroups(runs); if (gs.length < 2) return runs;
+    const tk = new Set(trainerKeys(ref.trainer)), rg = regionOf(ref);
+    const g = gs.find((x) => x.runs.some((r) => trainerKeys(r.trainer).some((k) => tk.has(k)))) || gs.find((x) => x.regions.has(rg));
+    return g ? g.runs : [];
+  }
+  const fixHistory = (card) => { (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
+  const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "");
   const silk = (r, big) => r && r.silk ? `<img class="silk${big ? " big" : ""}" src="${esc(r.silk)}" alt="" loading="lazy">` : `<span class="silk none${big ? " big" : ""}"></span>`;
-  const horseCell = (r) => `<span class="horsecell">${silk(r)}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a></span>`;
+  const horseCell = (r) => `<span class="horsecell">${silk(r)}<a href="${horseURL(r.horse, r)}">${esc(r.horse)}</a></span>`;
 
   // records like "24: 5-3-4"
   function record(runs) {
@@ -372,7 +404,7 @@
     $("#datecrumb").href = "form-guide.html?date=" + d;
     loading($("#runners"));
     let card;
-    try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`); } catch (e) { return fail($("#runners"), e); }
+    try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`)); } catch (e) { return fail($("#runners"), e); }
     const tr = track(t, card.runs[0]), up = card.upcoming;
     document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
     $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
@@ -429,7 +461,7 @@
     $("#rn").textContent = n; $("#comparelink").href = `comparison.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`;
     loading($("#field"));
     let card;
-    try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`); } catch (e) { return fail($("#field"), e); }
+    try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`)); } catch (e) { return fail($("#field"), e); }
     const runs = card.runs, r0 = runs[0], tr = track(t, r0), up = card.upcoming;
     $("#meetinglink").textContent = tr.name;
     if (!r0) { $("#field").innerHTML = `<tr><td colspan="11">No race ${n} at ${esc(tr.name)} on ${fmtDate(d)}.</td></tr>`; return; }
@@ -488,6 +520,23 @@
     try {
       [runs, entries] = await Promise.all([get(`/api/runs?horse=${encodeURIComponent(name)}&limit=5000`).then((x) => x.runs), get(`/api/upcoming?horse=${encodeURIComponent(name)}`).catch(() => [])]);
     } catch (e) { return fail($("#formrows"), e); }
+    // more than one horse with this name? show the one asked for (c=country) and offer the others
+    const groups = horseGroups(runs);
+    if (groups.length > 1) {
+      const want = qs("c").toUpperCase(), wantRg = want === "NZ" ? "ANZ" : want === "IRE" || want === "GBR" ? "GBI" : want;
+      const e0 = entries.find((e) => !isScr(e));
+      let g = (want && groups.find((x) => x.regions.has(wantRg) || x.regions.has(want)))
+        || (e0 && groups.find((x) => x.runs.includes(sameHorse(runs, e0)[0]))) || groups[0];
+      runs = g.runs;
+      entries = entries.filter((e) => g.regions.has(regionOf(e)) || trainerKeys(e.trainer).some((k) => g.runs.some((r) => trainerKeys(r.trainer).includes(k))));
+      if (!g.regions.has("ANZ")) runs = runs.map((r) => ({ ...r, silk: null }));   // the silks folder is Australian horses
+      const nm = groups[0].latest.horse.replace(/\s*\([A-Z]{2,4}\)\s*$/, "");
+      const box = document.createElement("div");
+      box.className = "twins";
+      box.innerHTML = `<b>${groups.length} horses are called ${esc(nm)}.</b> Showing: ` + groups.map((x) =>
+        `<a class="filter${x === g ? " active" : ""}" href="horse.html?horse=${encodeURIComponent(qs("horse"))}&c=${x.id}">${esc(nm)} (${esc(x.id)}) · ${esc(dash(x.latest.trainer))} · ${x.runs.length} start${x.runs.length === 1 ? "" : "s"}</a>`).join(" ");
+      $(".hero").before(box);
+    }
     $('[data-tabcontent="entries"]').innerHTML = `<h3>Upcoming Entries</h3>` + (entries.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Track</th><th class="name">Race</th><th>Dist</th><th>No.</th><th>Barrier</th><th>Weight</th><th>Jockey</th></tr></thead><tbody>${entries.map((e) =>
       `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">R${e.race} ${esc(e.race_name)}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="note">No upcoming starts in the next few days.</p>`);
@@ -583,7 +632,7 @@
     $("#racelink").href = `race.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`;
     loading($("#compbody"));
     let card;
-    try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`); } catch (e) { return fail($("#compbody"), e); }
+    try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`)); } catch (e) { return fail($("#compbody"), e); }
     const runs = card.runs.filter((r) => !isScr(r)), up = card.upcoming, tr = track(t, runs[0]);
     $("#racelink").textContent = `${tr.name} Race ${n}`;
     if (!runs.length) { $("#compbody").innerHTML = `<tr><td>No such race.</td></tr>`; return; }
@@ -601,7 +650,7 @@
       ["Last start", (r) => { const l = stats.get(r).last; return l ? `${posLabel(l)} · ${esc(track(l.track).name)} ${dash(l.distance)}m · ${fmtDate(l.date)}` : "First start"; }],
     ];
     function comp() {
-      $("#comphead").innerHTML = "<tr><th>Metric</th>" + selected.map((r) => `<th><a href="${horseURL(r.horse)}">${esc(r.horse)}</a> <button data-x="${runs.indexOf(r)}" title="Remove">×</button></th>`).join("") + "</tr>";
+      $("#comphead").innerHTML = "<tr><th>Metric</th>" + selected.map((r) => `<th><a href="${horseURL(r.horse, r)}">${esc(r.horse)}</a> <button data-x="${runs.indexOf(r)}" title="Remove">×</button></th>`).join("") + "</tr>";
       $("#compbody").innerHTML = rowsDef.map(([l, f]) => `<tr><td>${l}</td>${selected.map((r) => `<td>${f(r)}</td>`).join("")}</tr>`).join("");
       $$("#comphead [data-x]").forEach((b) => b.onclick = () => { selected = selected.filter((r) => r !== runs[Number(b.dataset.x)]); comp(); });
     }
