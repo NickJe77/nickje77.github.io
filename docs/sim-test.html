@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Virtual Race Test | The Sporting Almanac</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="formguide.css">
+<style>
+  .simtest .field{padding:7px 9px}
+  .simtest label{display:inline-flex;flex-direction:column;gap:3px;font-size:12px;font-weight:600;color:var(--muted);margin-right:10px}
+  .simtest .bar{height:8px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:10px 0}
+  .simtest .bar>div{height:100%;background:var(--blue);width:0;transition:width .2s}
+  .simtest textarea{width:100%;min-height:150px;font:12px ui-monospace,monospace;padding:10px;border:1px solid var(--line);border-radius:10px}
+  .simtest td.best{background:#e7f6ec;font-weight:700}
+</style>
+</head>
+<body data-page="simtest">
+<header><div class="brand"><a href="racing.html">THE <span>SPORTING</span> ALMANAC</a></div><nav><a href="racing.html">Racing</a><a href="form-guide.html">Form Guide</a><a href="blackbook.html">Blackbook</a></nav></header>
+<main id="main" class="simtest">
+<h1>Virtual Race Test</h1>
+<p class="sub">Runs the virtual race over past races using only what was known before each race (form, and a speed map predicted from where each horse usually settles), then checks it against the real result and the favourite.</p>
+<div class="panel pad">
+  <label>From<input class="field" type="date" id="from"></label>
+  <label>To<input class="field" type="date" id="to"></label>
+  <label>Meetings<select class="field" id="types"><option value="Metro">Metro only</option><option value="Metro,Provincial" selected>Metro + Provincial</option><option value="Metro,Provincial,Country">All Australian</option></select></label>
+  <label>Most races<select class="field" id="max"><option>150</option><option selected>300</option><option>600</option></select></label>
+  <button class="primary" id="go">Run test</button>
+  <div class="bar"><div id="prog"></div></div>
+  <p class="note" id="status">Takes a few minutes for 300 races. Leave this tab open while it runs.</p>
+</div>
+<section class="panel" style="margin-top:16px"><div class="tablewrap"><table>
+  <thead><tr><th class="name">Setting</th><th>Races</th><th>Top pick won</th><th>Top pick placed</th><th>Winner's avg rank</th><th>Score (lower is better)</th></tr></thead>
+  <tbody id="rows"><tr><td colspan="6" class="note">Results appear here.</td></tr></tbody></table></div></section>
+<h3 style="margin-top:18px">Copy this and send it to Claude</h3>
+<textarea id="out" readonly placeholder="The summary appears here when the test finishes."></textarea>
+<p class="foot">The Sporting Almanac Form Guide</p>
+</main>
+<script src="formguide-tracks.js"></script>
+<script src="formguide.js"></script>
+<script>
+(function () {
+  const FG = window.FG, $ = (s) => document.querySelector(s);
+  const iso = (d) => d.toISOString().slice(0, 10), day = 86400000;
+  $("#to").value = iso(new Date(Date.now() + 10 * 3600000 - day));
+  $("#from").value = iso(new Date(Date.now() + 10 * 3600000 - 46 * day));
+  const VARIANTS = [
+    ["Current settings", {}],
+    ["No pace/map effect", { paceL: 0 }], ["Double pace/map effect", { paceL: 3 }],
+    ["Class counts half", { classScale: 0.5 }], ["Class counts 1.5×", { classScale: 1.5 }],
+    ["No distance/going/track record", { suitScale: 0 }], ["Double distance/going/track record", { suitScale: 2 }],
+    ["No weight effect", { weightScale: 0 }], ["Double weight effect", { weightScale: 2 }],
+    ["Older runs count more", { recency: 0.92 }], ["Recent runs count more", { recency: 0.7 }],
+  ];
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  async function get(path, tries = 3) {
+    for (let i = 0; ; i++) { try { return await FG.get(path); } catch (e) { if (i >= tries) throw e; await sleep(1500 * (i + 1)); } }
+  }
+  $("#go").onclick = async () => {
+    $("#go").disabled = true;
+    const types = $("#types").value.split(","), max = Number($("#max").value), from = $("#from").value, to = $("#to").value;
+    const stats = VARIANTS.map(() => ({ n: 0, win: 0, place: 0, rank: 0, ll: 0 })), fav = { n: 0, win: 0, place: 0 };
+    let races = 0, d = to;
+    const status = (t) => $("#status").textContent = t;
+    while (d >= from && races < max) {
+      status(`${d}: looking for meetings… (${races} races tested so far)`);
+      let m;
+      try { m = await get("/api/meetings?date=" + d); } catch (e) { d = iso(new Date(new Date(d) - day)); continue; }
+      const meets = (m.meetings || []).filter((x) => !x.upcoming).map((x) => ({ ...x, t: FG.track(x.track, x) })).filter((x) => x.t.aus && types.includes(x.t.type));
+      for (const mt of meets) {
+        if (races >= max) break;
+        let card;
+        try { card = FG.fixHistory(await get(`/api/card?track=${encodeURIComponent(mt.track)}&date=${d}`)); } catch (e) { continue; }
+        const byRace = {};
+        card.runs.forEach((r) => (byRace[r.race] ||= []).push(r));
+        for (const rs of Object.values(byRace)) {
+          const live = rs.filter((r) => !FG.isScr(r) && FG.pos(r));
+          if (live.length < 5 || !live.some((r) => FG.pos(r) === 1) || races >= max) continue;
+          const place = FG.initialPlacement(live, card.history, true), pace = FG.suggestPace(place);
+          const today = { dist: FG.num(live[0].distance), going: (live[0].track_condition || ""), track: live[0].track, date: live[0].date };
+          today.going = /^good/i.test(today.going) ? "Good" : /^soft/i.test(today.going) ? "Soft" : /^heavy/i.test(today.going) ? "Heavy" : /^synth/i.test(today.going) ? "Synthetic" : today.going;
+          VARIANTS.forEach(([, o], vi) => {
+            const order = FG.runVirtualRace(live, place, pace, card.history, today, { pattern: "none", lane: "none", strength: "moderate" }, { ...o, N: 400 });
+            const st = stats[vi], top = order[0], w = order.find((x) => FG.pos(x.r) === 1);
+            st.n++; if (FG.pos(top.r) === 1) st.win++; if (FG.pos(top.r) <= 3) st.place++;
+            st.rank += order.indexOf(w) + 1; st.ll += -Math.log(Math.max(0.005, w.winPct / 100));
+          });
+          const f = [...live].filter((r) => FG.num(r.starting_odds)).sort((a, b) => FG.num(a.starting_odds) - FG.num(b.starting_odds))[0];
+          if (f) { fav.n++; if (FG.pos(f) === 1) fav.win++; if (FG.pos(f) <= 3) fav.place++; }
+          races++;
+        }
+        $("#prog").style.width = (100 * races / max) + "%";
+        show(stats, fav);
+        await sleep(400);                                   // go easy on the database
+      }
+      d = iso(new Date(new Date(d) - day));
+    }
+    status(`Done: ${races} races from ${d} to ${to}.`);
+    $("#prog").style.width = "100%";
+    show(stats, fav, true, { from: d, to, types, races });
+    $("#go").disabled = false;
+  };
+  function show(stats, fav, done, info) {
+    const pct = (a, b) => b ? (100 * a / b).toFixed(1) + "%" : "—";
+    const best = Math.min(...stats.map((s) => s.n ? s.ll / s.n : 99));
+    $("#rows").innerHTML = VARIANTS.map(([name], i) => { const s = stats[i];
+      return `<tr><td class="name">${name}</td><td>${s.n}</td><td>${pct(s.win, s.n)}</td><td>${pct(s.place, s.n)}</td><td>${s.n ? (s.rank / s.n).toFixed(2) : "—"}</td>
+        <td class="${s.n && s.ll / s.n === best ? "best" : ""}">${s.n ? (s.ll / s.n).toFixed(3) : "—"}</td></tr>`; }).join("")
+      + `<tr><td class="name"><b>Favourite (starting price)</b></td><td>${fav.n}</td><td>${pct(fav.win, fav.n)}</td><td>${pct(fav.place, fav.n)}</td><td>—</td><td>—</td></tr>`;
+    if (done) $("#out").value = JSON.stringify({ ...info, favourite: { races: fav.n, won: pct(fav.win, fav.n), placed: pct(fav.place, fav.n) },
+      settings: VARIANTS.map(([name, o], i) => ({ name, o, races: stats[i].n, top_won: pct(stats[i].win, stats[i].n), top_placed: pct(stats[i].place, stats[i].n),
+        winner_rank: +(stats[i].rank / stats[i].n).toFixed(2), score: +(stats[i].ll / stats[i].n).toFixed(3) })) }, null, 1);
+  }
+})();
+</script>
+</body>
+</html>

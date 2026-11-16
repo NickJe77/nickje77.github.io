@@ -26,16 +26,20 @@
     .replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16))).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   // one spelling per jockey: "Fred W Kersley" / "Fred W. Kersley" -> "Fred Kersley" (middle initials dropped), "FRED KERSLEY" -> "Fred Kersley"
+  // trainers too, one partner at a time: "Jay P. Bernardini" -> "Jay Bernardini", "Annabel & Rob Archibald" stays as it is
   function personName(v) {
-    let w = String(v || "").replace(/\s+/g, " ").trim().split(" ");
-    if (w.length >= 3) w = [w[0], ...w.slice(1, -1).filter((x) => !/^[A-Za-z]\.?$/.test(x)), w[w.length - 1]];
-    const t = w.join(" ");
-    return /[a-z]/.test(t) ? t : t.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+    const one = (x) => {
+      let w = x.replace(/\s+/g, " ").trim().split(" ");
+      if (w.length >= 3) w = [w[0], ...w.slice(1, -1).filter((y) => !/^[A-Za-z]\.?$/.test(y)), w[w.length - 1]];
+      return w.join(" ");
+    };
+    const t = String(v || "").split(/(\s*&\s*|\s+and\s+|\s*\/\s*)/).map((x, i) => i % 2 ? x : one(x)).join("");
+    return /[a-z]/.test(t) ? t : t.toLowerCase().replace(/(^|[\s'&-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
   }
   async function get(path) {
     const r = await fetch(API + path);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
-    return JSON.parse(await r.text(), (k, v) => k === "jockey" && typeof v === "string" ? personName(unent(v)) : unent(v));
+    return JSON.parse(await r.text(), (k, v) => (k === "jockey" || k === "trainer") && typeof v === "string" ? personName(unent(v)) : unent(v));
   }
 
   // ------------------------------------------------------------ tracks, horses, races
@@ -483,7 +487,9 @@
   function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
   const placeRate = (list) => list.length ? list.filter((r) => { const p = pos(r); return p && p <= 3; }).length / list.length : null;
 
-  function horseModel(r, prior, today, field) {
+  // the weightings (tuned by sim-test.html against past races)
+  const SIM = { classScale: 1, suitScale: 1, weightScale: 1, paceL: 1.5, recency: 0.82 };
+  function horseModel(r, prior, today, field, o = SIM) {
     const notes = [];
     const recent = (prior || []).slice(0, 8);
     let sum = 0, wsum = 0;
@@ -492,7 +498,7 @@
       let beaten = num(h.margin);
       if (p === 1) beaten = -1;                                   // a win counts a length better than a narrow second
       else if (beaten === null) beaten = (p - 1) * 1.2;
-      const perf = CLASS_PTS[classBand(h)] - Math.min(beaten, 15), w = Math.pow(0.82, i);
+      const perf = CLASS_PTS[classBand(h)] * o.classScale - Math.min(beaten, 15), w = Math.pow(o.recency, i);
       sum += perf * w; wsum += w;
     });
     const nEff = wsum, raw = wsum ? sum / wsum : null;
@@ -500,7 +506,7 @@
     const add = (v, why) => { if (Math.abs(v) >= 0.3) notes.push((v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "L " + why); adj += v; };
     if (recent.length) {
       const career = placeRate(prior);
-      const suit = (list, why) => { if (list.length >= 2 && career !== null) add(Math.max(-1.5, Math.min(1.5, 3 * (placeRate(list) - career))), why); };
+      const suit = (list, why) => { if (list.length >= 2 && career !== null) add(o.suitScale * Math.max(-1.5, Math.min(1.5, 3 * (placeRate(list) - career))), why); };
       suit(prior.filter((h) => near(dist(h), today.dist, 150)), "at the distance");
       suit(prior.filter((h) => going(h) && going(h) === today.going), "on the going");
       suit(prior.filter((h) => h.track === today.track), "at the track");
@@ -514,14 +520,15 @@
       if (today.dist && best && today.dist > best + 400) add(-1, "untried this far");
     } else notes.push("no race form");
     const w = num(r.weight) - (num(r.claim) || 0);
-    if (w && field.avgWeight) add(-(w - field.avgWeight) * (0.4 + (today.dist || 1400) / 6000), "weight");
+    if (w && field.avgWeight) add(-o.weightScale * (w - field.avgWeight) * (0.4 + (today.dist || 1400) / 6000), "weight");
     return { raw, nEff, adj, notes, unknown: !recent.length };
   }
 
-  function runVirtualRace(live, place, pace, history, today, bias) {
+  function runVirtualRace(live, place, pace, history, today, bias, opts) {
+    const o = { ...SIM, ...(opts || {}) }, N = o.N || 1000;
     const ws = live.map((r) => num(r.weight) - (num(r.claim) || 0)).filter((x) => x);
     const field = { avgWeight: ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null };
-    const models = live.map((r) => ({ r, ...horseModel(r, (history || {})[r.horse_key] || [], today, field) }));
+    const models = live.map((r) => ({ r, ...horseModel(r, (history || {})[r.horse_key] || [], today, field, o) }));
     const known = models.filter((m) => m.raw !== null), mean = known.length ? known.reduce((a, m) => a + m.raw, 0) / known.length : 0;
     const S = BIAS_STRENGTH[bias.strength] || 3, fx = PACE_FX[pace];
     models.forEach((m) => {
@@ -529,7 +536,7 @@
       m.base = m.raw === null ? mean - 2.5 : (m.nEff * m.raw + 1.5 * mean) / (m.nEff + 1.5);
       const p = place[m.r.horse_key] || { c: 2, o: 0 }, c = p.c;
       const add = (v, why) => { if (Math.abs(v) >= 0.3) m.notes.push((v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "L " + why); m.adj += v; };
-      add(fx[c] * 1.5, COLS[c].toLowerCase() + " in a " + pace.toLowerCase() + " pace");
+      add(fx[c] * o.paceL, COLS[c].toLowerCase() + " in a " + pace.toLowerCase() + " pace");
       const b = num(m.r.barrier);
       if (b && b > 8 && c >= 1 && (today.dist || 0) < 1600) add(-0.15 * (b - 8), "wide barrier");
       if (b && b > 8 && c === 0) add(-0.1 * (b - 8), "crossing from wide");
@@ -539,7 +546,6 @@
       m.sd = m.unknown ? 3.2 : 2 + 3 / (1 + m.nEff);
       m.wins = 0; m.top3 = 0; m.posSum = 0;
     });
-    const N = 1000;
     for (let i = 0; i < N; i++) {
       const out = models.map((m) => ({ m, v: m.score + gauss() * m.sd })).sort((a, b) => b.v - a.v);
       out.forEach((o, j) => { if (j === 0) o.m.wins++; if (j < 3) o.m.top3++; o.m.posSum += j + 1; });
@@ -1095,7 +1101,7 @@
   };
 
   // ------------------------------------------------------------ start
-  window.FG = { track, record, figure, horseStats, API };
+  window.FG = { track, record, figure, horseStats, API, get, runVirtualRace, initialPlacement, suggestPace, fixHistory, pos, num, isScr, SIM };
   document.addEventListener("DOMContentLoaded", async () => {
     accountUI();
     await Promise.race([syncBook(), new Promise((r) => setTimeout(r, 3000))]);
