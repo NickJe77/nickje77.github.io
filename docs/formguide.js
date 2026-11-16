@@ -90,6 +90,8 @@
     const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
     return { code, show: shortCode(code) ? code : "", name: RENAME[nameKey(name)] || name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
   }
+  // the same track under two codes (MVAL / M V) counts as one track in a horse's record
+  const sameTrack = (a, b) => a === b || (!!a && !!b && nameKey(track(a).name) === nameKey(track(b).name) && track(a).aus === track(b).aus);
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
   const isScr = (r) => Number(r.scratched) === 1;
   const wt = (r) => r.weight ? r.weight + (r.claim && r.claim !== "0" ? ` <span class="mini">(a${esc(r.claim)})</span>` : "") : "—";
@@ -305,8 +307,8 @@
       last10: figure(prior, 10), last5: figure(prior, 5),
       dist: at ? record(prior.filter((r) => near(dist(r), d))) : null,
       going: at ? record(prior.filter((r) => going(r) === going(at))) : null,
-      track: at ? record(prior.filter((r) => r.track === at.track)) : null,
-      trackDist: at ? record(prior.filter((r) => r.track === at.track && near(dist(r), d))) : null,
+      track: at ? record(prior.filter((r) => sameTrack(r.track, at.track))) : null,
+      trackDist: at ? record(prior.filter((r) => sameTrack(r.track, at.track) && near(dist(r), d))) : null,
       jockey: at ? record(prior.filter((r) => r.jockey && r.jockey === at.jockey)) : null,
       firstUp: record(prior.filter((r) => tags.get(r) === 1)),
       secondUp: record(prior.filter((r) => tags.get(r) === 2)),
@@ -509,7 +511,7 @@
       const suit = (list, why) => { if (list.length >= 2 && career !== null) add(o.suitScale * Math.max(-1.5, Math.min(1.5, 3 * (placeRate(list) - career))), why); };
       suit(prior.filter((h) => near(dist(h), today.dist, 150)), "at the distance");
       suit(prior.filter((h) => going(h) && going(h) === today.going), "on the going");
-      suit(prior.filter((h) => h.track === today.track), "at the track");
+      suit(prior.filter((h) => sameTrack(h.track, today.track)), "at the track");
       const last = prior[0], gap = last ? days(last.date, today.date) : 0;
       if (gap >= SPELL_DAYS) {
         const tags = upTags(prior), fu = prior.filter((h) => tags.get(h) === 1);
@@ -999,8 +1001,8 @@
       .filter(([, r]) => r.n).map(([g, r]) => `<p>${g}: <b>${r.text}</b></p>`).join("") || "<p>—</p>";
     const s = horseStats(runs.slice(1), last), tags = upTags(runs);
     $("#fresh").innerHTML = `<p>First-up: <b>${record(runs.filter((r) => tags.get(r) === 1)).text}</b></p><p>Second-up: <b>${record(runs.filter((r) => tags.get(r) === 2)).text}</b></p>
-      <p>${esc(track(last.track).name)}: <b>${record(runs.filter((r) => r.track === last.track)).text}</b></p>
-      <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => r.track === last.track && near(dist(r), dist(last)))).text}</b></p>`;
+      <p>${esc(track(last.track).name)}: <b>${record(runs.filter((r) => sameTrack(r.track, last.track))).text}</b></p>
+      <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => sameTrack(r.track, last.track) && near(dist(r), dist(last)))).text}</b></p>`;
     $("#lastcmp").innerHTML = `<p>${esc(dash(last.jockey))} on this horse: <b>${record(runs.filter((r) => r.jockey && r.jockey === last.jockey)).text}</b></p>
       ${prev ? `<p>Weight change: <b>${fmtDelta(num(last.weight), num(prev.weight), "kg")}</b></p><p>Distance change: <b>${fmtDelta(dist(last), dist(prev), "m")}</b></p>
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
