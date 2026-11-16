@@ -110,6 +110,18 @@
     else if ((m = t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})$/)) && MON.includes(m[2].toLowerCase())) t = `${MON.indexOf(m[2].toLowerCase()) + 1}:${m[1].padStart(2, "0")}.00`;
     return dash(t.replace("-", ":"));
   }
+  const timeSecs = (v) => { const t = runTime(v); if (t === "—") return null; const p = t.split(":"); const x = p.length > 1 ? Number(p[0]) * 60 + Number(p[1]) : Number(p[0]); return x > 0 ? x : null; };
+  const SECS_PER_LENGTH = 0.17;
+  const avgKey = (r) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}`;
+  // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far
+  function vsAverage(r, avgs) {
+    const a = avgs && avgs[avgKey(r)], t = timeSecs(r.finish_time);
+    if (!a || a.n < 3 || t === null) return `<td class="mini" title="${a ? "Only " + a.n + " race" + (a.n === 1 ? "" : "s") + " to average" : "No average yet"}">—</td>`;
+    const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
+    const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
+    const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
+    return `<td style="background:${bg};font-weight:600" title="Average winning time here: ${avgTxt} (${a.n} races at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")})">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L</td>`;
+  }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
   const meetingURL = (t, d) => `meeting.html?track=${encodeURIComponent(t)}&date=${d}`;
   // ---- same name, different horses (Lady Catalina in Australia and another in the USA)
@@ -640,7 +652,7 @@
     const next = entries.find((e) => !isScr(e)) || entries[0];
     const star = (disp) => { const on = !!book()[disp]; $("#star").textContent = on ? "★" : "☆"; $("#star").classList.toggle("on", on); };
     if (!runs.length) {
-      $("#formrows").innerHTML = `<tr><td colspan="18">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
+      $("#formrows").innerHTML = `<tr><td colspan="19">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
       if (next) {
         const disp = next.horse;
         document.title = `${disp} | The Sporting Almanac`;
@@ -681,7 +693,7 @@
 
     const c = record(runs);
     $("#c-starts").textContent = c.n; $("#c-w").textContent = c.w; $("#c-s").textContent = c.s; $("#c-t").textContent = c.t;
-    $("#c-pct").textContent = `Win ${c.win.toFixed(1)}% · Place ${c.place.toFixed(1)}% · Prize money ${money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0))}`;
+    $("#c-pct").textContent = `Win ${c.win.toFixed(1)}% · Place ${c.place.toFixed(1)}%`;
     const wins = runs.filter((r) => pos(r) === 1 && dist(r));
     $("#winrange").textContent = wins.length ? `${Math.min(...wins.map(dist))}–${Math.max(...wins.map(dist))}m` : "no wins yet";
     $("#goingrec").innerHTML = ["Good", "Soft", "Heavy", "Synthetic", "Firm"].map((g) => [g, record(runs.filter((r) => going(r) === g))])
@@ -695,7 +707,8 @@
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
 
-    let scope = "all";
+    let scope = "all", avgs = null;
+    get("/api/avgtimes?tracks=" + encodeURIComponent([...new Set(runs.map((r) => String(r.track).toUpperCase()))].join(","))).then((x) => { avgs = x; renderForm(); }).catch(() => {});
     function renderForm() {
       const list = runs.filter((r) => scope === "all" || (scope === "aus" ? track(r.track).aus : !track(r.track).aus));
       $("#formrows").innerHTML = list.map((r) => {
@@ -703,10 +716,10 @@
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
-          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${runTime(r.finish_time)}</td><td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
+          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${runTime(r.finish_time)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`;
-      }).join("") || `<tr><td colspan="18">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
+      }).join("") || `<tr><td colspan="19">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
     }
     $$("[data-scope]").forEach((b) => b.onclick = () => { $$("[data-scope]").forEach((x) => x.classList.toggle("active", x === b)); scope = b.dataset.scope; renderForm(); });
     renderForm();
