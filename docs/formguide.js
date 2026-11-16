@@ -131,34 +131,108 @@
   const fail = (el, e) => { if (el) el.innerHTML = `<div class="error">Couldn't load the data (${esc(e.message || e)}). Try refreshing.</div>`; };
   const groupBy = (arr, f) => arr.reduce((m, x) => { const k = f(x); (m[k] ||= []).push(x); return m; }, {});
 
-  // speed map from settling positions (800m, else 400m)
-  function speedMap(runs) {
-    const settle = (r) => num(r.pos_800) ?? num(r.pos_400);
-    const has = runs.filter((r) => settle(r) !== null);
-    if (!has.length) return `<div class="pad note">No settling positions recorded for this race.</div>`;
-    const n = runs.length, cut = [0, Math.ceil(n * .2), Math.ceil(n * .45), Math.ceil(n * .75), 99];
-    const cols = ["Leaders", "On pace", "Midfield", "Back"];
-    const sorted = [...has].sort((a, b) => settle(a) - settle(b));
-    return `<div class="speedmap">${cols.map((c, i) => `<div><h4>${c}</h4>${sorted.filter((r) => settle(r) > cut[i] && settle(r) <= cut[i + 1])
-      .map((r) => `<div class="runner">${silk(r)}<span>${esc(r.horse)} <span class="mini">(${settle(r)}${pos(r) ? " → " + posLabel(r) : ""})</span></span></div>`).join("") || '<span class="mini">—</span>'}</div>`).join("")}</div>
-      <p class="pad note" style="padding-top:0">Positions in running at the 800m (or 400m), and where each finished.</p>`;
+  // ------------------------------------------------------------ interactive speed map
+  // Starting positions: actual settling position (results) or predicted from the last 5 runs (upcoming).
+  // You can drag horses between columns / reorder them, and choose the pace. Saved per race in this browser.
+  const COLS = ["Leaders", "On pace", "Midfield", "Back"];
+  const PACES = ["Slow", "Moderate", "Genuine", "Fast"];
+  // how each pace treats each column: + helps, - hurts
+  const PACE_FX = { Slow: [2, 1, -1, -2], Moderate: [1, 1, 0, -1], Genuine: [0, 1, 1, 0], Fast: [-2, -1, 1, 2] };
+  const MAPKEY = "tsa-speedmaps";
+  const loadMaps = () => { try { return JSON.parse(localStorage.getItem(MAPKEY) || "{}"); } catch (e) { return {}; } };
+  const saveMaps = (m) => { try { localStorage.setItem(MAPKEY, JSON.stringify(m)); } catch (e) { /* storage blocked */ } };
+
+  function initialPlacement(runs, history, upcoming) {
+    const live = runs.filter((r) => !isScr(r));
+    let est;
+    if (upcoming) {
+      est = live.map((r) => {
+        const prior = ((history || {})[r.horse_key] || []).slice(0, 5)
+          .map((h) => { const p = num(h.pos_800) ?? num(h.pos_400), n = num(h.starters); return p && n ? (p - 1) / Math.max(1, n - 1) : null; })
+          .filter((x) => x !== null);
+        return { r, v: prior.length ? prior.reduce((a, b) => a + b, 0) / prior.length : null };
+      });
+    } else {
+      const n = live.length;
+      est = live.map((r) => { const p = num(r.pos_800) ?? num(r.pos_400); return { r, v: p ? (p - 1) / Math.max(1, n - 1) : null }; });
+    }
+    const col = (v) => v === null ? 2 : v < .2 ? 0 : v < .45 ? 1 : v < .75 ? 2 : 3;   // no data: midfield
+    const out = {};
+    est.sort((a, b) => (a.v ?? .6) - (b.v ?? .6)).forEach((e, i) => out[e.r.horse_key] = { c: col(e.v), o: i, guess: e.v === null });
+    return out;
+  }
+  function suggestPace(place) {
+    const leaders = Object.values(place).filter((p) => p.c === 0).length, pace = Object.values(place).filter((p) => p.c <= 1).length;
+    return leaders >= 4 || pace >= 7 ? "Fast" : leaders === 3 ? "Genuine" : leaders <= 1 ? "Slow" : "Moderate";
   }
 
-  // predicted map for an upcoming race: average settling position (as a share of the field) over the last 5 runs
-  function predictedMap(runs, history) {
-    const est = runs.filter((r) => !isScr(r)).map((r) => {
-      const prior = (history[r.horse_key] || []).slice(0, 5)
-        .map((h) => { const p = num(h.pos_800) ?? num(h.pos_400), n = num(h.starters); return p && n ? (p - 1) / Math.max(1, n - 1) : null; })
-        .filter((x) => x !== null);
-      return { r, v: prior.length ? prior.reduce((a, b) => a + b, 0) / prior.length : null };
-    });
-    const known = est.filter((e) => e.v !== null).sort((a, b) => a.v - b.v);
-    const cols = [["Leaders", 0, .2], ["On pace", .2, .45], ["Midfield", .45, .75], ["Back", .75, 1.01]];
-    const unk = est.filter((e) => e.v === null);
-    return `<div class="speedmap">${cols.map(([c, lo, hi]) => `<div><h4>${c}</h4>${known.filter((e) => e.v >= lo && e.v < hi)
-      .map((e) => `<div class="runner">${silk(e.r)}<span>${esc(e.r.number ? e.r.number + ". " : "")}${esc(e.r.horse)} <span class="mini">(b${dash(e.r.barrier)})</span></span></div>`).join("") || '<span class="mini">—</span>'}</div>`).join("")}</div>
-      <p class="pad note" style="padding-top:0">Predicted from where each horse settled in its last 5 runs.${unk.length ? " No settling data for: " + unk.map((e) => esc(e.r.horse)).join(", ") + "." : ""}</p>`;
+  function speedMapEditor(el, runs, history, upcoming, key) {
+    const live = runs.filter((r) => !isScr(r));
+    const byKey = Object.fromEntries(live.map((r) => [r.horse_key, r]));
+    const start = initialPlacement(runs, history, upcoming), suggested = suggestPace(start);
+    const maps = loadMaps(), saved = maps[key];
+    let place = saved && saved.place && Object.keys(saved.place).length ? { ...start, ...saved.place } : JSON.parse(JSON.stringify(start));
+    Object.keys(place).forEach((k) => { if (!byKey[k]) delete place[k]; });
+    let pace = (saved && saved.pace) || suggested;
+    const edited = () => !!(saved && (saved.edited || saved.pace));
+
+    function persist(isEdit) {
+      const m = loadMaps();
+      m[key] = { place, pace, edited: isEdit || (m[key] && m[key].edited) || false, at: Date.now() };
+      const keys = Object.keys(m); if (keys.length > 300) keys.sort((a, b) => m[a].at - m[b].at).slice(0, keys.length - 300).forEach((k) => delete m[k]);
+      saveMaps(m);
+    }
+    function move(k, c, beforeKey) {
+      const list = (col) => Object.keys(place).filter((x) => place[x].c === col && x !== k).sort((a, b) => place[a].o - place[b].o);
+      const target = list(c), i = beforeKey ? target.indexOf(beforeKey) : -1;
+      target.splice(i < 0 ? target.length : i, 0, k);
+      place[k].c = c;
+      COLS.forEach((_, ci) => (ci === c ? target : list(ci)).forEach((x, j) => place[x].o = ci * 100 + j));
+      persist(true); draw();
+    }
+    function nudge(k, dc, dy) {
+      const p = place[k];
+      if (dc) return move(k, Math.max(0, Math.min(3, p.c + dc)));
+      const col = Object.keys(place).filter((x) => place[x].c === p.c).sort((a, b) => place[a].o - place[b].o), i = col.indexOf(k), j = i + dy;
+      if (j < 0 || j >= col.length) return;
+      move(k, p.c, dy < 0 ? col[j] : col[j + 1]);
+    }
+    function draw() {
+      const fx = PACE_FX[pace];
+      const tone = (v) => v > 0 ? `<span class="fx good">${v > 1 ? "Big advantage" : "Advantage"}</span>` : v < 0 ? `<span class="fx bad">${v < -1 ? "Big disadvantage" : "Disadvantage"}</span>` : `<span class="fx">Neutral</span>`;
+      el.innerHTML = `<div class="maptools">
+          <span class="mini">Pace:</span>${PACES.map((x) => `<button class="filter ${x === pace ? "active" : ""}" data-pace="${x}">${x}${x === suggested ? " •" : ""}</button>`).join("")}
+          <span class="mini">• suggested from the likely leaders</span><span style="flex:1"></span><button data-reset>Reset</button></div>
+        <div class="speedmap">${COLS.map((c, ci) => `<div class="mapcol ${fx[ci] > 0 ? "good" : fx[ci] < 0 ? "bad" : ""}" data-col="${ci}"><h4>${c} ${tone(fx[ci])}</h4>${Object.keys(place)
+          .filter((k) => place[k].c === ci).sort((a, b) => place[a].o - place[b].o).map((k) => { const r = byKey[k];
+            const fin = !upcoming && pos(r) ? ` → ${posLabel(r)}` : "";
+            return `<div class="runner" draggable="true" data-k="${esc(k)}" title="Drag to move">${silk(r)}<span class="rname">${r.number ? esc(r.number) + ". " : ""}${esc(r.horse)} <span class="mini">(b${dash(r.barrier)}${fin})${place[k].guess ? " ?" : ""}</span></span>
+              <span class="nudge"><button data-n="${esc(k)}" data-dc="-1" title="Further forward">◀</button><button data-n="${esc(k)}" data-dy="-1" title="Up">▲</button><button data-n="${esc(k)}" data-dy="1" title="Down">▼</button><button data-n="${esc(k)}" data-dc="1" title="Further back">▶</button></span></div>`; }).join("") || '<span class="mini droph">Drop horses here</span>'}</div>`).join("")}</div>
+        <p class="pad note" style="padding-top:0">${upcoming ? "Starting positions are predicted from where each horse settled in its last 5 runs (? = no settling data yet)." : "Starting positions are where each horse settled at the 800m (or 400m), with where it finished."}
+          Drag horses to change the map, or use the arrows. Your map and pace are saved in this browser.</p>`;
+      $$("[data-pace]", el).forEach((b) => b.onclick = () => { pace = b.dataset.pace; persist(false); draw(); });
+      $("[data-reset]", el).onclick = () => { const m = loadMaps(); delete m[key]; saveMaps(m); place = JSON.parse(JSON.stringify(start)); pace = suggested; draw(); };
+      $$("[data-n]", el).forEach((b) => b.onclick = (e) => { e.stopPropagation(); nudge(b.dataset.n, Number(b.dataset.dc || 0), Number(b.dataset.dy || 0)); });
+      // drag and drop
+      $$(".runner[data-k]", el).forEach((d) => {
+        d.ondragstart = (e) => { e.dataTransfer.setData("text/plain", d.dataset.k); e.dataTransfer.effectAllowed = "move"; d.classList.add("dragging"); };
+        d.ondragend = () => d.classList.remove("dragging");
+      });
+      $$(".mapcol", el).forEach((col) => {
+        col.ondragover = (e) => { e.preventDefault(); col.classList.add("over"); };
+        col.ondragleave = () => col.classList.remove("over");
+        col.ondrop = (e) => {
+          e.preventDefault(); col.classList.remove("over");
+          const k = e.dataTransfer.getData("text/plain"); if (!place[k]) return;
+          const below = $$(".runner[data-k]", col).filter((x) => x.dataset.k !== k).find((x) => e.clientY < x.getBoundingClientRect().top + x.offsetHeight / 2);
+          move(k, Number(col.dataset.col), below ? below.dataset.k : null);
+        };
+      });
+    }
+    draw();
   }
+  const mapKey = (r) => `${r.track}|${r.date}|${r.race}`;
+
   // upcoming field table (shared by meeting and race pages)
   const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th>Last 10</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
   function fieldRows(runs, history) {
@@ -268,7 +342,7 @@
     const races = groupBy(card.runs, (r) => r.race);
     const nums = Object.keys(races).map(Number).sort((a, b) => a - b);
     $("#m-races").textContent = nums.length; $("#m-runners").textContent = card.runs.filter((r) => !isScr(r)).length;
-    if (up) { $("#m-first-label").textContent = "First Race"; $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
+    if (up) { $("#m-first-box").classList.remove("hidden"); $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
     $("#m-going").textContent = goingLabel(card.runs[0] || {}) || "—";
     let active = Number(qs("race")) || nums[0];
     function setRace(n) {
@@ -285,7 +359,7 @@
       if (up) {
         const draw = () => { $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
         draw();
-        $('[data-tabcontent="speed"]').innerHTML = predictedMap(runs, card.history);
+        speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
         $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
         $('[data-tabcontent="track"]').innerHTML = `<div class="pad"><p><b>${esc(tr.name)}</b> ${tr.state ? "· " + esc(tr.state) : ""} ${tr.type ? "· " + esc(tr.type) : ""}</p><p>Track condition: <b>${esc(goingLabel(r0) || "not yet rated")}</b></p>${r0.rail ? `<p>Rail: <b>${esc(r0.rail)}</b></p>` : ""}</div>`;
         raceHistory($('[data-tabcontent="history"]'), r0);
@@ -296,7 +370,7 @@
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.trainer)}</td><td>${dash(r.jockey)}</td><td>${dash(r.weight)}</td>
           <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`;
       }).join("");
-      $('[data-tabcontent="speed"]').innerHTML = speedMap(runs);
+      speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
       $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
       $('[data-tabcontent="track"]').innerHTML = `<div class="pad"><p><b>${esc(tr.name)}</b> ${tr.state ? "· " + esc(tr.state) : ""} ${tr.type ? "· " + esc(tr.type) : ""}</p><p>Track condition: <b>${esc(goingLabel(r0) || "—")}</b></p><p class="note">Track code: ${esc(t)}</p></div>`;
       raceHistory($('[data-tabcontent="history"]'), r0);
@@ -328,7 +402,7 @@
       $("#field").closest("table").querySelector("thead").innerHTML = FIELD_HEAD;
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
       draw();
-      $('[data-tabcontent="speed"]').innerHTML = predictedMap(runs, card.history);
+      speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
       $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats");
       $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
       $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
@@ -351,7 +425,7 @@
       $$("#field .star").forEach((x) => x.onclick = () => { toggleBook(x.dataset.h); render(); });
     }
     render();
-    $('[data-tabcontent="speed"]').innerHTML = speedMap(runs);
+    speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
     $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
     $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
       `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${dash(String(r.finish_time || "").replace("-", ":"))}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`).join("")}</tbody></table></div>
