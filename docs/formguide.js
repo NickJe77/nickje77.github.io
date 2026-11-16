@@ -300,6 +300,32 @@
     } catch (e) { fail(el, e); }
   }
 
+  // horse name search box with suggestions; onPick(name)
+  function horseSearch(input, box, onPick) {
+    let timer, items = [], sel = -1;
+    const close = () => { box.classList.add("hidden"); sel = -1; };
+    const show = () => {
+      box.innerHTML = items.map((h, i) => `<div data-i="${i}" class="${i === sel ? "on" : ""}"><span class="horsecell">${h.silk ? silk(h) : ""}${esc(h.horse)}</span><span class="mini">${h.starts ? `${h.starts} start${h.starts === 1 ? "" : "s"} · last ${fmtDate(h.last_date)}` : "first starter"}</span></div>`).join("")
+        || `<div class="mini">No horses found</div>`;
+      box.classList.remove("hidden");
+      $$("[data-i]", box).forEach((x) => x.onmousedown = (e) => { e.preventDefault(); const h = items[Number(x.dataset.i)]; close(); onPick(h.horse); });
+    };
+    input.oninput = () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { close(); return; }
+      timer = setTimeout(async () => { try { items = await get("/api/horses?q=" + encodeURIComponent(q)); sel = -1; show(); } catch (e) { close(); } }, 200);
+    };
+    input.onkeydown = (e) => {
+      if (box.classList.contains("hidden") && e.key !== "Enter") return;
+      if (e.key === "ArrowDown") { sel = Math.min(items.length - 1, sel + 1); show(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); show(); e.preventDefault(); }
+      else if (e.key === "Enter") { const h = items[sel >= 0 ? sel : 0]; if (h) { close(); onPick(h.horse); } else if (input.value.trim()) onPick(input.value.trim()); e.preventDefault(); }
+      else if (e.key === "Escape") close();
+    };
+    input.onblur = () => setTimeout(close, 150);
+  }
+
   // ============================================================ PAGES
   const pages = {};
 
@@ -448,7 +474,12 @@
   // ---------------------------------------------- 4. Horse profile
   pages["horse"] = async function () {
     const name = qs("horse");
-    if (!name) { $("#main").innerHTML = `<p class="sub">Search for a horse on the <a href="blackbook.html">Blackbook</a> page, or open one from a race.</p>`; return; }
+    horseSearch($("#hsearch"), $("#hsuggest"), (h) => location.href = horseURL(h));
+    if (!name) {
+      $$("#main > :not(.crumb):not(.controls)").forEach((el) => el.classList.add("hidden"));
+      $("#hsearch").focus();
+      return;
+    }
     $("#horseName").textContent = name.toUpperCase();
     loading($("#formrows"));
     let runs, entries = [];
@@ -578,22 +609,7 @@
 
   // ---------------------------------------------- 6. Blackbook
   pages["blackbook"] = async function () {
-    const input = $("#search"), box = $("#suggest");
-    let timer;
-    input.oninput = () => {
-      clearTimeout(timer);
-      const q = input.value.trim();
-      if (q.length < 2) { box.classList.add("hidden"); return; }
-      timer = setTimeout(async () => {
-        try {
-          const list = await get("/api/horses?q=" + encodeURIComponent(q));
-          box.innerHTML = list.map((h) => `<div data-h="${esc(h.horse)}"><span>${esc(h.horse)}</span><span class="mini">${h.starts} starts · last ${fmtDate(h.last_date)}</span></div>`).join("") || `<div class="mini">No horses found</div>`;
-          box.classList.remove("hidden");
-          $$("[data-h]", box).forEach((x) => x.onclick = () => { const b = book(); b[x.dataset.h] ??= { note: "", added: todayISO() }; saveBook(b); input.value = ""; box.classList.add("hidden"); render(); });
-        } catch (e) { box.innerHTML = `<div class="error">${esc(e.message)}</div>`; box.classList.remove("hidden"); }
-      }, 200);
-    };
-    document.addEventListener("click", (e) => { if (!box.contains(e.target) && e.target !== input) box.classList.add("hidden"); });
+    horseSearch($("#search"), $("#suggest"), (h) => { const b = book(); b[h] ??= { note: "", added: todayISO() }; saveBook(b); $("#search").value = ""; render(); });
 
     const lastRuns = {};
     async function render() {
