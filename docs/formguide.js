@@ -41,6 +41,17 @@
   Object.entries(TRACKS).forEach(([c, t]) => { const k = nameKey(t[0]); if (k) (BY_NAME[k] ||= []).push(c); });
   // same name in two countries (Ascot WA / Ascot UK): pick the one in the right country
   const byName = (n, intl) => { const l = BY_NAME[nameKey(n)] || []; return l.find((c) => AU.has(TRACKS[c][1]) !== intl) || (l.length === 1 && TRACKS[l[0]][2] !== "International" && !intl ? l[0] : null); };
+  const ABBR = { asc: "Ascot", ascot: "Ascot", ayr: "Ayr", bath: "Bath", bevl: "Beverley", bev: "Beverley", brig: "Brighton", brgh: "Brighton", carl: "Carlisle",
+    catt: "Catterick", chel: "Cheltenham", ches: "Chester", chst: "Chester", chep: "Chepstow", donc: "Doncaster", epsm: "Epsom", epsom: "Epsom", ffos: "Ffos Las",
+    good: "Goodwood", gdwd: "Goodwood", hami: "Hamilton", hmtn: "Hamilton", hayd: "Haydock", kemp: "Kempton", kmpt: "Kempton", leic: "Leicester", ling: "Lingfield",
+    muss: "Musselburgh", newb: "Newbury", newc: "Newcastle", ncsl: "Newcastle", nmkt: "Newmarket", newm: "Newmarket", nmkj: "Newmarket (July)", nott: "Nottingham",
+    pont: "Pontefract", redc: "Redcar", ripn: "Ripon", ripo: "Ripon", sals: "Salisbury", sand: "Sandown Park", sthw: "Southwell", souw: "Southwell", thir: "Thirsk",
+    wind: "Windsor", winds: "Windsor", wolv: "Wolverhampton", wolvs: "Wolverhampton", warw: "Warwick", wrwk: "Warwick", yarm: "Yarmouth", york: "York",
+    curr: "The Curragh", curragh: "The Curragh", leop: "Leopardstown", fair: "Fairyhouse", gowr: "Gowran Park", dund: "Dundalk", galw: "Galway", naas: "Naas",
+    navn: "Navan", nava: "Navan", punc: "Punchestown", tipp: "Tipperary", list: "Listowel", lstl: "Listowel", cork: "Cork", kill: "Killarney", limk: "Limerick",
+    rosc: "Roscommon", slig: "Sligo", tram: "Tramore", wexf: "Wexford", bell: "Bellewstown", ball: "Ballinrobe", down: "Down Royal", lchp: "ParisLongchamp",
+    long: "ParisLongchamp", chan: "Chantilly", deau: "Deauville", stcl: "Saint-Cloud", mlaf: "Maisons-Laffitte", shat: "Sha Tin", shtn: "Sha Tin", hapv: "Happy Valley",
+    toky: "Tokyo", kyot: "Kyoto", hans: "Hanshin", naka: "Nakayama", meyd: "Meydan", belm: "Belmont Park", sara: "Saratoga", keen: "Keeneland", chur: "Churchill Downs" };
   const shortCode = (c) => /^[A-Z0-9 .]{2,5}$/.test(c || "");
   function track(code, extra) {
     const x = extra || {};
@@ -51,7 +62,7 @@
       : byName(x.venue_name, intl) || byName(String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus|can|brz|saf)$/i, "").replace(/-/g, " "), intl);
     const t = c && TRACKS[c];
     if (t) return { code, show: shortCode(c) ? c : "", name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
-    const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+    const name = x.venue_name || ABBR[String(code || "").toLowerCase().replace(/[^a-z]/g, "")] || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
     return { code, show: shortCode(code) ? code : "", name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
   }
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
@@ -72,6 +83,25 @@
     return main.replace(/^Group (\d)$/i, "G$1").replace(/^Listed$/i, "LR");
   }
   const dist = (r) => num(r.distance);
+  const WORDS = { TRPHY: "Trophy", TRPY: "Trophy", TPHY: "Trophy", MDN: "Maiden", NOV: "Novice", NOVS: "Novice", HCP: "Handicap", HCAP: "Handicap", "H'CAP": "Handicap",
+    STKS: "Stakes", STK: "Stakes", CLM: "Claiming", CLMG: "Claiming", ALW: "Allowance", ALWC: "Allowance", FIL: "Fillies", FILS: "Fillies", MRS: "Mares", CND: "Conditions",
+    COND: "Conditions", INTL: "International", MEM: "Memorial", CHAMP: "Championship", CHMP: "Championship", APP: "Apprentice", APPR: "Apprentice", AMAT: "Amateur", SPR: "Sprint" };
+  const KEEP = /^(G[123]|LR|SW|SWP|WFA|BM\d*|F&M|CL\d*|MSW|TAB|ATC|VRC|MRC|QTC|AJC|SAJC|WATC|BRC|RL|PB|NZ|UK|USA|[IVX]{2,5}|[0-9]+YO\+?|[0-9]+[A-Z]?)$/;
+  const SMALL = new Set(["of", "the", "and", "at", "in", "for", "on", "by", "to", "a", "de", "du", "la", "le"]);
+  function raceName(v) {
+    const t = String(v || "").trim();
+    if (!t || /[a-z]/.test(t)) return t;                  // already in normal case
+    return t.split(/(\s+|-|\/)/).map((w, i) => {
+      if (/^(\s+|-|\/)$/.test(w) || !w) return w;
+      if (WORDS[w]) return WORDS[w];
+      const m = w.match(/^(\d+)Y(O?)(\+?)$/); if (m) return m[1] + "yo" + m[3];
+      if (KEEP.test(w)) return w;
+      const low = w.toLowerCase();
+      if (i > 0 && SMALL.has(low)) return low;
+      if (i > 0 && /^[ld]'[a-z]/.test(low)) return low.slice(0, 2) + low.charAt(2).toUpperCase() + low.slice(3);   // de l'Arc, d'Or
+      return low.replace(/^([^a-z]*)([a-z])/, (x, p, c) => p + c.toUpperCase()).replace(/'([a-z])([a-z]+)/, (x, a, b) => "'" + a.toUpperCase() + b);
+    }).join("");
+  }
   // race time for display: 1-40.00 -> 1:40.00, and Excel's "Jan-40" -> 1:40.00
   const MON = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
   function runTime(v) {
@@ -393,7 +423,7 @@
         return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${runTime(w.finish_time)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
       });
       el.innerHTML = rows.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th class="name">Winner</th><th>Barrier</th><th>Jockey</th><th>Trainer</th><th>SP</th><th>Time</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`
-        : `<div class="pad note">No earlier runnings of "${esc(r.race_name)}" at ${esc(track(r.track).name)} in the database.</div>`;
+        : `<div class="pad note">No earlier runnings of "${esc(raceName(r.race_name))}" at ${esc(track(r.track).name)} in the database.</div>`;
     } catch (e) { fail(el, e); }
   }
 
@@ -486,7 +516,7 @@
       $$("#racebuttons button").forEach((b) => b.onclick = () => { setRace(Number(b.dataset.r)); history.replaceState(null, "", `?track=${encodeURIComponent(t)}&date=${d}&race=${b.dataset.r}`); });
       $("#racelabel").textContent = "Race " + n + (up && r0.start_time ? " · " + fmtTime(r0.start_time) : "");
       $("#racelink").href = raceURL(r0);
-      $("#racetitle").textContent = r0.race_name || "Race " + n;
+      $("#racetitle").textContent = raceName(r0.race_name) || "Race " + n;
       $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0),
         (up ? money(r0.prize_money) : money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0))) + " prize money",
         runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0)].filter((x) => x && !x.startsWith("—")).join("  |  ");
@@ -510,7 +540,7 @@
       raceHistory($('[data-tabcontent="history"]'), r0);
     }
     $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
-      return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(r0.race_name)}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
+      return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(raceName(r0.race_name))}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
     if (up) $("#raceall").closest("table").querySelector("thead").innerHTML = `<tr><th>Race</th><th>Time · Distance</th><th>Class</th><th class="name">Race Name</th><th>Runners</th><th>Winner</th><th></th></tr>`;
     setRace(nums.includes(active) ? active : nums[0]);
     tabs("#meetingtabs");
@@ -529,9 +559,9 @@
     $("#meetinglink").textContent = tr.name;
     if (!r0) { $("#field").innerHTML = `<tr><td colspan="11">No race ${n} at ${esc(tr.name)} on ${fmtDate(d)}.</td></tr>`; return; }
     if (up) {
-      document.title = `${r0.race_name || "Race " + n} | The Sporting Almanac`;
+      document.title = `${raceName(r0.race_name) || "Race " + n} | The Sporting Almanac`;
       $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}${r0.start_time ? " · " + fmtTime(r0.start_time) : ""}`;
-      $("#rtitle").textContent = r0.race_name || "Race " + n;
+      $("#rtitle").textContent = raceName(r0.race_name) || "Race " + n;
       $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(r0.prize_money), goingLabel(r0), r0.rail && "Rail " + r0.rail].filter((x) => x && x !== "—").join(" · ");
       $("#field").closest("table").querySelector("thead").innerHTML = FIELD_HEAD;
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
@@ -544,9 +574,9 @@
       tabs("#racetabs");
       return;
     }
-    document.title = `${r0.race_name || "Race " + n} | The Sporting Almanac`;
+    document.title = `${raceName(r0.race_name) || "Race " + n} | The Sporting Almanac`;
     $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}`;
-    $("#rtitle").textContent = r0.race_name || "Race " + n;
+    $("#rtitle").textContent = raceName(r0.race_name) || "Race " + n;
     $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0)), goingLabel(r0)].filter((x) => x && x !== "—").join(" · ");
     function render() {
       const b = book();
@@ -604,7 +634,7 @@
       $(".hero").before(box);
     }
     $('[data-tabcontent="entries"]').innerHTML = `<h3>Upcoming Entries</h3>` + (entries.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Track</th><th class="name">Race</th><th>Dist</th><th>No.</th><th>Barrier</th><th>Weight</th><th>Jockey</th></tr></thead><tbody>${entries.map((e) =>
-      `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">R${e.race} ${esc(e.race_name)}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
+      `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">${esc(raceName(e.race_name)) || "Race " + e.race}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="note">No upcoming starts in the next few days.</p>`);
     if (entries.length) { const b = $('[data-panel="entries"]'); if (b) b.textContent = `Entries (${entries.length})`; }
     const next = entries.find((e) => !isScr(e)) || entries[0];
@@ -626,7 +656,7 @@
         $("#winrange").textContent = "—"; $("#goingrec").innerHTML = first; $("#fresh").innerHTML = first;
         $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
         $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
-          <p>${esc(next.race_name)}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
+          <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
         $$('[data-panel="entries"]').forEach((b) => b.click());
       }
       tabs("#horsetabs"); if (next) $$('#horsetabs [data-panel="entries"]').forEach((b) => b.click());
@@ -671,7 +701,7 @@
       $("#formrows").innerHTML = list.map((r) => {
         const i = runs.indexOf(r), p = runs[i + 1];
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
-          <td class="name"><a href="${raceURL(r)}">R${r.race} ${esc(r.race_name)}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
+          <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
           <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${runTime(r.finish_time)}</td><td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
@@ -702,7 +732,7 @@
     const runs = card.runs.filter((r) => !isScr(r)), up = card.upcoming, tr = track(t, runs[0]);
     $("#racelink").textContent = `${tr.name} Race ${n}`;
     if (!runs.length) { $("#compbody").innerHTML = `<tr><td>No such race.</td></tr>`; return; }
-    $("#racehead").textContent = `${tr.name} · ${fmtDate(d, true)} · Race ${n} · ${runs[0].race_name || ""} (${dash(runs[0].distance)}m)`;
+    $("#racehead").textContent = `${tr.name} · ${fmtDate(d, true)} · Race ${n} · ${raceName(runs[0].race_name)} (${dash(runs[0].distance)}m)`;
     const stats = new Map(runs.map((r) => [r, horseStats(card.history[r.horse_key] || [], r)]));
     let selected = up ? [...runs].sort((a, b) => stats.get(b).career.win - stats.get(a).career.win).slice(0, 4)
       : [...runs].sort((a, b) => (num(a.starting_odds) ?? 999) - (num(b.starting_odds) ?? 999)).slice(0, 4);
