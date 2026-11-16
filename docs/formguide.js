@@ -131,6 +131,29 @@
       g.runs.sort((a, b) => b.date.localeCompare(a.date));
       return { ...g, country: Object.entries(n).sort((a, b) => b[1] - a[1])[0][0], latest: g.runs[0] };
     }).sort((a, b) => (b.regions.has("ANZ") - a.regions.has("ANZ")) || b.latest.date.localeCompare(a.latest.date));
+    // horses that move country (an Irish import to Ciaron Maher, an Australian horse sold to Hong Kong):
+    // one career ends before the other starts, within two years, and the ages agree -> the same horse
+    const span2 = (g) => [g.runs[g.runs.length - 1].date, g.runs[0].date];
+    const foaled = (g) => { const y = g.runs.map((r) => parseInt(r.date, 10) - parseInt(r.horse_age, 10)).filter((x) => x > 1990); return y.length ? y.sort()[Math.floor(y.length / 2)] : null; };
+    const fits = (A, B) => {
+      if ([...A.regions].some((x) => B.regions.has(x))) return false;
+      const [a0, a1] = span2(A), [b0, b1] = span2(B), first = a0 <= b0 ? [a1, b0] : [b1, a0], gap = days(first[0], first[1]);
+      const fa = foaled(A), fb = foaled(B);
+      return gap >= -14 && gap <= 730 && !(fa && fb && Math.abs(fa - fb) > 1);
+    };
+    for (let again = true; again && out.length > 1;) {
+      again = false;
+      for (const A of out) {
+        const cand = out.filter((B) => B !== A && fits(A, B));
+        // only when it's clear-cut: A fits exactly one group, and that group fits only A
+        if (cand.length === 1 && out.filter((C) => C !== cand[0] && fits(cand[0], C)).length === 1) {
+          const B = cand[0], [keep, drop] = A.regions.has("ANZ") || A.runs.length >= B.runs.length ? [A, B] : [B, A];
+          keep.runs = [...keep.runs, ...drop.runs].sort((x, y) => y.date.localeCompare(x.date)); drop.regions.forEach((x) => keep.regions.add(x));
+          keep.latest = keep.runs[0]; out.splice(out.indexOf(drop), 1); again = true; break;
+        }
+      }
+    }
+    out.forEach((g) => { const n = {}; g.runs.forEach((r) => { const c = countryOf(r); n[c] = (n[c] || 0) + 1; }); g.country = g.regions.has("ANZ") ? "AUS" : Object.entries(n).sort((x, y) => y[1] - x[1])[0][0]; });
     const seen = {};
     out.forEach((g) => { seen[g.country] = (seen[g.country] || 0) + 1; g.id = g.country + (seen[g.country] > 1 ? "-" + seen[g.country] : ""); });
     return out;
