@@ -448,19 +448,40 @@
       `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">R${e.race} ${esc(e.race_name)}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="note">No upcoming starts in the next few days.</p>`);
     if (entries.length) { const b = $('[data-panel="entries"]'); if (b) b.textContent = `Entries (${entries.length})`; }
+    const next = entries.find((e) => !isScr(e)) || entries[0];
+    const star = (disp) => { const on = !!book()[disp]; $("#star").textContent = on ? "★" : "☆"; $("#star").classList.toggle("on", on); };
     if (!runs.length) {
       $("#formrows").innerHTML = `<tr><td colspan="18">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
-      if (entries.length) { $("#horseName").textContent = entries[0].horse.toUpperCase(); $("#trainer").textContent = "—"; }
-      tabs("#horsetabs"); return;
+      if (next) {
+        const disp = next.horse;
+        document.title = `${disp} | The Sporting Almanac`;
+        $("#horseName").textContent = disp.toUpperCase();
+        $("#silk").innerHTML = silk(next, true);
+        $("#trainerlabel").textContent = "Trainer";
+        $("#trainer").textContent = dash(next.trainer);
+        $("#star").onclick = () => { toggleBook(disp); star(disp); }; star(disp);
+        const first = `<p class="note">First starter — no race record yet.</p>`;
+        $("#m-dist").textContent = next.distance ? next.distance + "m" : "—";
+        $(".metric:nth-child(4) small") && ($(".metric:nth-child(4) small").textContent = "Next Start Distance");
+        ["#c-starts", "#c-w", "#c-s", "#c-t"].forEach((x) => $(x).textContent = "0");
+        $("#winrange").textContent = "—"; $("#goingrec").innerHTML = first; $("#fresh").innerHTML = first;
+        $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
+        $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
+          <p>${esc(next.race_name)}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
+        $$('[data-panel="entries"]').forEach((b) => b.click());
+      }
+      tabs("#horsetabs"); if (next) $$('#horsetabs [data-panel="entries"]').forEach((b) => b.click());
+      return;
     }
     runs.sort((a, b) => b.date.localeCompare(a.date) || 0);
     const last = runs[0], prev = runs[1], disp = last.horse;
     document.title = `${disp} | The Sporting Almanac`;
     $("#horseName").textContent = disp.toUpperCase();
-    $("#silk").innerHTML = silk(last, true);
-    $("#trainer").textContent = dash(last.trainer);
-    const star = () => { const on = !!book()[disp]; $("#star").textContent = on ? "★" : "☆"; $("#star").classList.toggle("on", on); };
-    $("#star").onclick = () => { toggleBook(disp); star(); }; star();
+    $("#silk").innerHTML = silk(last.silk ? last : next || last, true);
+    // current trainer: from the next start's field if there is one, else the last start
+    if (next && next.trainer) { $("#trainerlabel").textContent = "Trainer"; $("#trainer").textContent = next.trainer; }
+    else $("#trainer").textContent = dash(last.trainer);
+    $("#star").onclick = () => { toggleBook(disp); star(disp); }; star(disp);
 
     const lastWin = runs.find((r) => pos(r) === 1);
     $("#m-run").textContent = days(last.date, todayISO());
