@@ -44,13 +44,15 @@
   const shortCode = (c) => /^[A-Z0-9 .]{2,5}$/.test(c || "");
   function track(code, extra) {
     const x = extra || {};
-    const intl = x.venue_country ? !/^AU/i.test(x.venue_country) : false;
+    // overseas? from the venue's country, else a non-Australian state/country on the row (GBR, FRA, USA…)
+    const st = String(x.venue_country || x.state || x.venue_state || "").toUpperCase();
+    const intl = st ? !(AU.has(st) || /^AU/.test(st)) : /-(fr|gbr|ire|usa|jpn|ger|ity|can|brz|saf|uae|hk)$/i.test(code || "");
     const c = TRACKS[code] ? code : TRACKS[(code || "").toUpperCase()] ? (code || "").toUpperCase()
       : byName(x.venue_name, intl) || byName(String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus|can|brz|saf)$/i, "").replace(/-/g, " "), intl);
     const t = c && TRACKS[c];
     if (t) return { code, show: shortCode(c) ? c : "", name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
-    const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
-    return { code, show: shortCode(code) ? code : "", name, state: intl ? x.venue_country : (x.venue_state || ""), type: intl ? "International" : "Country", aus: !intl };
+    const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+    return { code, show: shortCode(code) ? code : "", name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
   }
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
   const isScr = (r) => Number(r.scratched) === 1;
