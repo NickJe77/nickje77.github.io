@@ -82,31 +82,63 @@
   const regionOf = (r) => { const c = countryOf(r); return c === "AUS" || c === "NZ" ? "ANZ" : c === "GBR" || c === "IRE" ? "GBI" : c; };
   const trainerKeys = (t) => String(t || "").toLowerCase().split(/\s*(?:&|\/|,|\band\b)\s*/).map((x) => {
     const w = x.replace(/[^a-z\s]/g, " ").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length > 1 ? w[0][0] : "") + w[w.length - 1] : ""; }).filter((k) => k.length > 2);
+  // Groups of runs that are one horse. Within a country, different trainers at the same time = different horses;
+  // a trainer change from one period to the next = the same horse changing stables.
   function horseGroups(runs) {
-    const regions = [...new Set(runs.map(regionOf))], parent = Object.fromEntries(regions.map((g) => [g, g]));
-    const find = (g) => parent[g] === g ? g : (parent[g] = find(parent[g]));
+    const units = {};                                   // region|trainer -> runs
+    runs.forEach((r) => { const k = regionOf(r) + "|" + (trainerKeys(r.trainer)[0] || "?"); (units[k] ||= []).push(r); });
+    const keys = Object.keys(units), parent = Object.fromEntries(keys.map((k) => [k, k]));
+    const find = (k) => parent[k] === k ? k : (parent[k] = find(parent[k]));
+    const join = (a, b) => { a = find(a); b = find(b); if (a !== b) parent[b] = a; };
+    // the same trainer (or partner) anywhere = the same horse (an Irish raider in Melbourne)
     const byTrainer = {};
-    runs.forEach((r) => trainerKeys(r.trainer).forEach((k) => (byTrainer[k] ||= new Set()).add(regionOf(r))));
-    Object.values(byTrainer).forEach((set) => { const l = [...set]; l.slice(1).forEach((g) => { parent[find(g)] = find(l[0]); }); });
+    keys.forEach((k) => units[k].forEach((r) => trainerKeys(r.trainer).forEach((t) => (byTrainer[t] ||= new Set()).add(k))));
+    Object.values(byTrainer).forEach((set) => { const l = [...set]; l.slice(1).forEach((k) => join(l[0], k)); });
+    // within a region: join stables one after the other; keep apart stables racing at the same time
+    const span = (k) => { const ds = keys.filter((x) => find(x) === k).flatMap((x) => units[x].map((r) => r.date)).sort(); return [ds[0], ds[ds.length - 1]]; };
+    const byRegion = {};
+    keys.forEach((k) => (byRegion[k.split("|")[0]] ||= new Set()).add(find(k)));
+    Object.values(byRegion).forEach((set) => {
+      const roots = [...set].filter((k) => !k.endsWith("|?"));
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const live = [...new Set(roots.map(find))].map((k) => ({ k, s: span(k) })).sort((a, b) => a.s[0].localeCompare(b.s[0]));
+        for (let i = 0; i < live.length && !changed; i++) for (let j = i + 1; j < live.length && !changed; j++) {
+          const A = live[i], B = live[j], gap = days(A.s[1], B.s[0]);
+          // one ends (give or take two weeks) before the other starts: same horse, new stable
+          if (gap >= -14 && !live.some((C, n) => n !== i && n !== j && C.s[0] < B.s[0] && C.s[1] > A.s[1])) { join(A.k, B.k); changed = true; }
+        }
+      }
+      // runs with no trainer go with the biggest group in that region
+      [...set].filter((k) => k.endsWith("|?")).forEach((k) => {
+        const others = [...new Set(roots.map(find))];
+        if (others.length) join(others.sort((a, b) => keys.filter((x) => find(x) === b).reduce((n, x) => n + units[x].length, 0) - keys.filter((x) => find(x) === a).reduce((n, x) => n + units[x].length, 0))[0], k);
+      });
+    });
     const groups = {};
-    runs.forEach((r) => { const g = find(regionOf(r)); (groups[g] ||= { regions: new Set(), runs: [] }).runs.push(r); groups[g].regions.add(regionOf(r)); });
-    return Object.values(groups).map((g) => {
+    keys.forEach((k) => { const g = (groups[find(k)] ||= { regions: new Set(), runs: [] }); g.runs.push(...units[k]); g.regions.add(k.split("|")[0]); });
+    const out = Object.values(groups).map((g) => {
       const n = {}; g.runs.forEach((r) => { const c = countryOf(r); n[c] = (n[c] || 0) + 1; });
-      const country = Object.entries(n).sort((a, b) => b[1] - a[1])[0][0];
-      const latest = [...g.runs].sort((a, b) => b.date.localeCompare(a.date))[0];
-      return { ...g, country, latest, id: country };
+      g.runs.sort((a, b) => b.date.localeCompare(a.date));
+      return { ...g, country: Object.entries(n).sort((a, b) => b[1] - a[1])[0][0], latest: g.runs[0] };
     }).sort((a, b) => (b.regions.has("ANZ") - a.regions.has("ANZ")) || b.latest.date.localeCompare(a.latest.date));
+    const seen = {};
+    out.forEach((g) => { seen[g.country] = (seen[g.country] || 0) + 1; g.id = g.country + (seen[g.country] > 1 ? "-" + seen[g.country] : ""); });
+    return out;
   }
   // the runs that belong to the same horse as "ref" (a run or a field entry)
   function sameHorse(runs, ref) {
     if (!runs || !runs.length || !ref) return runs || [];
     const gs = horseGroups(runs); if (gs.length < 2) return runs;
     const tk = new Set(trainerKeys(ref.trainer)), rg = regionOf(ref);
-    const g = gs.find((x) => x.runs.some((r) => trainerKeys(r.trainer).some((k) => tk.has(k)))) || gs.find((x) => x.regions.has(rg));
+    const g = gs.find((x) => x.runs.some((r) => trainerKeys(r.trainer).some((k) => tk.has(k))))
+      || gs.filter((x) => x.regions.has(rg)).sort((a, b) => Math.abs(days(a.latest.date, ref.date || todayISO())) - Math.abs(days(b.latest.date, ref.date || todayISO())))[0];
     return g ? g.runs : [];
   }
   const fixHistory = (card) => { (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
-  const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "");
+  const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "")
+    + (r && trainerKeys(r.trainer)[0] ? "&t=" + encodeURIComponent(trainerKeys(r.trainer)[0]) : "");
   const silk = (r, big) => r && r.silk ? `<img class="silk${big ? " big" : ""}" src="${esc(r.silk)}" alt="" loading="lazy">` : `<span class="silk none${big ? " big" : ""}"></span>`;
   const horseCell = (r) => `<span class="horsecell">${silk(r)}<a href="${horseURL(r.horse, r)}">${esc(r.horse)}</a></span>`;
 
@@ -525,7 +557,10 @@
     if (groups.length > 1) {
       const want = qs("c").toUpperCase(), wantRg = want === "NZ" ? "ANZ" : want === "IRE" || want === "GBR" ? "GBI" : want;
       const e0 = entries.find((e) => !isScr(e));
-      let g = (want && groups.find((x) => x.regions.has(wantRg) || x.regions.has(want)))
+      const wantT = qs("t").toLowerCase();
+      let g = groups.find((x) => x.id === want)
+        || (wantT && groups.find((x) => x.runs.some((r) => trainerKeys(r.trainer).includes(wantT)) && (!want || x.regions.has(wantRg) || x.regions.has(want))))
+        || (want && groups.find((x) => x.regions.has(wantRg) || x.regions.has(want)))
         || (e0 && groups.find((x) => x.runs.includes(sameHorse(runs, e0)[0]))) || groups[0];
       runs = g.runs;
       entries = entries.filter((e) => g.regions.has(regionOf(e)) || trainerKeys(e.trainer).some((k) => g.runs.some((r) => trainerKeys(r.trainer).includes(k))));
@@ -534,7 +569,7 @@
       const box = document.createElement("div");
       box.className = "twins";
       box.innerHTML = `<b>${groups.length} horses are called ${esc(nm)}.</b> Showing: ` + groups.map((x) =>
-        `<a class="filter${x === g ? " active" : ""}" href="horse.html?horse=${encodeURIComponent(qs("horse"))}&c=${x.id}">${esc(nm)} (${esc(x.id)}) · ${esc(dash(x.latest.trainer))} · ${x.runs.length} start${x.runs.length === 1 ? "" : "s"}</a>`).join(" ");
+        `<a class="filter${x === g ? " active" : ""}" href="horse.html?horse=${encodeURIComponent(qs("horse"))}&c=${x.id}">${esc(nm)} (${esc(x.country)}) · ${esc(dash(x.latest.trainer))} · ${x.runs.length} start${x.runs.length === 1 ? "" : "s"}</a>`).join(" ");
       $(".hero").before(box);
     }
     $('[data-tabcontent="entries"]').innerHTML = `<h3>Upcoming Entries</h3>` + (entries.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Track</th><th class="name">Race</th><th>Dist</th><th>No.</th><th>Barrier</th><th>Weight</th><th>Jockey</th></tr></thead><tbody>${entries.map((e) =>
