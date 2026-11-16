@@ -636,7 +636,12 @@
     }
     function render() {
       const q = $("#q").value.toLowerCase();
-      const list = data.meetings.map((m) => ({ ...m, t: track(m.track, m) }))
+      // results and upcoming fields for the same meeting can arrive under two names (WANG / Wangaratta): keep the results
+      const all = data.meetings.map((m) => ({ ...m, t: track(m.track, m) }));
+      const done = all.filter((m) => !m.upcoming);
+      const same = (u, r) => nameKey(u.t.name) === nameKey(r.t.name)
+        || (!TRACKS[String(r.track).toUpperCase()] && r.track.length >= 3 && nameKey(u.t.name).startsWith(String(r.track).toLowerCase().replace(/[^a-z]/g, "")));
+      const list = all.filter((m) => !m.upcoming || !done.some((r) => r.t.aus === m.t.aus && same(m, r)))
         .filter((m) => state === "ALL" || (state === "INT" ? !m.t.aus : m.t.state === state))
         .filter((m) => (m.t.name + " " + m.track).toLowerCase().includes(q))
         .sort((a, b) => (b.t.aus - a.t.aus) || (TYPE_ORDER.indexOf(a.t.type) - TYPE_ORDER.indexOf(b.t.type)) || a.t.name.localeCompare(b.t.name));

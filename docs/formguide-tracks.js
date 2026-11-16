@@ -288,6 +288,7 @@ window.TRACKS = {
   "VICH": ["Vichy", "FR", "International"],
   "W FM": ["Warwick Farm", "NSW", "Metro"],
   "WAGG": ["Wagga", "NSW", "Country"],
+  "WANG": ["Wangaratta", "VIC", "Country"],
   "WAR.": ["Warwick", "GB", "International"],
   "WARA": ["Warra", "QLD", "Country"],
   "WARS": ["Warsaw (Sluzewiec)", "POL", "International"],
