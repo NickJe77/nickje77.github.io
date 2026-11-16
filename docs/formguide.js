@@ -124,15 +124,32 @@
   }
   const timeSecs = (v) => { const t = runTime(v); if (t === "—") return null; const p = t.split(":"); const x = p.length > 1 ? Number(p[0]) * 60 + Number(p[1]) : Number(p[0]); return x > 0 ? x : null; };
   const SECS_PER_LENGTH = 0.17;
-  const avgKey = (r) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}`;
-  // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far
+  // class band, same rules as Cloudflare: each stakes level on its own, the rest by benchmark
+  function classBand(r) {
+    const g = String(r.race_grade || "").toUpperCase(), c = String(r.class || "").toUpperCase();
+    if (["G1", "G2", "G3", "LR"].includes(g)) return g;
+    if (c.includes("GROUP 1")) return "G1"; if (c.includes("GROUP 2")) return "G2"; if (c.includes("GROUP 3")) return "G3"; if (c.includes("LISTED")) return "LR";
+    const bm = c.match(/(?:BENCHMARK|BM)\s*(\d+)/);
+    if (/BM|BENCHMARK/.test(c)) { const n = bm ? Number(bm[1]) : 0; return n >= 78 ? "High" : n >= 64 ? "Mid" : n > 0 ? "Low" : "Other"; }
+    if (/OPEN|QUALITY|CLASS [456]/.test(c)) return "High";
+    if (/CLASS [23]/.test(c)) return "Mid";
+    if ((c.includes("MAIDEN") && !c.includes("MAIDENS INELIGIBLE")) || /CLASS 1|RESTRICTED|RATING/.test(c)) return "Low";
+    return "Other";
+  }
+  const BAND_NAME = { G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed", High: "BM78+ / Open", Mid: "BM64–77", Low: "BM63 & below / Maiden" };
+  const avgKey = (r, b) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}`;
+  // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far.
+  // Compared with winners of the same class band; falls back to all classes when there are fewer than 3.
   function vsAverage(r, avgs) {
-    const a = avgs && avgs[avgKey(r)], t = timeSecs(r.finish_time);
+    const band = classBand(r), t = timeSecs(r.finish_time);
+    let a = band !== "Other" && avgs && avgs[avgKey(r, band)], same = true;
+    if (!a || a.n < 3) { a = avgs && avgs[avgKey(r, "*")]; same = false; }
     if (!a || a.n < 3 || t === null) return `<td class="mini" title="${a ? "Only " + a.n + " race" + (a.n === 1 ? "" : "s") + " to average" : "No average yet"}">—</td>`;
     const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
     const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
     const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
-    return `<td style="background:${bg};font-weight:600" title="Average winning time here: ${avgTxt} (${a.n} races at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")})">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L</td>`;
+    const what = same ? BAND_NAME[band] + " races" : "races of all classes" + (band !== "Other" ? " (not enough " + BAND_NAME[band] + " races yet)" : "");
+    return `<td style="background:${bg};font-weight:600" title="Average winning time: ${avgTxt} — ${a.n} ${esc(what)} at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L${same ? "" : '<span class="mini">*</span>'}</td>`;
   }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
   const meetingURL = (t, d) => `meeting.html?track=${encodeURIComponent(t)}&date=${d}`;
@@ -285,11 +302,117 @@
     };
   }
 
-  // ------------------------------------------------------------ blackbook (saved in this browser)
+  // ------------------------------------------------------------ accounts (email + password, kept on Cloudflare)
+  const TOKEN = "tsa-token", EMAIL = "tsa-email";
+  const store = { get: (k) => { try { return localStorage.getItem(k) || ""; } catch (e) { return ""; } },
+                  set: (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch (e) { /* storage blocked */ } } };
+  const loggedIn = () => !!store.get(TOKEN);
+  async function api(path, method = "GET", body) {
+    const r = await fetch(API + path, { method, headers: { authorization: "Bearer " + store.get(TOKEN), ...(body ? { "content-type": "application/json" } : {}) },
+      body: body ? JSON.stringify(body) : undefined });
+    const d = await r.json().catch(() => ({}));
+    if (r.status === 401 && path.indexOf("/api/auth/login") < 0 && path.indexOf("/api/auth/signup") < 0) { store.set(TOKEN, ""); store.set(EMAIL, ""); }
+    if (!r.ok) throw new Error(d.error || "Something went wrong (" + r.status + ")");
+    return d;
+  }
+
+  // ------------------------------------------------------------ blackbook (this browser's copy; saved to your account when logged in)
   const BOOK = "tsa-blackbook";
   function book() { try { return JSON.parse(localStorage.getItem(BOOK) || "{}"); } catch (e) { return {}; } }
-  function saveBook(b) { try { localStorage.setItem(BOOK, JSON.stringify(b)); } catch (e) { /* storage blocked */ } }
+  function saveBook(b) {
+    const old = book();
+    try { localStorage.setItem(BOOK, JSON.stringify(b)); } catch (e) { /* storage blocked */ }
+    if (!loggedIn()) return;
+    // send only what changed to the account
+    Object.keys(b).forEach((h) => { if (!old[h] || old[h].note !== b[h].note) api("/api/blackbook", "PUT", { horse: h, note: b[h].note || "", added: b[h].added || "" }).catch(() => {}); });
+    Object.keys(old).forEach((h) => { if (!b[h]) api("/api/blackbook?horse=" + encodeURIComponent(h), "DELETE").catch(() => {}); });
+  }
+  // when logged in, the account's blackbook is the one shown
+  async function syncBook() {
+    if (!loggedIn()) return;
+    try { const b = await api("/api/blackbook"); try { localStorage.setItem(BOOK, JSON.stringify(b)); } catch (e) { /* storage blocked */ } } catch (e) { /* offline: keep this browser's copy */ }
+  }
   function toggleBook(name) { const b = book(); if (b[name]) delete b[name]; else b[name] = { note: "", added: todayISO() }; saveBook(b); return !!b[name]; }
+
+  function accountUI() {
+    const nav = $("header nav"); if (!nav) return;
+    let el = $("#acct"); if (!el) { el = document.createElement("span"); el.id = "acct"; nav.after(el); }
+    if (loggedIn()) {
+      el.innerHTML = `<button class="acctbtn" id="acctmenu">${esc(store.get(EMAIL))} ▾</button><div class="acctdrop hidden" id="acctdrop">
+        <a href="blackbook.html">My Blackbook</a><button data-pw>Change password</button><button data-out>Log out</button></div>`;
+      $("#acctmenu").onclick = (e) => { e.stopPropagation(); $("#acctdrop").classList.toggle("hidden"); };
+      document.addEventListener("click", () => $("#acctdrop") && $("#acctdrop").classList.add("hidden"));
+      $("[data-out]", el).onclick = async () => { await api("/api/auth/logout", "POST").catch(() => {}); store.set(TOKEN, ""); store.set(EMAIL, ""); store.set(BOOK, ""); location.reload(); };
+      $("[data-pw]", el).onclick = () => signIn("password");
+    } else {
+      el.innerHTML = `<button class="acctbtn primary" id="acctlogin">Log in</button>`;
+      $("#acctlogin").onclick = () => signIn("login");
+    }
+  }
+  const resetToken = qs("reset");
+  function signIn(mode) {
+    const box = document.createElement("div");
+    box.className = "modalback";
+    const draw = () => {
+      const pw = mode === "password", forgot = mode === "forgot", reset = mode === "reset";
+      if (forgot || reset) {
+        box.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><button class="x" title="Close">×</button>
+          <h2>${forgot ? "Forgot your password?" : "Choose a new password"}</h2>
+          <p class="note">${forgot ? "Enter your email and we'll send you a link to choose a new one." : "Pick a new password for your account (8+ characters)."}</p>
+          <form>${forgot ? `<label>Email<input class="field" type="email" name="email" autocomplete="email" required></label>`
+            : `<label>New password<input class="field" type="password" name="password" autocomplete="new-password" minlength="8" required></label>`}
+            <p class="err hidden"></p><p class="ok hidden"></p><button class="primary" type="submit">${forgot ? "Email me a link" : "Save new password"}</button></form>
+          <p class="note swap"><a href="#" data-m="login">Back to log in</a></p></div>`;
+        $(".x", box).onclick = () => box.remove();
+        $$("[data-m]", box).forEach((a) => a.onclick = (e) => { e.preventDefault(); mode = a.dataset.m; draw(); });
+        $("form", box).onsubmit = async (e) => {
+          e.preventDefault();
+          const f = Object.fromEntries(new FormData(e.target)), err = $(".err", box), ok = $(".ok", box), btn = $("button[type=submit]", box);
+          btn.disabled = true; err.classList.add("hidden");
+          try {
+            if (forgot) { const r = await api("/api/auth/forgot", "POST", f); ok.textContent = r.message; ok.classList.remove("hidden"); $("label", box).classList.add("hidden"); btn.classList.add("hidden"); return; }
+            const r = await api("/api/auth/reset", "POST", { token: resetToken, password: f.password });
+            store.set(TOKEN, r.token); store.set(EMAIL, r.email);
+            const local = book(); if (Object.keys(local).length) await api("/api/blackbook", "POST", { book: local }).catch(() => {});
+            await syncBook();
+            history.replaceState(null, "", location.pathname); location.reload();
+          } catch (x) { err.textContent = x.message; err.classList.remove("hidden"); btn.disabled = false; }
+        };
+        const f0 = $("input", box); if (f0) f0.focus();
+        return;
+      }
+      box.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><button class="x" title="Close">×</button>
+        <h2>${pw ? "Change password" : mode === "login" ? "Log in" : "Create an account"}</h2>
+        <p class="note">${pw ? "Other devices will be logged out." : "Save your blackbook to your account and see it on any device."}</p>
+        <form>${pw ? `<label>Current password<input class="field" type="password" name="old" autocomplete="current-password" required></label>
+          <label>New password<input class="field" type="password" name="new" autocomplete="new-password" minlength="8" required></label>`
+          : `<label>Email<input class="field" type="email" name="email" autocomplete="email" required></label>
+          <label>Password${mode === "signup" ? " <span class='mini'>(8+ characters)</span>" : ""}<input class="field" type="password" name="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" minlength="${mode === "signup" ? 8 : 1}" required></label>`}
+          <p class="err hidden"></p><button class="primary" type="submit">${pw ? "Change password" : mode === "login" ? "Log in" : "Create account"}</button></form>
+        ${pw ? "" : `<p class="note swap">${mode === "login" ? "<a href='#' data-m='forgot'>Forgot password?</a> · New here? <a href='#' data-m='signup'>Create an account</a>" : "Already have one? <a href='#' data-m='login'>Log in</a>"}</p>`}</div>`;
+      $(".x", box).onclick = () => box.remove();
+      $$("[data-m]", box).forEach((a) => a.onclick = (e) => { e.preventDefault(); mode = a.dataset.m; draw(); });
+      $("form", box).onsubmit = async (e) => {
+        e.preventDefault();
+        const f = Object.fromEntries(new FormData(e.target)), err = $(".err", box), btn = $("button[type=submit]", box);
+        btn.disabled = true; err.classList.add("hidden");
+        try {
+          const r = await api(pw ? "/api/auth/password" : "/api/auth/" + mode, "POST", f);
+          store.set(TOKEN, r.token); store.set(EMAIL, r.email);
+          if (!pw) {
+            // bring the horses saved in this browser into the account
+            const local = book(); if (Object.keys(local).length) await api("/api/blackbook", "POST", { book: local }).catch(() => {});
+            await syncBook();
+          }
+          location.reload();
+        } catch (x) { err.textContent = x.message; err.classList.remove("hidden"); btn.disabled = false; }
+      };
+      const first = $("input", box); if (first) first.focus();
+    };
+    draw();
+    box.onclick = (e) => { if (e.target === box) box.remove(); };
+    document.body.appendChild(box);
+  }
 
   // ------------------------------------------------------------ shared UI
   function tabs(container) {
@@ -797,7 +920,9 @@
     const lastRuns = {};
     async function render() {
       const b = book(), names = Object.keys(b).sort();
-      $("#count").textContent = names.length + (names.length === 1 ? " horse" : " horses");
+      $("#count").innerHTML = esc(names.length + (names.length === 1 ? " horse" : " horses")) + (loggedIn() ? ` · saved to your account`
+        : ` · saved in this browser only — <a href="#" id="bblogin">log in</a> to keep it on every device`);
+      const bl = $("#bblogin"); if (bl) bl.onclick = (e) => { e.preventDefault(); signIn("login"); };
       $("#bookrows").innerHTML = names.map((h) => `<tr><td class="name" data-last="${esc(h)}"><span class="horsecell"><span class="silk none"></span><a href="${horseURL(h)}">${esc(h)}</a></span></td>
         <td><input class="field blacknote" value="${esc(b[h].note || "")}" data-note="${esc(h)}" placeholder="Add a note…"></td>
         <td data-next="${esc(horseKey(h))}" class="mini">—</td><td data-lastrun="${esc(h)}" class="mini">…</td><td><button data-remove="${esc(h)}">Remove</button></td></tr>`).join("")
@@ -824,7 +949,11 @@
 
   // ------------------------------------------------------------ start
   window.FG = { track, record, figure, horseStats, API };
-  document.addEventListener("DOMContentLoaded", () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    accountUI();
+    await Promise.race([syncBook(), new Promise((r) => setTimeout(r, 3000))]);
+    accountUI();                                        // in case the sign-in had expired
+    if (/^[0-9a-f]{64}$/i.test(resetToken)) signIn("reset");   // arrived from a password-reset email
     const p = document.body.dataset.page;
     if (pages[p]) pages[p]().catch((e) => console.error(e));
   });
