@@ -64,11 +64,13 @@
     "IRE"], dund: ["Dundalk", "IRE"], galw: ["Galway", "IRE"], naas: ["Naas", "IRE"], navn: ["Navan", "IRE"], nava: ["Navan", "IRE"],
     punc: ["Punchestown", "IRE"], tipp: ["Tipperary", "IRE"], list: ["Listowel", "IRE"], lstl: ["Listowel", "IRE"], cork: ["Cork", "IRE"],
     kill: ["Killarney", "IRE"], limk: ["Limerick", "IRE"], rosc: ["Roscommon", "IRE"], slig: ["Sligo", "IRE"], tram: ["Tramore", "IRE"],
-    wexf: ["Wexford", "IRE"], bell: ["Bellewstown", "IRE"], ball: ["Ballinrobe", "IRE"], down: ["Down Royal", "GB"], lchp: ["ParisLongchamp", "FR"],
-    long: ["ParisLongchamp", "FR"], chan: ["Chantilly", "FR"], deau: ["Deauville", "FR"], stcl: ["Saint-Cloud", "FR"], mlaf: ["Maisons-Laffitte",
+    wexf: ["Wexford", "IRE"], bell: ["Bellewstown", "IRE"], ball: ["Ballinrobe", "IRE"], down: ["Down Royal", "GB"], lchp: ["Longchamp", "FR"],
+    long: ["Longchamp", "FR"], chan: ["Chantilly", "FR"], deau: ["Deauville", "FR"], stcl: ["Saint-Cloud", "FR"], mlaf: ["Maisons-Laffitte",
     "FR"], shat: ["Sha Tin", "HK"], shtn: ["Sha Tin", "HK"], hapv: ["Happy Valley", "HK"], toky: ["Tokyo", "JPN"], kyot: ["Kyoto", "JPN"],
     hans: ["Hanshin", "JPN"], naka: ["Nakayama", "JPN"], meyd: ["Meydan", "UAE"], belm: ["Belmont Park", "USA"], sara: ["Saratoga", "USA"],
     keen: ["Keeneland", "USA"], chur: ["Churchill Downs", "USA"] };
+  // names to show differently from how the feed spells them
+  const RENAME = { parislongchamp: "Longchamp" };
   const shortCode = (c) => /^[A-Z0-9 .]{2,5}$/.test(c || "");
   function track(code, extra) {
     const x = extra || {};
@@ -82,7 +84,7 @@
     const ab = !x.venue_name && ABBR[String(code || "").toLowerCase().replace(/[^a-z]/g, "")];
     if (ab && !(st && AU.has(st))) return { code, show: shortCode(code) ? code : "", name: ab[0], state: ab[1], type: "International", aus: false };
     const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
-    return { code, show: shortCode(code) ? code : "", name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
+    return { code, show: shortCode(code) ? code : "", name: RENAME[nameKey(name)] || name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
   }
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
   const isScr = (r) => Number(r.scratched) === 1;
