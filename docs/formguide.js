@@ -155,6 +155,14 @@
   const avgKey = (r, b) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}`;
   // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far.
   // Compared with winners of the same class band; falls back to all classes when there are fewer than 3.
+  // lengths faster (+) or slower (-) than the average winner of this class at this track/distance/going, or null
+  function lengthsVsAvg(r, avgs) {
+    const band = classBand(r), t = timeSecs(r.finish_time);
+    let a = band !== "Other" && avgs && avgs[avgKey(r, band)];
+    if (!a || a.n < 3) a = avgs && avgs[avgKey(r, "*")];
+    if (!a || a.n < 3 || t === null) return null;
+    return Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10;
+  }
   function vsAverage(r, avgs) {
     const band = classBand(r), t = timeSecs(r.finish_time);
     let a = band !== "Other" && avgs && avgs[avgKey(r, band)], same = true;
@@ -984,6 +992,7 @@
     if (next && next.trainer) { $("#trainerlabel").textContent = "Trainer"; $("#trainer").textContent = next.trainer; }
     else $("#trainer").textContent = dash(last.trainer);
     $("#star").onclick = () => { toggleBook(disp); star(disp); }; star(disp);
+    if (!$("#cmpbtn")) $("#star").insertAdjacentHTML("afterend", `<a id="cmpbtn" class="btn" style="margin-left:8px" href="comparison.html?a=${encodeURIComponent(disp)}">Compare ⇄</a>`);
 
     const lastWin = runs.find((r) => pos(r) === 1);
     $("#m-run").textContent = days(last.date, todayISO());
@@ -1038,7 +1047,7 @@
   // ---------------------------------------------- 5. Comparison
   pages["comparison"] = async function () {
     const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1;
-    if (!t || !d) { $("#main").innerHTML = `<p class="sub">Open a race and choose <b>Compare runners</b>.</p>`; return; }
+    if (!t || !d) return headToHead();
     $("#racelink").href = `race.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`;
     loading($("#compbody"));
     let card;
@@ -1067,6 +1076,91 @@
     $("#add").onclick = () => { const r = runs[Number($("#horses").value)]; if (!selected.includes(r)) selected.push(r); comp(); };
     comp();
   };
+
+
+  // ---------------------------------------------- 5b. Head to head: any two horses, picked by search
+  async function headToHead() {
+    document.title = "Head to Head | The Sporting Almanac";
+    const pick = [qs("a"), qs("b")];
+    $("#main").innerHTML = `<div class="crumb"><a href="form-guide.html">Form Guide</a> / Head to Head</div>
+      <h1>Head to Head</h1><p class="sub">Pick two horses to compare their form side by side, and see every race they've met in.</p>
+      <div class="h2hpick">${[0, 1].map((i) => `<div class="searchwrap"><label class="mini">${i ? "Second horse" : "First horse"}</label>
+        <input class="field" id="hs${i}" type="search" placeholder="Search for a horse…" autocomplete="off" value="${esc(pick[i])}" style="width:100%"><div id="hg${i}" class="suggest hidden"></div></div>`).join('<span class="vs">vs</span>')}</div>
+      <div id="h2hout"></div><p class="foot">The Sporting Almanac Form Guide</p>`;
+    const go = () => { const u = new URLSearchParams(); if (pick[0]) u.set("a", pick[0]); if (pick[1]) u.set("b", pick[1]); history.replaceState(null, "", "?" + u); render(); };
+    [0, 1].forEach((i) => horseSearch($("#hs" + i), $("#hg" + i), (h) => { pick[i] = h; $("#hs" + i).value = h; go(); }));
+    if (!pick[0]) $("#hs0").focus();
+    render();
+
+    async function load(name) {
+      const [rr, ent] = await Promise.all([get(`/api/runs?horse=${encodeURIComponent(name)}&limit=5000`), get(`/api/upcoming?horse=${encodeURIComponent(name)}`).catch(() => [])]);
+      const gs = horseGroups(rr.runs || []), g = gs[0];
+      const runs = g ? g.runs : [];
+      return { name, runs, entries: ent.filter((e) => !isScr(e)), twins: gs.length, display: runs[0] ? runs[0].horse : (ent[0] ? ent[0].horse : name) };
+    }
+    async function render() {
+      const out = $("#h2hout");
+      if (!pick[0] || !pick[1]) { out.innerHTML = `<p class="note pad">${pick[0] || pick[1] ? "Now pick the second horse." : "Search for the first horse above."}</p>`; return; }
+      loading(out);
+      let H;
+      try { H = await Promise.all(pick.map(load)); } catch (e) { return fail(out, e); }
+      const tracks = [...new Set(H.flatMap((h) => h.runs.slice(0, 5).map((r) => String(r.track).toUpperCase())))];
+      const avgs = tracks.length ? await get("/api/avgtimes?tracks=" + encodeURIComponent(tracks.join(","))).catch(() => ({})) : {};
+      const S = H.map((h) => {
+        const runs = h.runs, last = runs[0], tags = upTags(runs), wins = runs.filter((r) => pos(r) === 1);
+        const bandOrder = ["G1", "G2", "G3", "LR", "High", "Mid", "Low", "Other"];
+        const bestWin = wins.map(classBand).sort((a, b) => bandOrder.indexOf(a) - bandOrder.indexOf(b))[0];
+        const figs = runs.slice(0, 5).map((r) => lengthsVsAvg(r, avgs)).filter((x) => x !== null);
+        const byDist = (lo, hi) => record(runs.filter((r) => { const x = dist(r); return x && x >= lo && x <= hi; }));
+        return { h, runs, last, c: record(runs), tags, bestWin, fig: figs.length ? figs.reduce((a, b) => a + b, 0) / figs.length : null, nFig: figs.length,
+          d1: byDist(0, 1200), d2: byDist(1201, 1600), d3: byDist(1601, 2000), d4: byDist(2001, 9999),
+          gd: record(runs.filter((r) => going(r) === "Good")), sf: record(runs.filter((r) => going(r) === "Soft")), hv: record(runs.filter((r) => going(r) === "Heavy")),
+          fu: record(runs.filter((r) => tags.get(r) === 1)), su: record(runs.filter((r) => tags.get(r) === 2)) };
+      });
+      const recCell = (rec) => rec.n ? `${rec.text} <span class="mini">(${rec.win.toFixed(0)}% win)</span>` : "—";
+      const better = (vals, hi = true) => { const v = vals.map((x) => (x === null || x === undefined || isNaN(x) ? null : x)); if (v.some((x) => x === null) || v[0] === v[1]) return [false, false];
+        return hi ? [v[0] > v[1], v[1] > v[0]] : [v[0] < v[1], v[1] < v[0]]; };
+      const rate = (rec) => rec.n >= 2 ? rec.place : null;       // compare records by place rate, once there are 2+ runs
+      const rows = [
+        ["", (x) => `<span class="h2hsilk">${silk(x.last || x.h.entries[0], true)}</span>`, null],
+        ["Trainer", (x) => esc(dash((x.h.entries[0] || x.last || {}).trainer)), null],
+        ["Age", (x) => x.last && x.last.horse_age ? esc(String(Number(x.last.horse_age) + Math.floor(days(x.last.date, todayISO()) / 365))) : "—", null],
+        ["Last start", (x) => x.last ? `<a href="${raceURL(x.last)}">${posLabel(x.last)}${x.last.starters ? "/" + esc(x.last.starters) : ""} · ${esc(track(x.last.track, x.last).name)} ${dash(x.last.distance)}m</a><div class="mini">${fmtDate(x.last.date)} · ${esc(classLabel(x.last) || "")}</div>` : "First starter", null],
+        ["Days since run", (x) => x.last ? days(x.last.date, todayISO()) : "—", null],
+        ["Career", (x) => x.c.text, S.map((x) => x.c.w), true],
+        ["Win %", (x) => x.c.n ? x.c.win.toFixed(1) + "%" : "—", S.map((x) => x.c.n ? x.c.win : null)],
+        ["Place %", (x) => x.c.n ? x.c.place.toFixed(1) + "%" : "—", S.map((x) => x.c.n ? x.c.place : null)],
+        ["Last 10", (x) => figure(x.runs, 10), null],
+        ["Best class won", (x) => x.bestWin ? ({ G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed", High: "BM78+ / Open", Mid: "BM64–77", Low: "BM63 & below / Maiden", Other: "Other" })[x.bestWin] : "No wins yet",
+          S.map((x) => x.bestWin ? -["G1", "G2", "G3", "LR", "High", "Mid", "Low", "Other"].indexOf(x.bestWin) : null)],
+        ["Speed figure (last 5)", (x) => x.fig === null ? "—" : `<b>${x.fig > 0 ? "+" : x.fig < 0 ? "−" : ""}${Math.abs(x.fig).toFixed(1)}L</b> <span class="mini">vs average, ${x.nFig} run${x.nFig === 1 ? "" : "s"}</span>`, S.map((x) => x.fig)],
+        ["Up to 1200m", (x) => recCell(x.d1), S.map((x) => rate(x.d1))], ["1201–1600m", (x) => recCell(x.d2), S.map((x) => rate(x.d2))],
+        ["1601–2000m", (x) => recCell(x.d3), S.map((x) => rate(x.d3))], ["2001m+", (x) => recCell(x.d4), S.map((x) => rate(x.d4))],
+        ["Good", (x) => recCell(x.gd), S.map((x) => rate(x.gd))], ["Soft", (x) => recCell(x.sf), S.map((x) => rate(x.sf))], ["Heavy", (x) => recCell(x.hv), S.map((x) => rate(x.hv))],
+        ["First-up", (x) => recCell(x.fu), S.map((x) => rate(x.fu))], ["Second-up", (x) => recCell(x.su), S.map((x) => rate(x.su))],
+        ["Next start", (x) => { const e = x.h.entries[0]; return e ? `<a href="${raceURL(e)}">${fmtDate(e.date)} · ${esc(track(e.track, e).name)} R${e.race}</a><div class="mini">${dash(e.distance)}m${e.barrier ? " · barrier " + esc(e.barrier) : ""}</div>` : "—"; }, null],
+      ];
+      // races they've met in
+      const key = (r) => `${String(r.track).toUpperCase()}|${r.date}|${r.race}`;
+      const other = new Map(S[1].runs.map((r) => [key(r), r]));
+      const met = S[0].runs.filter((r) => other.has(key(r))).map((r) => [r, other.get(key(r))]);
+      const ahead = [0, 0];
+      met.forEach(([a, b]) => { const pa = pos(a), pb = pos(b); if (pa && pb) ahead[pa < pb ? 0 : 1]++; });
+      const nm = S.map((x) => esc(x.h.display));
+      out.innerHTML = `${S.some((x) => x.h.twins > 1) ? `<p class="note pad">${S.filter((x) => x.h.twins > 1).map((x) => `There's more than one horse called ${esc(x.h.display)}: this is the ${esc(track((x.last || {}).track || "", x.last || {}).aus ? "Australian" : "most recent")} one.`).join(" ")}</p>` : ""}
+        <section class="panel"><div class="tablewrap"><table class="compare h2h"><thead><tr><th></th>${S.map((x, i) => `<th><a href="${horseURL(x.h.display, x.last)}">${nm[i]}</a></th>`).join("")}</tr></thead><tbody>
+        ${rows.map(([label, f, vals, hi]) => { const b = vals ? better(vals, hi !== false) : [false, false];
+          return `<tr><td class="name">${label}</td>${S.map((x, i) => `<td class="${b[i] ? "better" : ""}">${f(x)}</td>`).join("")}</tr>`; }).join("")}
+        </tbody></table></div><p class="pad note" style="padding-top:8px">Green = the better of the two. Distance, going and first-up records are compared on place rate once a horse has 2+ runs there.</p></section>
+        <section class="panel" style="margin-top:16px"><div class="panelhead">Head-to-head meetings</div>
+        ${met.length ? `<p class="pad" style="padding-bottom:0"><b>${ahead[0] > ahead[1] ? nm[0] : ahead[1] > ahead[0] ? nm[1] : "Neither"}</b> ${ahead[0] === ahead[1] ? `— they're ${ahead[0]}–${ahead[1]}` : `finished ahead ${Math.max(...ahead)} of ${met.length} time${met.length === 1 ? "" : "s"}`}.</p>
+          <div class="tablewrap"><table><thead><tr><th>Date</th><th>Track</th><th class="name">Race</th><th>Dist</th><th>Going</th><th>${nm[0]}</th><th>${nm[1]}</th></tr></thead><tbody>
+          ${met.map(([a, b]) => `<tr><td>${fmtDate(a.date)}</td><td>${esc(track(a.track, a).name)}</td><td class="name"><a href="${raceURL(a)}">${esc(raceName(a.race_name)) || "Race " + a.race}</a></td><td>${dash(a.distance)}</td><td>${esc(goingLabel(a)) || "—"}</td>
+            <td class="${pos(a) && pos(b) && pos(a) < pos(b) ? "better" : ""}"><b>${posLabel(a)}</b>${a.margin && pos(a) !== 1 ? ` <span class="mini">${esc(a.margin)}L</span>` : ""}</td>
+            <td class="${pos(a) && pos(b) && pos(b) < pos(a) ? "better" : ""}"><b>${posLabel(b)}</b>${b.margin && pos(b) !== 1 ? ` <span class="mini">${esc(b.margin)}L</span>` : ""}</td></tr>`).join("")}</tbody></table></div>`
+          : `<p class="pad note">These two haven't raced against each other.</p>`}</section>`;
+    }
+  }
 
   // ---------------------------------------------- 6. Blackbook
   pages["blackbook"] = async function () {
