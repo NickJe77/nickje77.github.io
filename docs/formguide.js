@@ -25,10 +25,17 @@
   const unent = (v) => typeof v !== "string" || v.indexOf("&") < 0 ? v : v.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16))).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  // one spelling per jockey: "Fred W Kersley" / "Fred W. Kersley" -> "Fred Kersley" (middle initials dropped), "FRED KERSLEY" -> "Fred Kersley"
+  function personName(v) {
+    let w = String(v || "").replace(/\s+/g, " ").trim().split(" ");
+    if (w.length >= 3) w = [w[0], ...w.slice(1, -1).filter((x) => !/^[A-Za-z]\.?$/.test(x)), w[w.length - 1]];
+    const t = w.join(" ");
+    return /[a-z]/.test(t) ? t : t.toLowerCase().replace(/(^|[\s'-])([a-z])/g, (m, p, c) => p + c.toUpperCase());
+  }
   async function get(path) {
     const r = await fetch(API + path);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
-    return JSON.parse(await r.text(), (k, v) => unent(v));
+    return JSON.parse(await r.text(), (k, v) => k === "jockey" && typeof v === "string" ? personName(unent(v)) : unent(v));
   }
 
   // ------------------------------------------------------------ tracks, horses, races
