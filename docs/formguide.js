@@ -189,8 +189,19 @@
     // one career ends before the other starts, within two years, and the ages agree -> the same horse
     const span2 = (g) => [g.runs[g.runs.length - 1].date, g.runs[0].date];
     const foaled = (g) => { const y = g.runs.map((r) => parseInt(r.date, 10) - parseInt(r.horse_age, 10)).filter((x) => x > 1990); return y.length ? y.sort()[Math.floor(y.length / 2)] : null; };
+    // where the horse was bred, from the name: "Beautiful You (NZ)" -> NZ (most common across the group's runs)
+    const BRED = { GB: "GBR", UK: "GBR", IRE: "IRE", IRL: "IRE", NZ: "NZ", NZL: "NZ", USA: "USA", US: "USA", FR: "FR", FRA: "FR", JPN: "JPN", GER: "GER", AUS: "AUS", ARG: "ARG", BRZ: "BRZ", SAF: "SAF", CHI: "CHI", ITY: "ITY", HK: "HK" };
+    const bredIn = (g) => { const n = {}; g.runs.forEach((r) => { const m = String(r.horse || "").match(/\(([A-Za-z]{2,4})\)\s*$/); if (m) { const c = BRED[m[1].toUpperCase()] || m[1].toUpperCase(); n[c] = (n[c] || 0) + 1; } });
+      const e = Object.entries(n).sort((x, y) => y[1] - x[1])[0]; return e ? e[0] : null; };
+    const homeOf = (g) => { const n = {}; g.runs.forEach((r) => { const c = countryOf(r); n[c] = (n[c] || 0) + 1; }); return Object.entries(n).sort((x, y) => y[1] - x[1])[0][0]; };
     const fits = (A, B) => {
       if ([...A.regions].some((x) => B.regions.has(x))) return false;
+      // the bred-in country has to agree: (IRE) in Ireland and (IRE) in Australia is one horse;
+      // a (NZ) horse here and a horse with no suffix racing in the USA are two (it would be "(NZ)" over there too)
+      const ba = bredIn(A), bb = bredIn(B);
+      if (ba && bb && ba !== bb) return false;
+      if (ba && !bb && homeOf(B) !== ba) return false;
+      if (bb && !ba && homeOf(A) !== bb) return false;
       const [a0, a1] = span2(A), [b0, b1] = span2(B), first = a0 <= b0 ? [a1, b0] : [b1, a0], gap = days(first[0], first[1]);
       const fa = foaled(A), fb = foaled(B);
       return gap >= -14 && gap <= 730 && !(fa && fb && Math.abs(fa - fb) > 1);
