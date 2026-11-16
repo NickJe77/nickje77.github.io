@@ -471,6 +471,85 @@
     return leaders >= 4 || pace >= 7 ? "Fast" : leaders === 3 ? "Genuine" : leaders <= 1 ? "Slow" : "Moderate";
   }
 
+
+  // ------------------------------------------------------------ virtual race
+  // Each horse gets a rating in lengths from its recent runs (class of race + how far it was beaten), adjusted for
+  // today's distance/going/track record, weight, first-up, barrier, where you've put it on the speed map, the pace
+  // you've chosen and any track bias. The race is then run 1,000 times with some luck added to each horse.
+  const CLASS_PTS = { G1: 12, G2: 10, G3: 8, LR: 6, High: 4, Mid: 2, Low: 0, Other: 1 };
+  const BIAS_STRENGTH = { slight: 1, moderate: 2, strong: 3.5 };
+  const PATTERN_FX = { none: [0, 0, 0, 0], leaders: [1, 0.5, -0.25, -0.6], back: [-0.6, -0.25, 0.4, 1] };
+  const LANE_FX = { none: [0, 0, 0, 0], rail: [1, 0.5, 0, -0.5], railoff: [-1, -0.6, -0.1, 0.4], wide: [-0.6, -0.2, 0.3, 0.8] };   // by column: leaders hug the rail, backmarkers come wide
+  function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  const placeRate = (list) => list.length ? list.filter((r) => { const p = pos(r); return p && p <= 3; }).length / list.length : null;
+
+  function horseModel(r, prior, today, field) {
+    const notes = [];
+    const recent = (prior || []).slice(0, 8);
+    let sum = 0, wsum = 0;
+    recent.forEach((h, i) => {
+      const p = pos(h); if (!p) return;
+      let beaten = num(h.margin);
+      if (p === 1) beaten = -1;                                   // a win counts a length better than a narrow second
+      else if (beaten === null) beaten = (p - 1) * 1.2;
+      const perf = CLASS_PTS[classBand(h)] - Math.min(beaten, 15), w = Math.pow(0.82, i);
+      sum += perf * w; wsum += w;
+    });
+    const nEff = wsum, raw = wsum ? sum / wsum : null;
+    let adj = 0;
+    const add = (v, why) => { if (Math.abs(v) >= 0.3) notes.push((v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "L " + why); adj += v; };
+    if (recent.length) {
+      const career = placeRate(prior);
+      const suit = (list, why) => { if (list.length >= 2 && career !== null) add(Math.max(-1.5, Math.min(1.5, 3 * (placeRate(list) - career))), why); };
+      suit(prior.filter((h) => near(dist(h), today.dist, 150)), "at the distance");
+      suit(prior.filter((h) => going(h) && going(h) === today.going), "on the going");
+      suit(prior.filter((h) => h.track === today.track), "at the track");
+      const last = prior[0], gap = last ? days(last.date, today.date) : 0;
+      if (gap >= SPELL_DAYS) {
+        const tags = upTags(prior), fu = prior.filter((h) => tags.get(h) === 1);
+        if (fu.length >= 2 && career !== null) add(Math.max(-2, Math.min(1.5, 3 * (placeRate(fu) - career))), "first-up record");
+        else add(-0.8, "first-up");
+      }
+      const best = Math.max(...prior.filter((h) => pos(h) && pos(h) <= 3).map(dist).filter(Boolean), 0);
+      if (today.dist && best && today.dist > best + 400) add(-1, "untried this far");
+    } else notes.push("no race form");
+    const w = num(r.weight) - (num(r.claim) || 0);
+    if (w && field.avgWeight) add(-(w - field.avgWeight) * (0.4 + (today.dist || 1400) / 6000), "weight");
+    return { raw, nEff, adj, notes, unknown: !recent.length };
+  }
+
+  function runVirtualRace(live, place, pace, history, today, bias) {
+    const ws = live.map((r) => num(r.weight) - (num(r.claim) || 0)).filter((x) => x);
+    const field = { avgWeight: ws.length ? ws.reduce((a, b) => a + b, 0) / ws.length : null };
+    const models = live.map((r) => ({ r, ...horseModel(r, (history || {})[r.horse_key] || [], today, field) }));
+    const known = models.filter((m) => m.raw !== null), mean = known.length ? known.reduce((a, m) => a + m.raw, 0) / known.length : 0;
+    const S = BIAS_STRENGTH[bias.strength] || 3, fx = PACE_FX[pace];
+    models.forEach((m) => {
+      // little form -> pulled towards the field average; no form -> a bit below it
+      m.base = m.raw === null ? mean - 2.5 : (m.nEff * m.raw + 1.5 * mean) / (m.nEff + 1.5);
+      const p = place[m.r.horse_key] || { c: 2, o: 0 }, c = p.c;
+      const add = (v, why) => { if (Math.abs(v) >= 0.3) m.notes.push((v > 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "L " + why); m.adj += v; };
+      add(fx[c] * 1.5, COLS[c].toLowerCase() + " in a " + pace.toLowerCase() + " pace");
+      const b = num(m.r.barrier);
+      if (b && b > 8 && c >= 1 && (today.dist || 0) < 1600) add(-0.15 * (b - 8), "wide barrier");
+      if (b && b > 8 && c === 0) add(-0.1 * (b - 8), "crossing from wide");
+      add(PATTERN_FX[bias.pattern][c] * S, "track pattern");
+      add(LANE_FX[bias.lane][c] * S, "lane bias");
+      m.score = m.base + m.adj;
+      m.sd = m.unknown ? 3.2 : 2 + 3 / (1 + m.nEff);
+      m.wins = 0; m.top3 = 0; m.posSum = 0;
+    });
+    const N = 1000;
+    for (let i = 0; i < N; i++) {
+      const out = models.map((m) => ({ m, v: m.score + gauss() * m.sd })).sort((a, b) => b.v - a.v);
+      out.forEach((o, j) => { if (j === 0) o.m.wins++; if (j < 3) o.m.top3++; o.m.posSum += j + 1; });
+    }
+    models.forEach((m) => { m.winPct = 100 * m.wins / N; m.top3Pct = 100 * m.top3 / N; m.avgPos = m.posSum / N; });
+    const order = [...models].sort((a, b) => b.score - a.score);
+    order.forEach((m) => { m.margin = Math.max(0, order[0].score - m.score); });
+    return order;
+  }
+
   function speedMapEditor(el, runs, history, upcoming, key) {
     const live = runs.filter((r) => !isScr(r));
     const byKey = Object.fromEntries(live.map((r) => [r.horse_key, r]));
@@ -479,11 +558,16 @@
     let place = saved && saved.place && Object.keys(saved.place).length ? { ...start, ...saved.place } : JSON.parse(JSON.stringify(start));
     Object.keys(place).forEach((k) => { if (!byKey[k]) delete place[k]; });
     let pace = (saved && saved.pace) || suggested;
+    let bias = (saved && saved.bias) || { pattern: "none", lane: "none", strength: "moderate" }, simShown = false;
     const edited = () => !!(saved && (saved.edited || saved.pace));
+    el.innerHTML = `<div data-map></div><div data-sim class="simwrap"></div>`;
+    const mapEl = $("[data-map]", el), simEl = $("[data-sim]", el);
+    const r0 = live[0] || runs[0] || {};
+    const today = { dist: dist(r0), going: going(r0), track: r0.track, date: r0.date || todayISO() };
 
     function persist(isEdit) {
       const m = loadMaps();
-      m[key] = { place, pace, edited: isEdit || (m[key] && m[key].edited) || false, at: Date.now() };
+      m[key] = { place, pace, bias, edited: isEdit || (m[key] && m[key].edited) || false, at: Date.now() };
       const keys = Object.keys(m); if (keys.length > 300) keys.sort((a, b) => m[a].at - m[b].at).slice(0, keys.length - 300).forEach((k) => delete m[k]);
       saveMaps(m);
     }
@@ -493,7 +577,7 @@
       target.splice(i < 0 ? target.length : i, 0, k);
       place[k].c = c;
       COLS.forEach((_, ci) => (ci === c ? target : list(ci)).forEach((x, j) => place[x].o = ci * 100 + j));
-      persist(true); draw();
+      persist(true); draw(); if (simShown) simulate(false);
     }
     function nudge(k, dc, dy) {
       const p = place[k];
@@ -505,7 +589,7 @@
     function draw() {
       const fx = PACE_FX[pace];
       const tone = (v) => v > 0 ? `<span class="fx good">${v > 1 ? "Big advantage" : "Advantage"}</span>` : v < 0 ? `<span class="fx bad">${v < -1 ? "Big disadvantage" : "Disadvantage"}</span>` : `<span class="fx">Neutral</span>`;
-      el.innerHTML = `<div class="maptools">
+      mapEl.innerHTML = `<div class="maptools">
           <span class="mini">Pace:</span>${PACES.map((x) => `<button class="filter ${x === pace ? "active" : ""}" data-pace="${x}">${x}${x === suggested ? " •" : ""}</button>`).join("")}
           <span class="mini">• suggested from the likely leaders</span><span style="flex:1"></span><button data-reset>Reset</button></div>
         <div class="speedmap">${COLS.map((c, ci) => `<div class="mapcol ${fx[ci] > 0 ? "good" : fx[ci] < 0 ? "bad" : ""}" data-col="${ci}"><h4>${c} ${tone(fx[ci])}</h4>${Object.keys(place)
@@ -515,15 +599,16 @@
               <span class="nudge"><button data-n="${esc(k)}" data-dc="-1" title="Further forward">◀</button><button data-n="${esc(k)}" data-dy="-1" title="Up">▲</button><button data-n="${esc(k)}" data-dy="1" title="Down">▼</button><button data-n="${esc(k)}" data-dc="1" title="Further back">▶</button></span></div>`; }).join("") || '<span class="mini droph">Drop horses here</span>'}</div>`).join("")}</div>
         <p class="pad note" style="padding-top:0">${upcoming ? "Starting positions are predicted from where each horse settled in its last 5 runs (? = no settling data yet)." : "Starting positions are where each horse settled at the 800m (or 400m), with where it finished."}
           Drag horses to change the map, or use the arrows. Your map and pace are saved in this browser.</p>`;
-      $$("[data-pace]", el).forEach((b) => b.onclick = () => { pace = b.dataset.pace; persist(false); draw(); });
-      $("[data-reset]", el).onclick = () => { const m = loadMaps(); delete m[key]; saveMaps(m); place = JSON.parse(JSON.stringify(start)); pace = suggested; draw(); };
-      $$("[data-n]", el).forEach((b) => b.onclick = (e) => { e.stopPropagation(); nudge(b.dataset.n, Number(b.dataset.dc || 0), Number(b.dataset.dy || 0)); });
+      $$("[data-pace]", mapEl).forEach((b) => b.onclick = () => { pace = b.dataset.pace; persist(false); draw(); });
+      if (simShown) simulate(false);                       // keep the virtual race in step with the map
+      $("[data-reset]", mapEl).onclick = () => { const m = loadMaps(); delete m[key]; saveMaps(m); place = JSON.parse(JSON.stringify(start)); pace = suggested; bias = { pattern: "none", lane: "none", strength: "moderate" }; draw(); simControls(); simShown = false; };
+      $$("[data-n]", mapEl).forEach((b) => b.onclick = (e) => { e.stopPropagation(); nudge(b.dataset.n, Number(b.dataset.dc || 0), Number(b.dataset.dy || 0)); });
       // drag and drop
-      $$(".runner[data-k]", el).forEach((d) => {
+      $$(".runner[data-k]", mapEl).forEach((d) => {
         d.ondragstart = (e) => { e.dataTransfer.setData("text/plain", d.dataset.k); e.dataTransfer.effectAllowed = "move"; d.classList.add("dragging"); };
         d.ondragend = () => d.classList.remove("dragging");
       });
-      $$(".mapcol", el).forEach((col) => {
+      $$(".mapcol", mapEl).forEach((col) => {
         col.ondragover = (e) => { e.preventDefault(); col.classList.add("over"); };
         col.ondragleave = () => col.classList.remove("over");
         col.ondrop = (e) => {
@@ -534,6 +619,54 @@
         };
       });
     }
+
+    // ---- the virtual race panel
+    function simControls() {
+      const opt = (name, cur, list) => `<select class="field" data-b="${name}">${list.map(([v, t]) => `<option value="${v}" ${v === cur ? "selected" : ""}>${t}</option>`).join("")}</select>`;
+      simEl.innerHTML = `<div class="simtools">
+          <button class="primary" data-run>▶ Run virtual race</button>
+          <label>Track pattern ${opt("pattern", bias.pattern, [["none", "No bias"], ["leaders", "Leaders favoured"], ["back", "Swoopers favoured"]])}</label>
+          <label>Lane ${opt("lane", bias.lane, [["none", "No bias"], ["rail", "Rail fast"], ["railoff", "Rail off (inside slow)"], ["wide", "Out wide favoured"]])}</label>
+          <label>Strength ${opt("strength", bias.strength, [["slight", "Slight"], ["moderate", "Moderate"], ["strong", "Strong"]])}</label>
+        </div><div data-simout></div>`;
+      $("[data-run]", simEl).onclick = () => simulate(true);
+      $$("[data-b]", simEl).forEach((s) => s.onchange = () => { bias[s.dataset.b] = s.value; persist(false); if (simShown) simulate(false); });
+    }
+    function simulate(animate) {
+      simShown = true;
+      const order = runVirtualRace(live, place, pace, history, today, bias), out = $("[data-simout]", simEl);
+      const actual = !upcoming && live.some((r) => pos(r));
+      out.innerHTML = `<div class="simtrack" data-anim></div>
+        <div class="tablewrap"><table><thead><tr><th>Projected</th><th class="name">Horse</th><th>Margin</th><th>Win %</th><th>Top 3 %</th><th>Avg finish</th>${actual ? "<th>Actual</th>" : ""}<th class="name">Why</th></tr></thead><tbody>
+        ${order.map((m, i) => `<tr class="${i === 0 ? "win" : ""}"><td><b>${posLabel({ position: String(i + 1) })}</b></td><td class="name"><span class="horsecell">${silk(m.r)}${m.r.number ? esc(m.r.number) + ". " : ""}${esc(m.r.horse)}</span></td>
+          <td>${i ? m.margin.toFixed(1) + "L" : "—"}</td><td><b>${m.winPct.toFixed(0)}%</b></td><td>${m.top3Pct.toFixed(0)}%</td><td>${m.avgPos.toFixed(1)}</td>${actual ? `<td>${posLabel(m.r)}</td>` : ""}
+          <td class="name mini">${esc(m.notes.join(" · ") || "—")}</td></tr>`).join("")}</tbody></table></div>
+        <p class="pad note" style="padding-top:6px">A guide, not a tip: 1,000 runs of the race from each horse's recent form (class and margins), its record at the distance, going and track,
+          weight, first-up record and barrier, with your speed map, pace${bias.pattern !== "none" || bias.lane !== "none" ? " and track bias" : ""}. Win % is how often it won those 1,000 runs.
+          <button data-replay class="filter">↻ Replay</button></p>`;
+      $("[data-replay]", out).onclick = () => animateRace($("[data-anim]", out), order);
+      animateRace($("[data-anim]", out), order, !animate);
+    }
+    // the race on screen: they jump in speed-map order, the field closes up, then it finishes the way the model projects
+    function animateRace(box, order, still) {
+      const byNo = [...order].sort((a, b) => (num(a.r.number) || 99) - (num(b.r.number) || 99) || a.r.horse.localeCompare(b.r.horse));
+      const early = (m) => { const p = place[m.r.horse_key] || { c: 2, o: 200 }; return [0, 2.5, 5.5, 9][p.c] + (p.o % 100) * 0.8; };
+      const fin = (m) => Math.min(m.margin, 18);
+      box.innerHTML = `<div class="simfinish"></div><div class="simlabels"><span>Start</span><span>800m</span><span>400m</span><span>Finish</span></div>` + byNo.map((m) =>
+        `<div class="simlane"><span class="simhorse" data-h="${esc(m.r.horse_key)}">${silk(m.r)}${m.r.number ? `<span class="simno">${esc(m.r.number)}</span>` : ""}<span class="simname">${esc(m.r.horse)}</span></span></div>`).join("");
+      const els = byNo.map((m) => [m, $(`[data-h="${CSS.escape(m.r.horse_key)}"]`, box)]);
+      const W = () => box.clientWidth - 190, L = () => W() / 60;      // ~60 lengths visible across the track
+      const at = (m, t) => { const e = Math.min(1, t / 0.55), late = Math.max(0, (t - 0.55) / 0.45), sm = late * late * (3 - 2 * late);
+        const gap = early(m) * (1 - 0.35 * e) * (1 - sm) + fin(m) * sm; return Math.max(0, t * W() - gap * L()); };
+      const line = $(".simfinish", box); line.style.left = (12 + W() + 12) + "px";     // where the winner's silk ends up
+      $(".simlabels", box).style.width = (W() + 40) + "px";
+      const paint = (t) => els.forEach(([m, d]) => { if (d) d.style.transform = `translateX(${at(m, t)}px)`; });
+      if (still) return paint(1);
+      const T = 7000, t0 = performance.now();
+      const step = (now) => { const t = Math.min(1, (now - t0) / T); paint(t); if (t < 1 && box.isConnected) requestAnimationFrame(step); };
+      requestAnimationFrame(step);
+    }
+    simControls();
     draw();
   }
   const mapKey = (r) => `${r.track}|${r.date}|${r.race}`;
