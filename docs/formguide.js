@@ -41,17 +41,27 @@
   Object.entries(TRACKS).forEach(([c, t]) => { const k = nameKey(t[0]); if (k) (BY_NAME[k] ||= []).push(c); });
   // same name in two countries (Ascot WA / Ascot UK): pick the one in the right country
   const byName = (n, intl) => { const l = BY_NAME[nameKey(n)] || []; return l.find((c) => AU.has(TRACKS[c][1]) !== intl) || (l.length === 1 && TRACKS[l[0]][2] !== "International" && !intl ? l[0] : null); };
-  const ABBR = { asc: "Ascot", ascot: "Ascot", ayr: "Ayr", bath: "Bath", bevl: "Beverley", bev: "Beverley", brig: "Brighton", brgh: "Brighton", carl: "Carlisle",
-    catt: "Catterick", chel: "Cheltenham", ches: "Chester", chst: "Chester", chep: "Chepstow", donc: "Doncaster", epsm: "Epsom", epsom: "Epsom", ffos: "Ffos Las",
-    good: "Goodwood", gdwd: "Goodwood", hami: "Hamilton", hmtn: "Hamilton", hayd: "Haydock", kemp: "Kempton", kmpt: "Kempton", leic: "Leicester", ling: "Lingfield",
-    muss: "Musselburgh", newb: "Newbury", newc: "Newcastle", ncsl: "Newcastle", nmkt: "Newmarket", newm: "Newmarket", nmkj: "Newmarket (July)", nott: "Nottingham",
-    pont: "Pontefract", redc: "Redcar", ripn: "Ripon", ripo: "Ripon", sals: "Salisbury", sand: "Sandown Park", sthw: "Southwell", souw: "Southwell", thir: "Thirsk",
-    wind: "Windsor", winds: "Windsor", wolv: "Wolverhampton", wolvs: "Wolverhampton", warw: "Warwick", wrwk: "Warwick", yarm: "Yarmouth", york: "York",
-    curr: "The Curragh", curragh: "The Curragh", leop: "Leopardstown", fair: "Fairyhouse", gowr: "Gowran Park", dund: "Dundalk", galw: "Galway", naas: "Naas",
-    navn: "Navan", nava: "Navan", punc: "Punchestown", tipp: "Tipperary", list: "Listowel", lstl: "Listowel", cork: "Cork", kill: "Killarney", limk: "Limerick",
-    rosc: "Roscommon", slig: "Sligo", tram: "Tramore", wexf: "Wexford", bell: "Bellewstown", ball: "Ballinrobe", down: "Down Royal", lchp: "ParisLongchamp",
-    long: "ParisLongchamp", chan: "Chantilly", deau: "Deauville", stcl: "Saint-Cloud", mlaf: "Maisons-Laffitte", shat: "Sha Tin", shtn: "Sha Tin", hapv: "Happy Valley",
-    toky: "Tokyo", kyot: "Kyoto", hans: "Hanshin", naka: "Nakayama", meyd: "Meydan", belm: "Belmont Park", sara: "Saratoga", keen: "Keeneland", chur: "Churchill Downs" };
+  // overseas track codes seen in the CSV form (Nmkt, Asc., Newb…): name and country
+  const ABBR = {
+    asc: ["Ascot", "GB"], ascot: ["Ascot", "GB"], ayr: ["Ayr", "GB"], bath: ["Bath", "GB"], bevl: ["Beverley", "GB"], bev: ["Beverley", "GB"],
+    brig: ["Brighton", "GB"], brgh: ["Brighton", "GB"], carl: ["Carlisle", "GB"], catt: ["Catterick", "GB"], chel: ["Cheltenham", "GB"],
+    ches: ["Chester", "GB"], chst: ["Chester", "GB"], chep: ["Chepstow", "GB"], donc: ["Doncaster", "GB"], epsm: ["Epsom", "GB"], epsom: ["Epsom",
+    "GB"], ffos: ["Ffos Las", "GB"], good: ["Goodwood", "GB"], gdwd: ["Goodwood", "GB"], hami: ["Hamilton", "GB"], hmtn: ["Hamilton", "GB"],
+    hayd: ["Haydock", "GB"], kemp: ["Kempton", "GB"], kmpt: ["Kempton", "GB"], leic: ["Leicester", "GB"], ling: ["Lingfield", "GB"],
+    muss: ["Musselburgh", "GB"], newb: ["Newbury", "GB"], newc: ["Newcastle", "GB"], ncsl: ["Newcastle", "GB"], nmkt: ["Newmarket", "GB"],
+    newm: ["Newmarket", "GB"], nmkj: ["Newmarket (July)", "GB"], nott: ["Nottingham", "GB"], pont: ["Pontefract", "GB"], redc: ["Redcar", "GB"],
+    ripn: ["Ripon", "GB"], ripo: ["Ripon", "GB"], sals: ["Salisbury", "GB"], sand: ["Sandown Park", "GB"], sthw: ["Southwell", "GB"],
+    souw: ["Southwell", "GB"], thir: ["Thirsk", "GB"], wind: ["Windsor", "GB"], winds: ["Windsor", "GB"], wolv: ["Wolverhampton", "GB"],
+    wolvs: ["Wolverhampton", "GB"], warw: ["Warwick", "GB"], wrwk: ["Warwick", "GB"], yarm: ["Yarmouth", "GB"], york: ["York", "GB"],
+    curr: ["The Curragh", "IRE"], curragh: ["The Curragh", "IRE"], leop: ["Leopardstown", "IRE"], fair: ["Fairyhouse", "IRE"], gowr: ["Gowran Park",
+    "IRE"], dund: ["Dundalk", "IRE"], galw: ["Galway", "IRE"], naas: ["Naas", "IRE"], navn: ["Navan", "IRE"], nava: ["Navan", "IRE"],
+    punc: ["Punchestown", "IRE"], tipp: ["Tipperary", "IRE"], list: ["Listowel", "IRE"], lstl: ["Listowel", "IRE"], cork: ["Cork", "IRE"],
+    kill: ["Killarney", "IRE"], limk: ["Limerick", "IRE"], rosc: ["Roscommon", "IRE"], slig: ["Sligo", "IRE"], tram: ["Tramore", "IRE"],
+    wexf: ["Wexford", "IRE"], bell: ["Bellewstown", "IRE"], ball: ["Ballinrobe", "IRE"], down: ["Down Royal", "GB"], lchp: ["ParisLongchamp", "FR"],
+    long: ["ParisLongchamp", "FR"], chan: ["Chantilly", "FR"], deau: ["Deauville", "FR"], stcl: ["Saint-Cloud", "FR"], mlaf: ["Maisons-Laffitte",
+    "FR"], shat: ["Sha Tin", "HK"], shtn: ["Sha Tin", "HK"], hapv: ["Happy Valley", "HK"], toky: ["Tokyo", "JPN"], kyot: ["Kyoto", "JPN"],
+    hans: ["Hanshin", "JPN"], naka: ["Nakayama", "JPN"], meyd: ["Meydan", "UAE"], belm: ["Belmont Park", "USA"], sara: ["Saratoga", "USA"],
+    keen: ["Keeneland", "USA"], chur: ["Churchill Downs", "USA"] };
   const shortCode = (c) => /^[A-Z0-9 .]{2,5}$/.test(c || "");
   function track(code, extra) {
     const x = extra || {};
@@ -62,7 +72,9 @@
       : byName(x.venue_name, intl) || byName(String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus|can|brz|saf)$/i, "").replace(/-/g, " "), intl);
     const t = c && TRACKS[c];
     if (t) return { code, show: shortCode(c) ? c : "", name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
-    const name = x.venue_name || ABBR[String(code || "").toLowerCase().replace(/[^a-z]/g, "")] || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+    const ab = !x.venue_name && ABBR[String(code || "").toLowerCase().replace(/[^a-z]/g, "")];
+    if (ab && !(st && AU.has(st))) return { code, show: shortCode(code) ? code : "", name: ab[0], state: ab[1], type: "International", aus: false };
+    const name = x.venue_name || String(code || "").replace(/-(fr|gbr|ire|usa|jpn|ger|ity|nz|aus)$/i, "").replace(/-/g, " ").toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
     return { code, show: shortCode(code) ? code : "", name, state: intl ? (x.venue_country || st) : (x.venue_state || (AU.has(st) ? st : "")), type: intl ? "International" : "Country", aus: !intl };
   }
   const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
