@@ -21,19 +21,29 @@
   const money = (v) => { const n = num(v); return n ? "$" + Math.round(n).toLocaleString("en-AU") : "—"; };
   const dash = (v) => (v === null || v === undefined || v === "" ? "—" : v);
 
+  // some names arrive with HTML codes in them ("&amp;", "&#8217;"): turn them back into characters
+  const unent = (v) => typeof v !== "string" || v.indexOf("&") < 0 ? v : v.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16))).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
   async function get(path) {
     const r = await fetch(API + path);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || "HTTP " + r.status);
-    return r.json();
+    return JSON.parse(await r.text(), (k, v) => unent(v));
   }
 
   // ------------------------------------------------------------ tracks, horses, races
   const TRACKS = window.TRACKS || {};
   const AU = new Set(["NSW", "VIC", "QLD", "WA", "SA", "TAS", "NT", "ACT"]);
-  function track(code) {
+  function track(code, extra) {
     const t = TRACKS[code] || TRACKS[(code || "").toUpperCase()];
-    return t ? { code, name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) } : { code, name: code, state: "", type: "", aus: true };
+    if (t) return { code, name: t[0], state: t[1], type: t[2], aus: AU.has(t[1]) };
+    const x = extra || {};
+    const intl = x.venue_country && !/^AU/i.test(x.venue_country);
+    return { code, name: x.venue_name || code, state: intl ? x.venue_country : (x.venue_state || ""), type: intl ? "International" : "", aus: !intl };
   }
+  const fmtTime = (iso) => !iso ? "" : new Date(iso).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" });
+  const isScr = (r) => Number(r.scratched) === 1;
+  const wt = (r) => r.weight ? r.weight + (r.claim && r.claim !== "0" ? ` <span class="mini">(a${esc(r.claim)})</span>` : "") : "—";
   const horseKey = (n) => String(n || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().trim()
     .replace(/\s*\([a-z]{2,4}\)\s*$/, "").replace(/[^a-z0-9]/g, "");
   const pos = (r) => { const n = parseInt(r.position, 10); return isNaN(n) ? null : n; };
@@ -134,6 +144,48 @@
       <p class="pad note" style="padding-top:0">Positions in running at the 800m (or 400m), and where each finished.</p>`;
   }
 
+  // predicted map for an upcoming race: average settling position (as a share of the field) over the last 5 runs
+  function predictedMap(runs, history) {
+    const est = runs.filter((r) => !isScr(r)).map((r) => {
+      const prior = (history[r.horse_key] || []).slice(0, 5)
+        .map((h) => { const p = num(h.pos_800) ?? num(h.pos_400), n = num(h.starters); return p && n ? (p - 1) / Math.max(1, n - 1) : null; })
+        .filter((x) => x !== null);
+      return { r, v: prior.length ? prior.reduce((a, b) => a + b, 0) / prior.length : null };
+    });
+    const known = est.filter((e) => e.v !== null).sort((a, b) => a.v - b.v);
+    const cols = [["Leaders", 0, .2], ["On pace", .2, .45], ["Midfield", .45, .75], ["Back", .75, 1.01]];
+    const unk = est.filter((e) => e.v === null);
+    return `<div class="speedmap">${cols.map(([c, lo, hi]) => `<div><h4>${c}</h4>${known.filter((e) => e.v >= lo && e.v < hi)
+      .map((e) => `<div class="runner">${silk(e.r)}<span>${esc(e.r.number ? e.r.number + ". " : "")}${esc(e.r.horse)} <span class="mini">(b${dash(e.r.barrier)})</span></span></div>`).join("") || '<span class="mini">—</span>'}</div>`).join("")}</div>
+      <p class="pad note" style="padding-top:0">Predicted from where each horse settled in its last 5 runs.${unk.length ? " No settling data for: " + unk.map((e) => esc(e.r.horse)).join(", ") + "." : ""}</p>`;
+  }
+  // upcoming field table (shared by meeting and race pages)
+  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th>Last 10</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
+  function fieldRows(runs, history) {
+    const b = book();
+    return runs.map((r) => {
+      const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
+      return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
+        <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
+        <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td><td>${s.last10}</td><td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
+        <td>${s.daysSince ?? "1st"}</td><td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
+    }).join("");
+  }
+  function fieldStats(runs, history) {
+    const live = runs.filter((r) => !isScr(r)).map((r) => ({ r, s: horseStats(history[r.horse_key] || [], r) }));
+    const top = (label, f, fmt) => { const x = [...live].filter((e) => f(e) !== null).sort((a, b) => f(b) - f(a))[0];
+      return `<div class="stat"><small>${label}</small><b style="font-size:16px">${x ? esc(x.r.horse) : "—"}</b><div class="mini">${x ? fmt(x) : ""}</div></div>`; };
+    return `<div class="grid pad" style="margin:0">
+      ${top("Most career wins", (e) => e.s.career.w, (e) => e.s.career.text)}
+      ${top("Best win % (3+ starts)", (e) => e.s.career.n >= 3 ? e.s.career.win : null, (e) => e.s.career.win.toFixed(0) + "% · " + e.s.career.text)}
+      ${top("Best at this distance", (e) => e.s.dist.n ? e.s.dist.w * 10 + e.s.dist.s * 3 + e.s.dist.t : null, (e) => e.s.dist.text)}
+      ${top("Best on this going", (e) => e.s.going.n ? e.s.going.w * 10 + e.s.going.s * 3 + e.s.going.t : null, (e) => e.s.going.text)}
+      ${top("Best at this track", (e) => e.s.track.n ? e.s.track.w * 10 + e.s.track.s * 3 + e.s.track.t : null, (e) => e.s.track.text)}
+      ${top("Freshest (fewest days since run)", (e) => e.s.daysSince !== null ? -e.s.daysSince : null, (e) => e.s.daysSince + " days")}
+    </div>`;
+  }
+  function bindStars(root, rerender) { $$(".star[data-h]", root).forEach((x) => x.onclick = () => { toggleBook(x.dataset.h); rerender(); }); }
+
   function raceSummary(runs) {
     const win = runs.find((r) => pos(r) === 1);
     const fav = [...runs].sort((a, b) => (num(a.starting_odds) ?? 999) - (num(b.starting_odds) ?? 999))[0];
@@ -181,16 +233,16 @@
     }
     function render() {
       const q = $("#q").value.toLowerCase();
-      const list = data.meetings.map((m) => ({ ...m, t: track(m.track) }))
+      const list = data.meetings.map((m) => ({ ...m, t: track(m.track, m) }))
         .filter((m) => state === "ALL" || (state === "INT" ? !m.t.aus : m.t.state === state))
         .filter((m) => (m.t.name + " " + m.track).toLowerCase().includes(q))
         .sort((a, b) => ["Metro", "Provincial", "Country", "International", ""].indexOf(a.t.type) - ["Metro", "Provincial", "Country", "International", ""].indexOf(b.t.type) || a.t.name.localeCompare(b.t.name));
-      $("#count").textContent = list.length + " meetings · " + fmtDate(data.date, true);
+      $("#count").textContent = list.length + " meetings · " + fmtDate(data.date, true) + (data.date === data.today ? " (today)" : "");
       rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a> <span class="mini">${esc(m.track)}</span></td>
         <td>${esc(m.t.state) || "—"}</td><td>${esc(m.t.type) || "—"}</td><td>${m.races}</td><td>${m.runners}</td>
-        <td>${esc(goingLabel(m)) || "—"}</td>
-        <td><a class="btn" href="${meetingURL(m.track, data.date)}">View Meeting →</a></td></tr>`).join("")
-        || `<tr><td colspan="7">No meetings${data.meetings.length ? " match" : " on this date"}.</td></tr>`;
+        <td>${esc(goingLabel(m)) || "—"}</td><td>${m.upcoming ? esc(fmtTime(m.first_race)) || "—" : '<span class="pill">Results</span>'}</td>
+        <td><a class="btn" href="${meetingURL(m.track, data.date)}">${m.upcoming ? "Form Guide →" : "View Meeting →"}</a></td></tr>`).join("")
+        || `<tr><td colspan="8">No meetings${data.meetings.length ? " match" : " on this date"}.</td></tr>`;
     }
     $$("#states button").forEach((b) => b.onclick = () => { $$("#states button").forEach((x) => x.classList.toggle("active", x === b)); state = b.dataset.state; render(); });
     $("#q").oninput = () => data && render();
@@ -202,29 +254,43 @@
 
   // ---------------------------------------------- 2. Meeting
   pages["meeting"] = async function () {
-    const t = qs("track"), d = qs("date"), tr = track(t);
+    const t = qs("track"), d = qs("date");
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Choose a meeting from the <a href="form-guide.html">Form Guide</a>.</p>`; return; }
-    document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
-    $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
     $("#datecrumb").href = "form-guide.html?date=" + d;
-    $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true)].filter(Boolean).join(" · ");
     loading($("#runners"));
     let card;
     try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`); } catch (e) { return fail($("#runners"), e); }
+    const tr = track(t, card.runs[0]), up = card.upcoming;
+    document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
+    $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
+    $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true), up ? "Upcoming" : "Results", card.runs[0] && card.runs[0].rail ? "Rail: " + card.runs[0].rail : ""].filter(Boolean).join(" · ");
+    if (up) { $("#runners").closest("table").querySelector("thead").innerHTML = FIELD_HEAD; $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats"); }
     const races = groupBy(card.runs, (r) => r.race);
     const nums = Object.keys(races).map(Number).sort((a, b) => a - b);
-    $("#m-races").textContent = nums.length; $("#m-runners").textContent = card.runs.length;
+    $("#m-races").textContent = nums.length; $("#m-runners").textContent = card.runs.filter((r) => !isScr(r)).length;
+    if (up) { $("#m-first-label").textContent = "First Race"; $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
     $("#m-going").textContent = goingLabel(card.runs[0] || {}) || "—";
     let active = Number(qs("race")) || nums[0];
     function setRace(n) {
       active = n;
       const runs = races[n], r0 = runs[0];
-      $("#racebuttons").innerHTML = nums.map((x) => `<button class="${x === n ? "primary" : ""}" data-r="${x}">R${x}<small>${dash(races[x][0].distance)}m</small></button>`).join("");
+      $("#racebuttons").innerHTML = nums.map((x) => `<button class="${x === n ? "primary" : ""}" data-r="${x}">R${x}<small>${up ? esc(fmtTime(races[x][0].start_time)) : dash(races[x][0].distance) + "m"}</small></button>`).join("");
       $$("#racebuttons button").forEach((b) => b.onclick = () => { setRace(Number(b.dataset.r)); history.replaceState(null, "", `?track=${encodeURIComponent(t)}&date=${d}&race=${b.dataset.r}`); });
-      $("#racelabel").textContent = "Race " + n;
+      $("#racelabel").textContent = "Race " + n + (up && r0.start_time ? " · " + fmtTime(r0.start_time) : "");
       $("#racelink").href = raceURL(r0);
       $("#racetitle").textContent = r0.race_name || "Race " + n;
-      $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0)) + " prize money", runs.length + " runners", goingLabel(r0)].filter((x) => x && x !== "$0").join("  |  ");
+      $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0),
+        (up ? money(r0.prize_money) : money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0))) + " prize money",
+        runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0)].filter((x) => x && !x.startsWith("—")).join("  |  ");
+      if (up) {
+        const draw = () => { $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
+        draw();
+        $('[data-tabcontent="speed"]').innerHTML = predictedMap(runs, card.history);
+        $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
+        $('[data-tabcontent="track"]').innerHTML = `<div class="pad"><p><b>${esc(tr.name)}</b> ${tr.state ? "· " + esc(tr.state) : ""} ${tr.type ? "· " + esc(tr.type) : ""}</p><p>Track condition: <b>${esc(goingLabel(r0) || "not yet rated")}</b></p>${r0.rail ? `<p>Rail: <b>${esc(r0.rail)}</b></p>` : ""}</div>`;
+        raceHistory($('[data-tabcontent="history"]'), r0);
+        return;
+      }
       $("#runners").innerHTML = runs.map((r) => {
         const s = horseStats(card.history[r.horse_key] || [], r);
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.trainer)}</td><td>${dash(r.jockey)}</td><td>${dash(r.weight)}</td>
@@ -236,22 +302,40 @@
       raceHistory($('[data-tabcontent="history"]'), r0);
     }
     $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
-      return `<tr><td>${n}</td><td>${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(r0.race_name)}</td><td>${runs.length}</td><td>${w ? esc(w.horse) : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
+      return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(r0.race_name)}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
+    if (up) $("#raceall").closest("table").querySelector("thead").innerHTML = `<tr><th>Race</th><th>Time · Distance</th><th>Class</th><th class="name">Race Name</th><th>Runners</th><th>Winner</th><th></th></tr>`;
     setRace(nums.includes(active) ? active : nums[0]);
     tabs("#meetingtabs");
   };
 
   // ---------------------------------------------- 3. Race
   pages["race"] = async function () {
-    const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1, tr = track(t);
+    const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1;
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Choose a race from the <a href="form-guide.html">Form Guide</a>.</p>`; return; }
-    $("#meetinglink").href = meetingURL(t, d); $("#meetinglink").textContent = tr.name;
+    $("#meetinglink").href = meetingURL(t, d);
     $("#rn").textContent = n; $("#comparelink").href = `comparison.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`;
     loading($("#field"));
     let card;
     try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`); } catch (e) { return fail($("#field"), e); }
-    const runs = card.runs, r0 = runs[0];
+    const runs = card.runs, r0 = runs[0], tr = track(t, r0), up = card.upcoming;
+    $("#meetinglink").textContent = tr.name;
     if (!r0) { $("#field").innerHTML = `<tr><td colspan="11">No race ${n} at ${esc(tr.name)} on ${fmtDate(d)}.</td></tr>`; return; }
+    if (up) {
+      document.title = `${r0.race_name || "Race " + n} | The Sporting Almanac`;
+      $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}${r0.start_time ? " · " + fmtTime(r0.start_time) : ""}`;
+      $("#rtitle").textContent = r0.race_name || "Race " + n;
+      $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(r0.prize_money), goingLabel(r0), r0.rail && "Rail " + r0.rail].filter((x) => x && x !== "—").join(" · ");
+      $("#field").closest("table").querySelector("thead").innerHTML = FIELD_HEAD;
+      const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
+      draw();
+      $('[data-tabcontent="speed"]').innerHTML = predictedMap(runs, card.history);
+      $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats");
+      $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
+      $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
+      raceHistory($('[data-tabcontent="history"]'), r0);
+      tabs("#racetabs");
+      return;
+    }
     document.title = `${r0.race_name || "Race " + n} | The Sporting Almanac`;
     $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}`;
     $("#rtitle").textContent = r0.race_name || "Race " + n;
@@ -282,9 +366,19 @@
     if (!name) { $("#main").innerHTML = `<p class="sub">Search for a horse on the <a href="blackbook.html">Blackbook</a> page, or open one from a race.</p>`; return; }
     $("#horseName").textContent = name.toUpperCase();
     loading($("#formrows"));
-    let runs;
-    try { runs = (await get(`/api/runs?horse=${encodeURIComponent(name)}&limit=5000`)).runs; } catch (e) { return fail($("#formrows"), e); }
-    if (!runs.length) { $("#formrows").innerHTML = `<tr><td colspan="18">No runs found for ${esc(name)}.</td></tr>`; return; }
+    let runs, entries = [];
+    try {
+      [runs, entries] = await Promise.all([get(`/api/runs?horse=${encodeURIComponent(name)}&limit=5000`).then((x) => x.runs), get(`/api/upcoming?horse=${encodeURIComponent(name)}`).catch(() => [])]);
+    } catch (e) { return fail($("#formrows"), e); }
+    $('[data-tabcontent="entries"]').innerHTML = `<h3>Upcoming Entries</h3>` + (entries.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th>Time</th><th>Track</th><th class="name">Race</th><th>Dist</th><th>No.</th><th>Barrier</th><th>Weight</th><th>Jockey</th></tr></thead><tbody>${entries.map((e) =>
+      `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">R${e.race} ${esc(e.race_name)}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
+      : `<p class="note">No upcoming starts in the next few days.</p>`);
+    if (entries.length) { const b = $('[data-panel="entries"]'); if (b) b.textContent = `Entries (${entries.length})`; }
+    if (!runs.length) {
+      $("#formrows").innerHTML = `<tr><td colspan="18">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
+      if (entries.length) { $("#horseName").textContent = entries[0].horse.toUpperCase(); $("#trainer").textContent = "—"; }
+      tabs("#horsetabs"); return;
+    }
     runs.sort((a, b) => b.date.localeCompare(a.date) || 0);
     const last = runs[0], prev = runs[1], disp = last.horse;
     document.title = `${disp} | The Sporting Almanac`;
@@ -345,21 +439,23 @@
 
   // ---------------------------------------------- 5. Comparison
   pages["comparison"] = async function () {
-    const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1, tr = track(t);
+    const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1;
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Open a race and choose <b>Compare runners</b>.</p>`; return; }
-    $("#racelink").href = `race.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`; $("#racelink").textContent = `${tr.name} Race ${n}`;
+    $("#racelink").href = `race.html?track=${encodeURIComponent(t)}&date=${d}&race=${n}`;
     loading($("#compbody"));
     let card;
     try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`); } catch (e) { return fail($("#compbody"), e); }
-    const runs = card.runs;
+    const runs = card.runs.filter((r) => !isScr(r)), up = card.upcoming, tr = track(t, runs[0]);
+    $("#racelink").textContent = `${tr.name} Race ${n}`;
     if (!runs.length) { $("#compbody").innerHTML = `<tr><td>No such race.</td></tr>`; return; }
     $("#racehead").textContent = `${tr.name} · ${fmtDate(d, true)} · Race ${n} · ${runs[0].race_name || ""} (${dash(runs[0].distance)}m)`;
     const stats = new Map(runs.map((r) => [r, horseStats(card.history[r.horse_key] || [], r)]));
-    let selected = [...runs].sort((a, b) => (num(a.starting_odds) ?? 999) - (num(b.starting_odds) ?? 999)).slice(0, 4);
+    let selected = up ? [...runs].sort((a, b) => stats.get(b).career.win - stats.get(a).career.win).slice(0, 4)
+      : [...runs].sort((a, b) => (num(a.starting_odds) ?? 999) - (num(b.starting_odds) ?? 999)).slice(0, 4);
     $("#horses").innerHTML = runs.map((r, i) => `<option value="${i}">${esc(r.horse)}</option>`).join("");
     const rowsDef = [
-      ["Silk", (r) => silk(r, true)], ["Finished", (r) => `<b>${posLabel(r)}</b>`], ["Barrier", (r) => dash(r.barrier)], ["Weight", (r) => dash(r.weight)],
-      ["Jockey", (r) => dash(r.jockey)], ["Trainer", (r) => dash(r.trainer)], ["Starting price", (r) => dash(r.starting_odds)],
+      ["Silk", (r) => silk(r, true)], up ? ["Number", (r) => `<b>${dash(r.number)}</b>`] : ["Finished", (r) => `<b>${posLabel(r)}</b>`], ["Barrier", (r) => dash(r.barrier)], ["Weight", (r) => wt(r)],
+      ["Jockey", (r) => dash(r.jockey)], ["Trainer", (r) => dash(r.trainer)], up ? ["Gear changes", (r) => dash(r.gear)] : ["Starting price", (r) => dash(r.starting_odds)],
       ["Recent form", (r) => stats.get(r).last10], ["Career", (r) => stats.get(r).career.text], ["At this distance", (r) => stats.get(r).dist.text],
       ["On this going", (r) => stats.get(r).going.text], ["At this track", (r) => stats.get(r).track.text], ["With this jockey", (r) => stats.get(r).jockey.text],
       ["First-up / second-up", (r) => stats.get(r).firstUp.text + " / " + stats.get(r).secondUp.text], ["Days since last run", (r) => dash(stats.get(r).daysSince)],
@@ -399,8 +495,14 @@
       $("#count").textContent = names.length + (names.length === 1 ? " horse" : " horses");
       $("#bookrows").innerHTML = names.map((h) => `<tr><td class="name" data-last="${esc(h)}"><span class="horsecell"><span class="silk none"></span><a href="${horseURL(h)}">${esc(h)}</a></span></td>
         <td><input class="field blacknote" value="${esc(b[h].note || "")}" data-note="${esc(h)}" placeholder="Add a note…"></td>
-        <td data-lastrun="${esc(h)}" class="mini">…</td><td><button data-remove="${esc(h)}">Remove</button></td></tr>`).join("")
-        || `<tr><td colspan="4">No horses saved yet. Search above, or tap ☆ on any race or horse page.</td></tr>`;
+        <td data-next="${esc(horseKey(h))}" class="mini">—</td><td data-lastrun="${esc(h)}" class="mini">…</td><td><button data-remove="${esc(h)}">Remove</button></td></tr>`).join("")
+        || `<tr><td colspan="5">No horses saved yet. Search above, or tap ☆ on any race or horse page.</td></tr>`;
+      if (names.length) get("/api/upcoming?keys=" + encodeURIComponent(names.map(horseKey).join(","))).then((list) => {
+        for (const e of list) {
+          const cell = $$("[data-next]").find((x) => x.dataset.next === e.horse_key);
+          if (cell && cell.textContent === "—") cell.innerHTML = `<a href="${raceURL(e)}"><b>${fmtDate(e.date)} ${esc(fmtTime(e.start_time))}</b> · ${esc(track(e.track, e).name)} R${e.race} · ${dash(e.distance)}m${e.barrier ? " · b" + esc(e.barrier) : ""}</a>${isScr(e) ? " (scratched)" : ""}`;
+        }
+      }).catch(() => {});
       $$("[data-note]").forEach((el) => el.onchange = () => { const b = book(); if (b[el.dataset.note]) { b[el.dataset.note].note = el.value; saveBook(b); } });
       $$("[data-remove]").forEach((el) => el.onclick = () => { const b = book(); delete b[el.dataset.remove]; saveBook(b); render(); });
       for (const h of names) {
