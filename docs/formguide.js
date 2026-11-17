@@ -137,6 +137,9 @@
     else if ((m = t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})$/)) && MON.includes(m[2].toLowerCase())) t = `${MON.indexOf(m[2].toLowerCase()) + 1}:${m[1].padStart(2, "0")}.00`;
     return dash(t.replace("-", ":"));
   }
+  // a race time for a table cell: the time, or a blank cell with the reason on hover
+  const timeCell = (r) => { const t = runTime(r.finish_time); if (t !== "—") return t;
+    return `<span class="nodata" title="${pos(r) ? "No time recorded for this race" : "Didn't finish"}"></span>`; };
   const timeSecs = (v) => { const t = runTime(v); if (t === "—") return null; const p = t.split(":"); const x = p.length > 1 ? Number(p[0]) * 60 + Number(p[1]) : Number(p[0]); return x > 0 ? x : null; };
   const SECS_PER_LENGTH = 0.17;
   // class band, same rules as Cloudflare: each stakes level on its own, the rest by benchmark
@@ -167,7 +170,7 @@
     const band = classBand(r), t = timeSecs(r.finish_time);
     let a = band !== "Other" && avgs && avgs[avgKey(r, band)], same = true;
     if (!a || a.n < 3) { a = avgs && avgs[avgKey(r, "*")]; same = false; }
-    if (!a || a.n < 3 || t === null) return `<td class="mini" title="${a ? "Only " + a.n + " race" + (a.n === 1 ? "" : "s") + " to average" : "No average yet"}">—</td>`;
+    if (!a || a.n < 3 || t === null) return `<td class="mini" title="${t === null ? (pos(r) ? "No time recorded for this race" : "Didn't finish") : a ? "Only " + a.n + " race" + (a.n === 1 ? "" : "s") + " here to average" : "Not enough races here to average"}"></td>`;
     const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
     const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
     const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
@@ -774,7 +777,7 @@
       <div class="stat"><small>Winner</small><b style="font-size:17px">${esc(win.horse)}</b></div>
       <div class="stat"><small>Winning barrier</small><b>${dash(win.barrier)}</b></div>
       <div class="stat"><small>Winner's SP</small><b>${dash(win.starting_odds)}</b></div>
-      <div class="stat"><small>Winning time</small><b>${runTime(win.finish_time)}</b></div>
+      <div class="stat"><small>Winning time</small><b>${runTime(win.finish_time) === "—" ? '<span class="mini">Not recorded</span>' : runTime(win.finish_time)}</b></div>
       <div class="stat"><small>Favourite</small><b style="font-size:17px">${fav ? esc(fav.horse) + " (" + posLabel(fav) + ")" : "—"}</b></div>
       <div class="stat"><small>Second's margin</small><b>${dash((runs.find((r) => pos(r) === 2) || {}).margin)}${(runs.find((r) => pos(r) === 2) || {}).margin ? "L" : ""}</b></div>
     </div>`;
@@ -788,7 +791,7 @@
       const byDate = groupBy(d.runs.filter((x) => x.date !== r.date), (x) => x.date);
       const rows = Object.keys(byDate).sort().reverse().map((dt) => {
         const w = byDate[dt].find((x) => pos(x) === 1) || byDate[dt][0];
-        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${runTime(w.finish_time)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
+        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${timeCell(w)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
       });
       el.innerHTML = rows.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th class="name">Winner</th><th>Barrier</th><th>Jockey</th><th>Trainer</th><th>SP</th><th>Time</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`
         : `<div class="pad note">No earlier runnings of "${esc(raceName(r.race_name))}" at ${esc(track(r.track).name)} in the database.</div>`;
@@ -874,6 +877,10 @@
     const tr = track(t, card.runs[0]), up = card.upcoming;
     document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
     $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
+    if (!$("#rbbtn")) {
+      $("#trackname").insertAdjacentHTML("afterend", `<a id="rbbtn" class="btn" href="racebook.html?track=${encodeURIComponent(t)}&date=${d}">🖨 Racebook (PDF)</a>`);
+      $("#rbbtn").onclick = (e) => { if (!loggedIn()) { e.preventDefault(); signIn("signup"); } };
+    }
     $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true), up ? "Upcoming" : "Results", card.runs[0] && card.runs[0].rail ? "Rail: " + card.runs[0].rail : ""].filter(Boolean).join(" · ");
     if (up) { $("#runners").closest("table").querySelector("thead").innerHTML = FIELD_HEAD; $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats"); }
     const races = groupBy(card.runs, (r) => r.race);
@@ -968,7 +975,7 @@
     speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
     $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
     $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
-      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${runTime(r.finish_time)}</td><td>${marginTxt(r)}</td></tr>`).join("")}</tbody></table></div>
+      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${timeCell(r)}</td><td>${marginTxt(r)}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
     tabs("#racetabs");
@@ -1081,7 +1088,7 @@
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
-          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${runTime(r.finish_time)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
+          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`;
       }).join("") || `<tr><td colspan="19">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
@@ -1188,7 +1195,7 @@
         ["Last 10", (x) => figure(x.runs, 10), null],
         ["Best class won", (x) => x.bestWin ? ({ G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed", High: "BM78+ / Open", Mid: "BM64–77", Low: "BM63 & below / Maiden", Other: "Other" })[x.bestWin] : "No wins yet",
           S.map((x) => x.bestWin ? -["G1", "G2", "G3", "LR", "High", "Mid", "Low", "Other"].indexOf(x.bestWin) : null)],
-        ["Speed figure (last 5)", (x) => x.fig === null ? "—" : `<b>${x.fig > 0 ? "+" : x.fig < 0 ? "−" : ""}${Math.abs(x.fig).toFixed(1)}L</b> <span class="mini">vs average, ${x.nFig} run${x.nFig === 1 ? "" : "s"}</span>`, S.map((x) => x.fig)],
+        ["Speed figure (last 5)", (x) => x.fig === null ? '<span class="mini">No timed runs to compare</span>' : `<b>${x.fig > 0 ? "+" : x.fig < 0 ? "−" : ""}${Math.abs(x.fig).toFixed(1)}L</b> <span class="mini">vs average, ${x.nFig} run${x.nFig === 1 ? "" : "s"}</span>`, S.map((x) => x.fig)],
         ["Up to 1200m", (x) => recCell(x.d1), S.map((x) => rate(x.d1))], ["1201–1600m", (x) => recCell(x.d2), S.map((x) => rate(x.d2))],
         ["1601–2000m", (x) => recCell(x.d3), S.map((x) => rate(x.d3))], ["2001m+", (x) => recCell(x.d4), S.map((x) => rate(x.d4))],
         ["Good", (x) => recCell(x.gd), S.map((x) => rate(x.gd))], ["Soft", (x) => recCell(x.sf), S.map((x) => rate(x.sf))], ["Heavy", (x) => recCell(x.hv), S.map((x) => rate(x.hv))],
@@ -1237,6 +1244,74 @@
       try { const r = await api("/api/alerts/test", "POST", {}); $("#amsg").textContent = `Sent to ${a.email}` + (r.horses ? ` (${r.horses} runner${r.horses === 1 ? "" : "s"} on ${fmtDate(r.date)}).` : " (none of your horses are in a field yet, so it shows the empty version)."); }
       catch (x) { $("#amsg").textContent = x.message; } b.disabled = false; };
   }
+
+
+  // ---------------------------------------------- 7. Racebook (members): a print-ready form guide for a whole meeting
+  pages["racebook"] = async function () {
+    const t = qs("track"), d = qs("date"), only = Number(qs("race")) || 0, out = $("#racebook");
+    $("#rbback").href = meetingURL(t, d);
+    if (!loggedIn()) {
+      out.innerHTML = `<div class="panel pad" style="max-width:560px"><h2>Racebooks are for members</h2>
+        <p>Create a free account (or log in) to print a full racebook for any meeting: form, records, last starts, speed maps and where winners settle, race by race.</p>
+        <p><button class="primary" id="rbsign">Create a free account</button> <button id="rblog">Log in</button></p></div>`;
+      $("#rbsign").onclick = () => signIn("signup"); $("#rblog").onclick = () => signIn("login");
+      return;
+    }
+    let card;
+    try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`)); } catch (e) { return fail(out, e); }
+    const tr = track(t, card.runs[0]), races = groupBy(card.runs, (r) => r.race);
+    const nums = Object.keys(races).map(Number).sort((a, b) => a - b).filter((n) => !only || n === only);
+    if (!nums.length) { out.innerHTML = `<p class="pad">No races found for ${esc(tr.name)} on ${fmtDate(d, true)}.</p>`; return; }
+    document.title = `${tr.name} racebook ${fmtDate(d)} | The Sporting Almanac`;
+    $("#rbtitle").textContent = `${tr.name} Racebook`;
+    $("#rbsub").textContent = [fmtDate(d, true), tr.state, tr.type, goingLabel(card.runs[0] || {})].filter((x) => x && x !== "—").join(" · ");
+    const settled = await get(`/api/settled?tracks=${encodeURIComponent(sameTrackCodes(t, card.runs[0]).join(","))}&dists=${[...new Set(card.runs.map((r) => num(r.distance)).filter(Boolean))].join(",")}`).catch(() => ({}));
+    // average times for every track in the runners' last 5 starts (asked for 60 tracks at a time)
+    const trs = [...new Set(card.runs.flatMap((r) => (card.history[r.horse_key] || []).slice(0, 5).map((h) => String(h.track).toUpperCase())))];
+    const avgs = Object.assign({}, ...(await Promise.all(Array.from({ length: Math.ceil(trs.length / 60) }, (_, i) =>
+      get("/api/avgtimes?tracks=" + encodeURIComponent(trs.slice(i * 60, i * 60 + 60).join(","))).catch(() => ({}))))));
+    const figTxt = (L) => { if (L === null) return ""; const k = Math.min(1, Math.abs(L) / 8), a = (0.12 + 0.38 * k).toFixed(2);
+      return `<span class="fpill ${L > 0 ? "fplus" : L < 0 ? "fminus" : ""}" style="background:${L > 0 ? `rgba(22,163,74,${a})` : L < 0 ? `rgba(220,38,38,${a})` : "#eef0f3"}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L</span>`; };
+    const rec = (x) => x && x.n ? x.text : "—";
+    const head = `<div class="rbhead"><span>THE <b>SPORTING</b> ALMANAC</span><span>${esc(tr.name)} · ${esc(fmtDate(d, true))}</span></div>`;
+    out.innerHTML = nums.map((n) => {
+      const runs = races[n], r0 = runs[0], live = runs.filter((r) => !isScr(r));
+      const place = initialPlacement(live, card.history, true), pace = suggestPace(place);
+      const cols = [0, 1, 2, 3].map((c) => live.filter((r) => (place[r.horse_key] || { c: 2 }).c === c).sort((a, b) => (place[a.horse_key].o || 0) - (place[b.horse_key].o || 0)));
+      const st = settled[num(r0.distance)];
+      const best = st ? Math.max(...SETTLE.map((k) => st[k])) : 0;
+      const settleLine = st && st.races >= 5 ? `<div class="rbsettle">${SETTLE.map((k) => `<div class="${st[k] === best ? "top" : ""}"><span>${k}</span><b>${Math.round(100 * st[k] / st.races)}%</b></div>`).join("")}<em>${st.races} races</em></div>` : " not enough races here yet";
+      const sorted = [...runs].sort((a, b) => isScr(a) - isScr(b) || (num(a.number) || 99) - (num(b.number) || 99));
+      return `<section class="rbrace">${head}
+        <div class="rbracehead"><div class="rbno">R${n}</div><div><h2>${esc(raceName(r0.race_name) || "Race " + n)}</h2>
+          <p>${[r0.start_time && fmtTime(r0.start_time), r0.distance && r0.distance + "m", r0.class || classLabel(r0), num(r0.prize_money) ? money(r0.prize_money) : "", goingLabel(r0), r0.rail && "Rail " + r0.rail].filter((x) => x && x !== "—").map(esc).join(" · ")}</p></div></div>
+        <div class="rbinfo"><div><b>Where winners settle at ${esc(tr.name)} ${dash(r0.distance)}m</b>${settleLine}</div>
+          <div class="rbmap"><b>Speed map</b> <span class="mini">expected ${esc(pace.toLowerCase())} pace</span>${cols.map((list, c) => list.length ? `<div class="rbmaprow"><span class="rbcol c${c}">${COLS[c]}</span>${list.map((r) => `<span class="rbchip c${c}"><b>${esc(r.number || "?")}</b> ${esc(r.horse)}</span>`).join("")}</div>` : "").join("")}</div></div>
+        ${sorted.map((r) => {
+          const prior = card.history[r.horse_key] || [], s = horseStats(prior, r), scr = isScr(r);
+          if (scr) return `<div class="rbrunner scr"><span class="rbnum">${esc(r.number || "")}</span> <s>${esc(r.horse)}</s> <span class="mini">scratched</span></div>`;
+          const gd = (g) => rec(record(prior.filter((h) => going(h) === g)));
+          const last3 = prior.slice(0, 3).map((h) => `<tr><td class="${["", "p1", "p2", "p3"][pos(h)] || ""}"><b>${posLabel(h)}</b>${h.starters ? "/" + esc(h.starters) : ""}</td><td>${esc(track(h.track, h).name)}</td><td>${fmtDate(h.date)}</td><td>${dash(h.distance)}m</td>
+            <td>${esc(goingLabel(h)) || "—"}</td><td>${esc(classLabel(h) || "")}</td><td>${h.weight ? esc(h.weight) + "kg" : ""}</td><td>${esc(h.jockey || "")}</td><td>${dash(h.starting_odds)}</td><td>${timeCell(h)}</td><td>${marginTxt(h)}</td><td title="Lengths faster (+) or slower (−) than the average winner of this class here">${figTxt(lengthsVsAvg(h, avgs))}</td></tr>`).join("");
+          const f5 = prior.slice(0, 5).map((h) => lengthsVsAvg(h, avgs)).filter((x) => x !== null), fig = f5.length ? Math.round(f5.reduce((a, b) => a + b, 0) / f5.length * 10) / 10 : null;
+          return `<div class="rbrunner"><div class="rbtop"><span class="rbnum">${esc(r.number || "")}</span>${silk(r)}
+              <div class="rbname"><b>${esc(r.horse)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}<div class="mini">Barrier ${dash(r.barrier)} · ${wt(r)}kg · ${esc(r.jockey || "—")} · Trainer: ${esc(r.trainer || "—")}</div></div>
+              <div class="rbcareer"><div><span class="mini">Career</span> <b>${s.career.text}</b></div><div><span class="mini">Last 10</span> <b>${s.last10 || "—"}</b></div>${fig === null ? "" : `<div><span class="mini">Speed (${f5.length} run${f5.length === 1 ? "" : "s"})</span> <b>${figTxt(fig)}</b></div>`}</div></div>
+            <div class="rbstats">Track ${rec(s.track)} · Dist ${rec(s.dist)} · Trk/Dist ${rec(s.trackDist)} · Good ${gd("Good")} · Soft ${gd("Soft")} · Heavy ${gd("Heavy")} · 1st up ${rec(s.firstUp)} · 2nd up ${rec(s.secondUp)} · ${s.daysSince === null ? "First starter" : s.daysSince + " days since run"}${r.gear ? ` · <b>Gear:</b> ${esc(r.gear)}` : ""}</div>
+            ${last3 ? `<table class="rblast">${last3}</table>` : `<p class="mini" style="margin:2px 0 0">No race starts yet.</p>`}</div>`;
+        }).join("")}
+        <p class="rbfoot">thesportingalmanac.com · Printed for ${esc(store.get(EMAIL))} · Speed = lengths faster (+) or slower (−) than the average winner of that class at that track, distance and going. Form is each horse's record before this meeting. Check final scratchings and fields before betting.</p></section>`;
+    }).join("");
+    // load every silk now (not when scrolled to), so they're all in the PDF
+    const imgs = $$("#racebook img"); imgs.forEach((i) => { i.loading = "eager"; });
+    $("#rbprint").disabled = false;
+    $("#rbprint").onclick = async () => {
+      $("#rbprint").textContent = "Getting silks ready…";
+      await Promise.race([Promise.all(imgs.map((i) => i.complete ? 0 : new Promise((r) => { i.onload = i.onerror = r; }))), new Promise((r) => setTimeout(r, 4000))]);
+      $("#rbprint").textContent = "🖨 Print / Save as PDF";
+      window.print();
+    };
+  };
 
   // ---------------------------------------------- 6. Blackbook
   pages["blackbook"] = async function () {
