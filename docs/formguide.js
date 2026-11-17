@@ -362,11 +362,16 @@
     let el = $("#acct"); if (!el) { el = document.createElement("span"); el.id = "acct"; nav.after(el); }
     if (loggedIn()) {
       el.innerHTML = `<button class="acctbtn" id="acctmenu">${esc(store.get(EMAIL))} ▾</button><div class="acctdrop hidden" id="acctdrop">
-        <a href="blackbook.html">My Blackbook</a><button data-pw>Change password</button><button data-out>Log out</button></div>`;
+        <a href="blackbook.html">My Blackbook</a><button data-alerts>Email alerts: …</button><button data-pw>Change password</button><button data-out>Log out</button></div>`;
       $("#acctmenu").onclick = (e) => { e.stopPropagation(); $("#acctdrop").classList.toggle("hidden"); };
       document.addEventListener("click", () => $("#acctdrop") && $("#acctdrop").classList.add("hidden"));
       $("[data-out]", el).onclick = async () => { await api("/api/auth/logout", "POST").catch(() => {}); store.set(TOKEN, ""); store.set(EMAIL, ""); store.set(BOOK, ""); location.reload(); };
       $("[data-pw]", el).onclick = () => signIn("password");
+      const ab = $("[data-alerts]", el);
+      const showA = (on) => ab.textContent = "Email alerts: " + (on ? "On ✓" : "Off");
+      api("/api/alerts").then((a) => showA(a.email_alerts)).catch(() => ab.remove());
+      ab.onclick = async (e) => { e.stopPropagation(); const now = /On/.test(ab.textContent); showA(!now);
+        try { const r = await api("/api/alerts", "POST", { email_alerts: !now }); showA(r.email_alerts); const t = $("#alerton"); if (t) t.checked = r.email_alerts; } catch (x) { showA(now); } };
     } else {
       el.innerHTML = `<button class="acctbtn primary" id="acctlogin">Log in</button>`;
       $("#acctlogin").onclick = () => signIn("login");
@@ -485,6 +490,53 @@
     return leaders >= 4 || pace >= 7 ? "Fast" : leaders === 3 ? "Genuine" : leaders <= 1 ? "Slow" : "Moderate";
   }
 
+
+
+  // ------------------------------------------------------------ finishing order: finishers 1st..last, then BD / F / FTF / LR etc.
+  const byFinish = (runs) => [...runs].sort((a, b) => (isScr(a) - isScr(b)) || ((pos(a) || 999) - (pos(b) || 999)));
+  const marginTxt = (r) => { const p = pos(r), m = num(r.margin); return !p || p === 1 || !m ? "—" : r.margin + "L"; };
+
+  // ------------------------------------------------------------ above a race: where winners settle here, and winners out of the race
+  const SETTLE = ["Leader", "On Pace", "Midfield", "Off Pace", "Backmarker"];
+  const extrasCache = {};
+  function sameTrackCodes(code, r) {
+    const t = track(code, r), k = nameKey(t.name);
+    return [...new Set([String(code).toUpperCase(), ...Object.keys(TRACKS).filter((c) => nameKey(TRACKS[c][0]) === k && AU.has(TRACKS[c][1]) === t.aus)])].slice(0, 6);
+  }
+  async function raceExtras(host, runs, allRuns, up) {
+    const r0 = runs[0], d = r0.date, code = String(r0.track).toUpperCase(), tr = track(r0.track, r0), dist = num(r0.distance);
+    host.innerHTML = `<div class="extras"><div data-settle><p class="mini">Loading where winners settle…</p></div>${up ? "" : `<div data-wout></div>`}</div>`;
+    const key = code + "|" + d;
+    const c = (extrasCache[key] ||= {
+      settled: get(`/api/settled?tracks=${encodeURIComponent(sameTrackCodes(r0.track, r0).join(","))}&dists=${[...new Set(allRuns.map((r) => num(r.distance)).filter(Boolean))].join(",")}`).catch(() => ({})),
+      wout: up ? Promise.resolve([]) : get(`/api/winners-out?track=${encodeURIComponent(r0.track)}&date=${d}`).catch(() => []),
+    });
+    const st = (await c.settled)[dist];
+    const box = $("[data-settle]", host); if (!box) return;
+    if (!st || st.races < 5) box.innerHTML = `<p class="mini settlehead">Where winners settle at ${esc(tr.name)} ${dist || ""}m: not enough races here yet${st && st.races ? ` (${st.races})` : ""}.</p>`;
+    else {
+      const best = Math.max(...SETTLE.map((k) => st[k]));
+      box.innerHTML = `<p class="mini settlehead">Where winners settled · <b>${esc(tr.name)} ${dist}m</b> · ${st.races} races</p><div class="settle">${SETTLE.map((k) =>
+        `<div class="${st[k] === best ? "top" : ""}"><span>${k}</span><b>${Math.round(100 * st[k] / st.races)}%</b><small>${st[k]} win${st[k] === 1 ? "" : "s"}</small></div>`).join("")}</div>`;
+    }
+    if (up) return;
+    // winners out: each horse from this race that has won since, counted once
+    const rows = (await c.wout).filter((x) => Number(x.race) === Number(r0.race));
+    const wb = $("[data-wout]", host); if (!wb) return;
+    const out = [];
+    runs.forEach((r) => {
+      const wins = rows.filter((x) => x.horse_key === r.horse_key).map((x) => ({ ...x, position: "1", race: x.wrace }));
+      if (!wins.length) return;
+      const mine = sameHorse([r, ...wins], r).filter((x) => x !== r && wins.includes(x));   // same name, different horse? leave its wins out
+      if (mine.length) out.push({ r, first: mine.sort((a, b) => a.date.localeCompare(b.date))[0], n: mine.length });
+    });
+    out.sort((a, b) => a.first.date.localeCompare(b.first.date));
+    const live = runs.filter((r) => !isScr(r)).length;
+    wb.innerHTML = `<div class="wout"><p class="settlehead mini"><b>${out.length} winner${out.length === 1 ? "" : "s"} out of this race</b> · ${out.length} of ${live} runners have won since</p>
+      ${out.length ? `<ul>${out.map((o) => `<li><a href="${horseURL(o.r.horse, o.r)}"><b>${esc(o.r.horse)}</b></a> <span class="mini">(${posLabel(o.r)} here)</span> — won ${fmtDate(o.first.date)} at
+        <a href="${raceURL(o.first)}">${esc(track(o.first.track, o.first).name)}</a> <span class="mini">${esc(classLabel(o.first) || "")}${o.n > 1 ? ` · ${o.n} wins since` : ""}</span></li>`).join("")}</ul>`
+        : `<p class="mini" style="margin:4px 0 0">None yet.</p>`}</div>`;
+  }
 
   // ------------------------------------------------------------ virtual race
   // Each horse gets a rating in lengths from its recent runs (class of race + how far it was beaten), adjusted for
@@ -838,6 +890,8 @@
       $("#racelabel").textContent = "Race " + n + (up && r0.start_time ? " · " + fmtTime(r0.start_time) : "");
       $("#racelink").href = raceURL(r0);
       $("#racetitle").textContent = raceName(r0.race_name) || "Race " + n;
+      let ex = $("#raceextras"); if (!ex) { ex = document.createElement("div"); ex.id = "raceextras"; $("#racedetails").after(ex); }
+      raceExtras(ex, runs, card.runs, up);
       $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0),
         (up ? money(r0.prize_money) : money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0))) + " prize money",
         runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0)].filter((x) => x && !x.startsWith("—")).join("  |  ");
@@ -850,10 +904,10 @@
         raceHistory($('[data-tabcontent="history"]'), r0);
         return;
       }
-      $("#runners").innerHTML = runs.map((r) => {
+      $("#runners").innerHTML = byFinish(runs).map((r) => {
         const s = horseStats(card.history[r.horse_key] || [], r);
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.trainer)}</td><td>${dash(r.jockey)}</td><td>${dash(r.weight)}</td>
-          <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`;
+          <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r)}</td></tr>`;
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
       $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
@@ -876,8 +930,9 @@
     loading($("#field"));
     let card;
     try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}&race=${n}`)); } catch (e) { return fail($("#field"), e); }
-    const runs = card.runs, r0 = runs[0], tr = track(t, r0), up = card.upcoming;
+    const runs = byFinish(card.runs), r0 = runs[0], tr = track(t, r0), up = card.upcoming;
     $("#meetinglink").textContent = tr.name;
+    if (r0) { let ex = $("#raceextras"); if (!ex) { ex = document.createElement("div"); ex.id = "raceextras"; $(".hero").after(ex); } raceExtras(ex, runs, runs, up); }
     if (!r0) { $("#field").innerHTML = `<tr><td colspan="11">No race ${n} at ${esc(tr.name)} on ${fmtDate(d)}.</td></tr>`; return; }
     if (up) {
       document.title = `${raceName(r0.race_name) || "Race " + n} | The Sporting Almanac`;
@@ -913,7 +968,7 @@
     speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
     $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
     $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
-      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${runTime(r.finish_time)}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td></tr>`).join("")}</tbody></table></div>
+      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${runTime(r.finish_time)}</td><td>${marginTxt(r)}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
     tabs("#racetabs");
@@ -1162,6 +1217,27 @@
     }
   }
 
+  // blackbook page: "email me when my horses run" switch and a test button
+  let alertsDrawn = false;
+  async function alertsPanel() {
+    if (alertsDrawn) return; alertsDrawn = true;
+    const host = $("#count") && $("#count").closest("section"); if (!host) return;
+    const box = document.createElement("div"); box.className = "alertbox";
+    host.before(box);
+    if (!loggedIn()) { box.innerHTML = `🔔 <b>Get an email when your horses are running.</b> <a href="#" id="alog">Log in or create an account</a> to turn on blackbook alerts.`;
+      $("#alog").onclick = (e) => { e.preventDefault(); signIn("login"); }; return; }
+    let a; try { a = await api("/api/alerts"); } catch (e) { box.remove(); return; }
+    box.innerHTML = `<label class="switch"><input type="checkbox" id="alerton" ${a.email_alerts ? "checked" : ""}><span></span></label>
+      <div><b>Email me when my horses are running</b><div class="mini">One email at about 9am Melbourne time (after scratchings) on days one of your horses is in a field, to ${esc(a.email)}.</div></div>
+      <button id="atest" class="filter">Send me a test</button><span class="mini" id="amsg"></span>`;
+    $("#alerton").onchange = async (e) => { try { const r = await api("/api/alerts", "POST", { email_alerts: e.target.checked }); e.target.checked = r.email_alerts;
+      $("#amsg").textContent = r.email_alerts ? "Alerts on." : "Alerts off.";
+      const mb = $("[data-alerts]"); if (mb) mb.textContent = "Email alerts: " + (r.email_alerts ? "On ✓" : "Off"); } catch (x) { e.target.checked = !e.target.checked; $("#amsg").textContent = x.message; } };
+    $("#atest").onclick = async () => { const b = $("#atest"); b.disabled = true; $("#amsg").textContent = "Sending…";
+      try { const r = await api("/api/alerts/test", "POST", {}); $("#amsg").textContent = `Sent to ${a.email}` + (r.horses ? ` (${r.horses} runner${r.horses === 1 ? "" : "s"} on ${fmtDate(r.date)}).` : " (none of your horses are in a field yet, so it shows the empty version)."); }
+      catch (x) { $("#amsg").textContent = x.message; } b.disabled = false; };
+  }
+
   // ---------------------------------------------- 6. Blackbook
   pages["blackbook"] = async function () {
     horseSearch($("#search"), $("#suggest"), (h) => { const b = book(); b[h] ??= { note: "", added: todayISO() }; saveBook(b); $("#search").value = ""; render(); });
@@ -1172,6 +1248,7 @@
       $("#count").innerHTML = esc(names.length + (names.length === 1 ? " horse" : " horses")) + (loggedIn() ? ` · saved to your account`
         : ` · saved in this browser only — <a href="#" id="bblogin">log in</a> to keep it on every device`);
       const bl = $("#bblogin"); if (bl) bl.onclick = (e) => { e.preventDefault(); signIn("login"); };
+      alertsPanel();
       $("#bookrows").innerHTML = names.map((h) => `<tr><td class="name" data-last="${esc(h)}"><span class="horsecell"><span class="silk none"></span><a href="${horseURL(h)}">${esc(h)}</a></span></td>
         <td><input class="field blacknote" value="${esc(b[h].note || "")}" data-note="${esc(h)}" placeholder="Add a note…"></td>
         <td data-next="${esc(horseKey(h))}" class="mini">—</td><td data-lastrun="${esc(h)}" class="mini">…</td><td><button data-remove="${esc(h)}">Remove</button></td></tr>`).join("")
