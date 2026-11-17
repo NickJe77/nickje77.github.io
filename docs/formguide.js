@@ -22,9 +22,35 @@
   const dash = (v) => (v === null || v === undefined || v === "" ? "—" : v);
 
   // some names arrive with HTML codes in them ("&amp;", "&#8217;"): turn them back into characters
-  const unent = (v) => typeof v !== "string" || v.indexOf("&") < 0 ? v : v.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
+  // text garbled by a wrong character set somewhere upstream: "Moï¿½t" (letter lost) and "MoÃ«t" (letter recoverable)
+  const LOST = "(?:ï¿½|\uFFFD|�)";
+  const KNOWN = [["Mo", "t", "Moët"], ["Ros", "", "Rosé"], ["Caf", "", "Café"], ["Ch", "teau", "Château"], ["P", "tillant", "Pétillant"],
+    ["Cr", "me", "Crème"], ["Entr", "e", "Entrée"], ["Soir", "e", "Soirée"], ["Matin", "e", "Matinée"], ["Fianc", "", "Fiancé"], ["Fianc", "e", "Fiancée"],
+    ["Clich", "", "Cliché"], ["Na", "ve", "Naïve"], ["Beyonc", "", "Beyoncé"], ["Pok", "mon", "Pokémon"], ["Se", "or", "Señor"], ["Se", "orita", "Señorita"],
+    ["Ma", "ana", "Mañana"], ["Jos", "", "José"], ["Andr", "", "André"], ["Ren", "e", "Renée"], ["Ren", "", "René"], ["Z", "rich", "Zürich"],
+    ["M", "nchen", "München"], ["D", "j", "Déjà"], ["Fa", "ade", "Façade"], ["Gar", "on", "Garçon"], ["Ol", "", "Olé"], ["Expos", "", "Exposé"],
+    ["Prot", "g", "Protégé"], ["Souffl", "", "Soufflé"], ["Saut", "", "Sauté"], ["Pur", "e", "Purée"], ["Caf", "s", "Cafés"]]
+    .map(([a, b, w]) => [new RegExp("(^|[^A-Za-z])" + a + LOST + "+" + b + "(?![A-Za-z])", "gi"), w]);
+  const CP1252 = { 0x20AC: 0x80, 0x201A: 0x82, 0x0192: 0x83, 0x201E: 0x84, 0x2026: 0x85, 0x2020: 0x86, 0x2021: 0x87, 0x02C6: 0x88, 0x2030: 0x89, 0x0160: 0x8A,
+    0x2039: 0x8B, 0x0152: 0x8C, 0x017D: 0x8E, 0x2018: 0x91, 0x2019: 0x92, 0x201C: 0x93, 0x201D: 0x94, 0x2022: 0x95, 0x2013: 0x96, 0x2014: 0x97, 0x02DC: 0x98,
+    0x2122: 0x99, 0x0161: 0x9A, 0x203A: 0x9B, 0x0153: 0x9C, 0x017E: 0x9E, 0x0178: 0x9F };
+  function fixGarbled(v) {
+    if (typeof v !== "string") return v;
+    if (/[ÃÂÅÄ][\u0080-\u00bf\u0152-\u2122]/.test(v)) {           // UTF-8 read as Latin-1 / Windows-1252: decode it back
+      try {
+        const bytes = Uint8Array.from([...v].map((ch) => { const c = ch.charCodeAt(0); return c < 256 ? c : (CP1252[c] ?? 63); }));
+        const d = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        if (d && !/[ÃÂ][\u0080-\u00bf]/.test(d)) v = d;
+      } catch (e) { /* not that kind of mix-up: leave it */ }
+    }
+    if (!/ï¿½|\uFFFD|�/.test(v)) return v;
+    KNOWN.forEach(([re, w]) => { v = v.replace(re, (m, pre) => pre + w); });
+    return v.replace(new RegExp(LOST + "+", "g"), "e");      // a lost letter we can't name: "e" is by far the most common
+  }
+  const unent0 = (v) => typeof v !== "string" || v.indexOf("&") < 0 ? v : v.replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
     .replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16))).replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
     .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+  const unent = unent0;                       // the stored text stays as it is (lookups use it); fixGarbled is applied when race names are shown
   // one spelling per jockey: "Fred W Kersley" / "Fred W. Kersley" -> "Fred Kersley" (middle initials dropped), "FRED KERSLEY" -> "Fred Kersley"
   // trainers too, one partner at a time: "Jay P. Bernardini" -> "Jay Bernardini", "Annabel & Rob Archibald" stays as it is
   function personName(v) {
@@ -116,7 +142,7 @@
   const KEEP = /^(G[123]|LR|SW|SWP|WFA|BM\d*|F&M|CL\d*|MSW|TAB|ATC|VRC|MRC|QTC|AJC|SAJC|WATC|BRC|RL|PB|NZ|UK|USA|[IVX]{2,5}|[0-9]+YO\+?|[0-9]+[A-Z]?)$/;
   const SMALL = new Set(["of", "the", "and", "at", "in", "for", "on", "by", "to", "a", "de", "du", "la", "le"]);
   function raceName(v) {
-    const t = String(v || "").trim();
+    const t = fixGarbled(String(v || "").trim());
     if (!t || /[a-z]/.test(t)) return t;                  // already in normal case
     return t.split(/(\s+|-|\/)/).map((w, i) => {
       if (/^(\s+|-|\/)$/.test(w) || !w) return w;
