@@ -512,6 +512,11 @@
     const col = (v) => v === null ? 2 : v < .2 ? 0 : v < .45 ? 1 : v < .75 ? 2 : 3;   // no data: midfield
     const out = {};
     est.sort((a, b) => (a.v ?? .6) - (b.v ?? .6)).forEach((e, i) => out[e.r.horse_key] = { c: col(e.v), o: i, guess: e.v === null });
+    if (upcoming) {   // within each column, horses sit in barrier order: lowest barrier on the rail (top)
+      const bar = Object.fromEntries(live.map((r) => [r.horse_key, num(r.barrier) ?? 99]));
+      [0, 1, 2, 3].forEach((c) => Object.keys(out).filter((k) => out[k].c === c)
+        .sort((a, b) => bar[a] - bar[b] || out[a].o - out[b].o).forEach((k, i) => out[k].o = i));
+    }
     return out;
   }
   function suggestPace(place) {
@@ -694,7 +699,7 @@
             const fin = !upcoming && pos(r) ? ` → ${posLabel(r)}` : "";
             return `<div class="runner" draggable="true" data-k="${esc(k)}" title="Drag to move">${silk(r)}<span class="rname">${r.number ? esc(r.number) + ". " : ""}${esc(r.horse)} <span class="mini">(b${dash(r.barrier)}${fin})${place[k].guess ? " ?" : ""}</span></span>
               <span class="nudge"><button data-n="${esc(k)}" data-dc="-1" title="Further forward">◀</button><button data-n="${esc(k)}" data-dy="-1" title="Up">▲</button><button data-n="${esc(k)}" data-dy="1" title="Down">▼</button><button data-n="${esc(k)}" data-dc="1" title="Further back">▶</button></span></div>`; }).join("") || '<span class="mini droph">Drop horses here</span>'}</div>`).join("")}</div>
-        <p class="pad note" style="padding-top:0">${upcoming ? "Starting positions are predicted from where each horse settled in its last 5 runs (? = no settling data yet)." : "Starting positions are where each horse settled at the 800m (or 400m), with where it finished."}
+        <p class="pad note" style="padding-top:0">${upcoming ? "Starting positions are predicted from where each horse settled in its last 5 runs (? = no settling data yet). Within each column, the lowest barrier is on the rail (top)." : "Starting positions are where each horse settled at the 800m (or 400m), with where it finished."}
           Drag horses to change the map, or use the arrows. Your map and pace are saved in this browser.</p>`;
       $$("[data-pace]", mapEl).forEach((b) => b.onclick = () => { pace = b.dataset.pace; persist(false); draw(); });
       if (simShown) simulate(false);                       // keep the virtual race in step with the map
