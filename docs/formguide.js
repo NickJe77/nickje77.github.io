@@ -213,6 +213,10 @@
   const regionOf = (r) => { const c = countryOf(r); return c === "AUS" || c === "NZ" ? "ANZ" : c === "GBR" || c === "IRE" ? "GBI" : c; };
   const trainerKeys = (t) => String(t || "").toLowerCase().split(/\s*(?:&|\/|,|\band\b)\s*/).map((x) => {
     const w = x.replace(/[^a-z\s]/g, " ").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length > 1 ? w[0][0] : "") + w[w.length - 1] : ""; }).filter((k) => k.length > 2);
+  // one key per stable, however the name is written: "Mick Price & Michael Kent Jnr" = "M Price & M Kent (Jnr)" -> "mkent|mprice"
+  const stableKey = (t) => String(t || "").toLowerCase().split(/\s*(?:&|\/|,|\band\b)\s*/).map((x) => {
+    const w = x.replace(/[^a-z\s]/g, " ").trim().split(/\s+/).filter((y) => y && !/^(jnr|snr|jr|sr|junior|senior)$/.test(y));
+    return w.length ? (w.length > 1 ? w[0][0] : "") + w[w.length - 1] : ""; }).filter(Boolean).sort().join("|");
   // Groups of runs that are one horse. Within a country, different trainers at the same time = different horses;
   // a trainer change from one period to the next = the same horse changing stables.
   function horseGroups(runs) {
@@ -1114,9 +1118,10 @@
     $("#fresh").innerHTML = `<p>First-up: <b>${record(runs.filter((r) => tags.get(r) === 1)).text}</b></p><p>Second-up: <b>${record(runs.filter((r) => tags.get(r) === 2)).text}</b></p>
       <p>${esc(track(last.track).name)}: <b>${record(runs.filter((r) => sameTrack(r.track, last.track))).text}</b></p>
       <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => sameTrack(r.track, last.track) && near(dist(r), dist(last)))).text}</b></p>`;
-    { const nx = next && !isScr(next) && next.jockey ? next : null, who = nx || last, tr = (nx && nx.trainer) || last.trainer;
+    { const nx = next && !isScr(next) && next.jockey ? next : null, who = nx || last, sk = stableKey((nx && nx.trainer) || last.trainer);
+      const withTr = runs.filter((r) => stableKey(r.trainer) === sk), tr = (withTr[0] && withTr[0].trainer) || (nx && nx.trainer) || last.trainer;
       $("#tjbox").innerHTML = `<p>${esc(dash(who.jockey))} on this horse: <b>${runs.some((r) => r.jockey === who.jockey) ? record(runs.filter((r) => r.jockey === who.jockey)).text : "first ride"}</b></p>
-        <p>${esc(dash(tr))} with this horse: <b>${record(runs.filter((r) => r.trainer && r.trainer === tr)).text}</b></p>`;
+        <p>${esc(dash((nx && nx.trainer) || tr))} with this horse: <b>${withTr.length ? record(withTr).text : "first start"}</b></p>`;
       comboLine($("#tjbox"), tr, who.jockey, !!nx); }
     $("#lastcmp").innerHTML = `${last.jockey ? `<p>Jockey: <b>${esc(last.jockey)}</b>${prev && prev.jockey && prev.jockey !== last.jockey ? ` <span class="mini">(was ${esc(prev.jockey)})</span>` : ""}</p>` : ""}
       ${prev ? `<p>Weight change: <b>${fmtDelta(num(last.weight), num(prev.weight), "kg")}</b></p><p>Distance change: <b>${fmtDelta(dist(last), dist(prev), "m")}</b></p>
