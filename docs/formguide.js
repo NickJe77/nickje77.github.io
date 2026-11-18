@@ -313,7 +313,7 @@
   function comboLine(el, trainer, jockey, nextStart) {
     if (!el || !trainer || !jockey || trainer === "—" || jockey === "—") return;
     const box = document.createElement("div"); box.className = "combo";
-    const head = `<small>Trainer + jockey${nextStart ? " · next start" : ""}</small><div class="combonames">${esc(trainer)} + ${esc(jockey)}</div>`;
+    const head = `<small>${nextStart ? "Next start" : "Last start"}</small><div class="combonames">${esc(trainer)} + ${esc(jockey)}</div>`;
     box.innerHTML = head + `<div class="mini">Loading…</div>`; el.prepend(box);
     const stat = (v, l, cls = "") => `<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
     get(`/api/combo?trainer=${encodeURIComponent(trainer)}&jockey=${encodeURIComponent(jockey)}`).then((c) => {
@@ -1079,7 +1079,7 @@
         $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
         $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
           <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
-        comboLine($("#lastcmp"), next.trainer, next.jockey, true);
+        $("#tjbox").innerHTML = ""; comboLine($("#tjbox"), next.trainer, next.jockey, true);
         $$('[data-panel="entries"]').forEach((b) => b.click());
       }
       tabs("#horsetabs"); if (next) $$('#horsetabs [data-panel="entries"]').forEach((b) => b.click());
@@ -1114,12 +1114,14 @@
     $("#fresh").innerHTML = `<p>First-up: <b>${record(runs.filter((r) => tags.get(r) === 1)).text}</b></p><p>Second-up: <b>${record(runs.filter((r) => tags.get(r) === 2)).text}</b></p>
       <p>${esc(track(last.track).name)}: <b>${record(runs.filter((r) => sameTrack(r.track, last.track))).text}</b></p>
       <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => sameTrack(r.track, last.track) && near(dist(r), dist(last)))).text}</b></p>`;
-    $("#lastcmp").innerHTML = `<p>${esc(dash(last.jockey))} on this horse: <b>${record(runs.filter((r) => r.jockey && r.jockey === last.jockey)).text}</b></p>
+    { const nx = next && !isScr(next) && next.jockey ? next : null, who = nx || last, tr = (nx && nx.trainer) || last.trainer;
+      $("#tjbox").innerHTML = `<p>${esc(dash(who.jockey))} on this horse: <b>${runs.some((r) => r.jockey === who.jockey) ? record(runs.filter((r) => r.jockey === who.jockey)).text : "first ride"}</b></p>
+        <p>${esc(dash(tr))} with this horse: <b>${record(runs.filter((r) => r.trainer && r.trainer === tr)).text}</b></p>`;
+      comboLine($("#tjbox"), tr, who.jockey, !!nx); }
+    $("#lastcmp").innerHTML = `${last.jockey ? `<p>Jockey: <b>${esc(last.jockey)}</b>${prev && prev.jockey && prev.jockey !== last.jockey ? ` <span class="mini">(was ${esc(prev.jockey)})</span>` : ""}</p>` : ""}
       ${prev ? `<p>Weight change: <b>${fmtDelta(num(last.weight), num(prev.weight), "kg")}</b></p><p>Distance change: <b>${fmtDelta(dist(last), dist(prev), "m")}</b></p>
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
-    { const nx = typeof next !== "undefined" && next && !isScr(next) && next.jockey ? next : null, who = nx || last, tr = (nx && nx.trainer) || last.trainer;
-      comboLine($("#lastcmp"), tr, who.jockey, !!nx); }
 
     let scope = "all", avgs = null;
     get("/api/avgtimes?tracks=" + encodeURIComponent([...new Set(runs.map((r) => String(r.track).toUpperCase()))].join(","))).then((x) => { avgs = x; renderForm(); }).catch(() => {});
