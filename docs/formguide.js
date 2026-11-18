@@ -931,8 +931,6 @@
         const draw = () => { $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
         draw();
         speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
-        $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
-        raceHistory($('[data-tabcontent="history"]'), r0);
         return;
       }
       $("#runners").innerHTML = byFinish(runs).map((r) => {
@@ -941,8 +939,6 @@
           <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r)}</td></tr>`;
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
-      $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
-      raceHistory($('[data-tabcontent="history"]'), r0);
     }
     $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
       return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(raceName(r0.race_name))}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
