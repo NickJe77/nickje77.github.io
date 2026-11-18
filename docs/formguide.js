@@ -926,14 +926,12 @@
       let ex = $("#raceextras"); if (!ex) { ex = document.createElement("div"); ex.id = "raceextras"; $("#racedetails").after(ex); }
       raceExtras(ex, runs, card.runs, up);
       $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0),
-        (up ? money(r0.prize_money) : money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0))) + " prize money",
-        runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0)].filter((x) => x && !x.startsWith("—")).join("  |  ");
+        runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0), r0.rail && "Rail: " + r0.rail].filter((x) => x && !x.startsWith("—")).join("  |  ");
       if (up) {
         const draw = () => { $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
         draw();
         speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
         $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
-        $('[data-tabcontent="track"]').innerHTML = `<div class="pad"><p><b>${esc(tr.name)}</b> ${tr.state ? "· " + esc(tr.state) : ""} ${tr.type ? "· " + esc(tr.type) : ""}</p><p>Track condition: <b>${esc(goingLabel(r0) || "not yet rated")}</b></p>${r0.rail ? `<p>Rail: <b>${esc(r0.rail)}</b></p>` : ""}</div>`;
         raceHistory($('[data-tabcontent="history"]'), r0);
         return;
       }
@@ -944,7 +942,6 @@
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
       $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
-      $('[data-tabcontent="track"]').innerHTML = `<div class="pad"><p><b>${esc(tr.name)}</b> ${tr.state ? "· " + esc(tr.state) : ""} ${tr.type ? "· " + esc(tr.type) : ""}</p><p>Track condition: <b>${esc(goingLabel(r0) || "—")}</b></p><p class="note">Track code: ${esc(t)}</p></div>`;
       raceHistory($('[data-tabcontent="history"]'), r0);
     }
     $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
@@ -971,7 +968,7 @@
       document.title = `${raceName(r0.race_name) || "Race " + n} | The Sporting Almanac`;
       $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}${r0.start_time ? " · " + fmtTime(r0.start_time) : ""}`;
       $("#rtitle").textContent = raceName(r0.race_name) || "Race " + n;
-      $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(r0.prize_money), goingLabel(r0), r0.rail && "Rail " + r0.rail].filter((x) => x && x !== "—").join(" · ");
+      $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), goingLabel(r0), r0.rail && "Rail: " + r0.rail].filter((x) => x && x !== "—").join(" · ");
       $("#field").closest("table").querySelector("thead").innerHTML = FIELD_HEAD;
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
       draw();
