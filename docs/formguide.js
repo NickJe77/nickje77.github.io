@@ -596,14 +596,14 @@
   // today's distance/going/track record, weight, first-up, barrier, where you've put it on the speed map, the pace
   // you've chosen and any track bias. The race is then run 1,000 times with some luck added to each horse.
   const CLASS_PTS = { G1: 12, G2: 10, G3: 8, LR: 6, High: 4, Mid: 2, Low: 0, Other: 1 };
-  const BIAS_STRENGTH = { slight: 1, moderate: 2, strong: 3.5 };
+  const BIAS_STRENGTH = { slight: 0.75, moderate: 1.5, strong: 2.5 };
   const PATTERN_FX = { none: [0, 0, 0, 0], leaders: [1, 0.5, -0.25, -0.6], back: [-0.6, -0.25, 0.4, 1] };
   const LANE_FX = { none: [0, 0, 0, 0], rail: [1, 0.5, 0, -0.5], railoff: [-1, -0.6, -0.1, 0.4], wide: [-0.6, -0.2, 0.3, 0.8] };   // by column: leaders hug the rail, backmarkers come wide
   function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
   const placeRate = (list) => list.length ? list.filter((r) => { const p = pos(r); return p && p <= 3; }).length / list.length : null;
 
   // the weightings (tuned by sim-test.html against past races)
-  const SIM = { classScale: 1, suitScale: 1, weightScale: 1, paceL: 1.5, recency: 0.82 };
+  const SIM = { classScale: 1, suitScale: 1, weightScale: 1, paceL: 0.9, recency: 0.82 };
   function horseModel(r, prior, today, field, o = SIM) {
     const notes = [];
     const recent = (prior || []).slice(0, 8);
@@ -635,7 +635,8 @@
       if (today.dist && best && today.dist > best + 400) add(-1, "untried this far");
     } else notes.push("no race form");
     const w = num(r.weight) - (num(r.claim) || 0);
-    if (w && field.avgWeight) add(-o.weightScale * (w - field.avgWeight) * (0.4 + (today.dist || 1400) / 6000), "weight");
+    // about 0.3L a kilo in sprints up to 0.45L over 2400m, capped at 2L: in handicaps the weights already reflect ability
+    if (w && field.avgWeight) add(Math.max(-2, Math.min(2, -o.weightScale * (w - field.avgWeight) * (0.15 + (today.dist || 1400) / 8000))), "weight");
     return { raw, nEff, adj, notes, unknown: !recent.length };
   }
 
@@ -658,7 +659,7 @@
       add(PATTERN_FX[bias.pattern][c] * S, "track pattern");
       add(LANE_FX[bias.lane][c] * S, "lane bias");
       m.score = m.base + m.adj;
-      m.sd = m.unknown ? 3.2 : 2 + 3 / (1 + m.nEff);
+      m.sd = m.unknown ? 3.8 : 2.8 + 3 / (1 + m.nEff);   // racing luck: keeps the top pick nearer a realistic 30-45%
       m.wins = 0; m.top3 = 0; m.posSum = 0;
     });
     for (let i = 0; i < N; i++) {
