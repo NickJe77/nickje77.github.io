@@ -308,6 +308,17 @@
   const horseCell = (r) => `<span class="horsecell">${silk(r)}<a href="${horseURL(r.horse, r)}">${esc(r.horse)}</a></span>`;
 
   // records like "24: 5-3-4"
+  // trainer + jockey combo line: "Gerald Egan + Brittany Button: 58 rides · 6 wins · 10.3% · ROI +12.0%"
+  function comboLine(el, trainer, jockey, label) {
+    if (!el || !trainer || !jockey || trainer === "—" || jockey === "—") return;
+    const p = document.createElement("p"); p.className = "combo"; p.innerHTML = `${esc(label)}: <span class="mini">loading…</span>`; el.prepend(p);
+    get(`/api/combo?trainer=${encodeURIComponent(trainer)}&jockey=${encodeURIComponent(jockey)}`).then((c) => {
+      if (!c.rides) { p.innerHTML = `${esc(label)}: <b>first time together</b>`; return; }
+      const roi = c.roi === null ? "" : ` · ROI <b class="${c.roi >= 0 ? "pos" : "neg"}">${c.roi >= 0 ? "+" : ""}${c.roi.toFixed(1)}%</b>`;
+      p.innerHTML = `${esc(label)}: <b>${c.rides} ride${c.rides === 1 ? "" : "s"} · ${c.wins} win${c.wins === 1 ? "" : "s"} · ${c.strike.toFixed(1)}%</b>${roi}`;
+      p.title = `${trainer} + ${jockey}, all races in the database. Last 12 months: ${c.last12.rides} rides, ${c.last12.wins} wins. ROI = profit or loss from $1 on every ride at the starting price${c.priced < c.rides ? ` (${c.priced} rides had a price)` : ""}.`;
+    }).catch(() => p.remove());
+  }
   function record(runs) {
     let w = 0, s = 0, t = 0, n = 0;
     for (const r of runs) { const p = pos(r); if (p === null && !r.position) continue; n++; if (p === 1) w++; else if (p === 2) s++; else if (p === 3) t++; }
@@ -1064,6 +1075,7 @@
         $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
         $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
           <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
+        comboLine($("#lastcmp"), next.trainer, next.jockey, `${next.trainer} + ${next.jockey}`);
         $$('[data-panel="entries"]').forEach((b) => b.click());
       }
       tabs("#horsetabs"); if (next) $$('#horsetabs [data-panel="entries"]').forEach((b) => b.click());
@@ -1102,6 +1114,8 @@
       ${prev ? `<p>Weight change: <b>${fmtDelta(num(last.weight), num(prev.weight), "kg")}</b></p><p>Distance change: <b>${fmtDelta(dist(last), dist(prev), "m")}</b></p>
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
+    { const nx = typeof next !== "undefined" && next && !isScr(next) && next.jockey ? next : null, who = nx || last, tr = (nx && nx.trainer) || last.trainer;
+      comboLine($("#lastcmp"), tr, who.jockey, `${tr} + ${who.jockey}${nx ? " (next start)" : ""}`); }
 
     let scope = "all", avgs = null;
     get("/api/avgtimes?tracks=" + encodeURIComponent([...new Set(runs.map((r) => String(r.track).toUpperCase()))].join(","))).then((x) => { avgs = x; renderForm(); }).catch(() => {});
