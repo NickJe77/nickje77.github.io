@@ -309,15 +309,19 @@
 
   // records like "24: 5-3-4"
   // trainer + jockey combo line: "Gerald Egan + Brittany Button: 58 rides · 6 wins · 10.3% · ROI +12.0%"
-  function comboLine(el, trainer, jockey, label) {
+  // trainer + jockey combo box: names, then rides / wins / strike rate / ROI ($1 on every ride at SP)
+  function comboLine(el, trainer, jockey, nextStart) {
     if (!el || !trainer || !jockey || trainer === "—" || jockey === "—") return;
-    const p = document.createElement("p"); p.className = "combo"; p.innerHTML = `${esc(label)}: <span class="mini">loading…</span>`; el.prepend(p);
+    const box = document.createElement("div"); box.className = "combo";
+    const head = `<small>Trainer + jockey${nextStart ? " · next start" : ""}</small><div class="combonames">${esc(trainer)} + ${esc(jockey)}</div>`;
+    box.innerHTML = head + `<div class="mini">Loading…</div>`; el.prepend(box);
+    const stat = (v, l, cls = "") => `<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
     get(`/api/combo?trainer=${encodeURIComponent(trainer)}&jockey=${encodeURIComponent(jockey)}`).then((c) => {
-      if (!c.rides) { p.innerHTML = `${esc(label)}: <b>first time together</b>`; return; }
-      const roi = c.roi === null ? "" : ` · ROI <b class="${c.roi >= 0 ? "pos" : "neg"}">${c.roi >= 0 ? "+" : ""}${c.roi.toFixed(1)}%</b>`;
-      p.innerHTML = `${esc(label)}: <b>${c.rides} ride${c.rides === 1 ? "" : "s"} · ${c.wins} win${c.wins === 1 ? "" : "s"} · ${c.strike.toFixed(1)}%</b>${roi}`;
-      p.title = `${trainer} + ${jockey}, all races in the database. Last 12 months: ${c.last12.rides} rides, ${c.last12.wins} wins. ROI = profit or loss from $1 on every ride at the starting price${c.priced < c.rides ? ` (${c.priced} rides had a price)` : ""}.`;
-    }).catch(() => p.remove());
+      if (!c.rides) { box.innerHTML = head + `<div class="mini">First time together.</div>`; return; }
+      box.innerHTML = head + `<div class="combostats">${stat(c.rides, "Rides")}${stat(c.wins, "Wins")}${stat(c.strike.toFixed(1) + "%", "Strike")}${
+        c.roi === null ? "" : stat((c.roi >= 0 ? "+" : "−") + Math.abs(c.roi).toFixed(1) + "%", "ROI", c.roi >= 0 ? "pos" : "neg")}</div>`;
+      box.title = `All races in the database. Last 12 months: ${c.last12.rides} rides, ${c.last12.wins} wins. ROI = profit or loss from $1 on every ride at the starting price${c.priced < c.rides ? ` (${c.priced} of the rides had a price)` : ""}.`;
+    }).catch(() => box.remove());
   }
   function record(runs) {
     let w = 0, s = 0, t = 0, n = 0;
@@ -1075,7 +1079,7 @@
         $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
         $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
           <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
-        comboLine($("#lastcmp"), next.trainer, next.jockey, `${next.trainer} + ${next.jockey}`);
+        comboLine($("#lastcmp"), next.trainer, next.jockey, true);
         $$('[data-panel="entries"]').forEach((b) => b.click());
       }
       tabs("#horsetabs"); if (next) $$('#horsetabs [data-panel="entries"]').forEach((b) => b.click());
@@ -1115,7 +1119,7 @@
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
     { const nx = typeof next !== "undefined" && next && !isScr(next) && next.jockey ? next : null, who = nx || last, tr = (nx && nx.trainer) || last.trainer;
-      comboLine($("#lastcmp"), tr, who.jockey, `${tr} + ${who.jockey}${nx ? " (next start)" : ""}`); }
+      comboLine($("#lastcmp"), tr, who.jockey, !!nx); }
 
     let scope = "all", avgs = null;
     get("/api/avgtimes?tracks=" + encodeURIComponent([...new Set(runs.map((r) => String(r.track).toUpperCase()))].join(","))).then((x) => { avgs = x; renderForm(); }).catch(() => {});
