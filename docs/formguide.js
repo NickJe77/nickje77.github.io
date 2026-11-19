@@ -613,6 +613,26 @@
     host.classList.remove("hidden");
   }
 
+  // ------------------------------------------------------------ rail history: last 5 meetings here, and where the winners came from
+  async function railHistory(host, code, r0, d) {
+    if (!host) return;
+    let H; try { H = await get(`/api/rail-history?tracks=${encodeURIComponent(sameTrackCodes(code, r0).join(","))}&before=${d}&n=5`); } catch (e) { return; }
+    if (!H || !H.length) return;
+    const tr = track(code, r0), today = String(r0.rail || "").trim(), rk = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9.]/g, "");
+    const cell = (m, k) => { const top = Math.max(...SETTLE.map((x) => m[x])); return `<td class="${m[k] && m[k] === top ? "railtop" : ""}">${m[k] || "·"}</td>`; };
+    const bcell = (m, k) => { const top = Math.max(...Object.values(m.bar)); return `<td class="${m.bar[k] && m.bar[k] === top ? "railtop" : ""}">${m.bar[k] || "·"}</td>`; };
+    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">Rail history · last ${H.length} meetings at ${esc(tr.name)}</h3><span class="mini">Today's rail: <b>${esc(today || "not listed yet")}</b></span></div>
+      <div class="tablewrap"><table class="railhist"><thead>
+        <tr><th rowspan="2" class="name">Meeting</th><th rowspan="2" class="name">Rail</th><th rowspan="2">Going</th><th rowspan="2">Races</th><th colspan="5">Where the winners settled</th><th colspan="3">Winners' barriers</th></tr>
+        <tr>${SETTLE.map((k) => `<th>${k}</th>`).join("")}<th>1–4</th><th>5–8</th><th>9+</th></tr></thead><tbody>
+        ${H.map((m) => `<tr><td class="name"><a href="${meetingURL(code, m.date)}">${esc(fmtDate(m.date))}</a></td>
+          <td class="name">${esc(m.rail || "—")}${today && m.rail && rk(m.rail) === rk(today) ? ' <span class="pill sameRail">same as today</span>' : ""}</td>
+          <td>${esc(m.going || "—")}</td><td>${m.races}</td>${SETTLE.map((k) => cell(m, k)).join("")}${["1-4", "5-8", "9+"].map((k) => bcell(m, k)).join("")}</tr>`).join("")}
+      </tbody></table></div>
+      <p class="mini" style="margin:6px 0 0">Settled = position at the 800m (1200m in races of 1400m+). Shaded = where most winners came from that day.${H.some((m) => !m.rail) ? " Rail shows — for meetings before we started saving rail positions." : ""}</p>`;
+    host.classList.remove("hidden");
+  }
+
   // ------------------------------------------------------------ virtual race
   // Each horse gets a rating in lengths from its recent runs (class of race + how far it was beaten), adjusted for
   // today's distance/going/track record, weight, first-up, barrier, where you've put it on the speed map, the pace
@@ -962,6 +982,7 @@
     if (up) { $("#m-first-box").classList.remove("hidden"); $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
     $("#m-going").textContent = goingLabel(card.runs[0] || {}) || "—";
     trackLeaders($("#leaders"), t, card.runs[0], card.runs);
+    railHistory($("#railhist"), t, card.runs[0], d);
     let active = Number(qs("race")) || nums[0];
     function setRace(n) {
       active = n;
