@@ -591,6 +591,28 @@
         : `<p class="mini" style="margin:4px 0 0">None yet.</p>`}</div>`;
   }
 
+  // ------------------------------------------------------------ track leaders: last 12 months at this track, jockeys and trainers
+  async function trackLeaders(host, code, r0, runs) {
+    if (!host) return;
+    let L; try { L = await get(`/api/track-leaders?track=${encodeURIComponent(sameTrackCodes(code, r0).join(","))}`); } catch (e) { return; }
+    if (!L || !L.runs) return;
+    const live = runs.filter((r) => !isScr(r));
+    const here = { jockey: new Set(live.map((r) => String(personName(r.jockey || "")).toLowerCase())), trainer: new Set(live.map((r) => stableKey(r.trainer))) };
+    const isHere = (who, n) => who === "jockey" ? here.jockey.has(String(personName(n)).toLowerCase()) : here.trainer.has(stableKey(n));
+    const roiTxt = (v) => v === null ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
+    const list = (who, rows, kind) => rows.length ? `<ol>${rows.map((x) => `<li class="${isHere(who, x.name) ? "here" : ""}"><span class="ln">${esc(personName(x.name))}${isHere(who, x.name) ? ' <span class="heredot" title="Engaged at this meeting">●</span>' : ""}</span>
+      <span class="lv">${kind === "wins" ? `<b>${x.wins}</b> wins <small>${x.rides} · ${x.strike.toFixed(0)}%</small>` : `<b class="${x.roi >= 0 ? "pos" : "neg"}">${roiTxt(x.roi)}</b> <small>${x.wins}/${x.priced}</small>`}</span></li>`).join("")}</ol>` : `<p class="mini">Not enough rides yet.</p>`;
+    const tr = track(code, r0);
+    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">${esc(tr.name)} leaders · last 12 months</h3><span class="mini"><span class="heredot">●</span> at this meeting · ROI = $1 on every ride at SP (min ${L.jockeys.minRides} rides) · ${L.runs.toLocaleString()} runners</span></div>
+      <div class="leaders">
+        <div><h4>Jockeys · most wins</h4>${list("jockey", L.jockeys.wins, "wins")}</div>
+        <div><h4>Jockeys · best ROI</h4>${list("jockey", L.jockeys.roi, "roi")}</div>
+        <div><h4>Trainers · most wins</h4>${list("trainer", L.trainers.wins, "wins")}</div>
+        <div><h4>Trainers · best ROI</h4>${list("trainer", L.trainers.roi, "roi")}</div>
+      </div>`;
+    host.classList.remove("hidden");
+  }
+
   // ------------------------------------------------------------ virtual race
   // Each horse gets a rating in lengths from its recent runs (class of race + how far it was beaten), adjusted for
   // today's distance/going/track record, weight, first-up, barrier, where you've put it on the speed map, the pace
@@ -939,6 +961,7 @@
     $("#m-races").textContent = nums.length; $("#m-runners").textContent = card.runs.filter((r) => !isScr(r)).length;
     if (up) { $("#m-first-box").classList.remove("hidden"); $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
     $("#m-going").textContent = goingLabel(card.runs[0] || {}) || "—";
+    trackLeaders($("#leaders"), t, card.runs[0], card.runs);
     let active = Number(qs("race")) || nums[0];
     function setRace(n) {
       active = n;
