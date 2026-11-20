@@ -971,7 +971,7 @@
     document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
     $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
     if (!$("#rbbtn")) {
-      $("#trackname").insertAdjacentHTML("afterend", `<a id="rbbtn" class="btn" href="racebook.html?track=${encodeURIComponent(t)}&date=${d}">🖨 Racebook (PDF)</a>`);
+      $("#trackname").insertAdjacentHTML("afterend", `<a id="rbbtn" class="btn" href="racebook.html?track=${encodeURIComponent(t)}&date=${d}">🖨 Racebook (PDF)</a> <a id="skbtn" class="btn" href="silks.html?track=${encodeURIComponent(t)}&date=${d}">🎽 Silks (PDF)</a>`);
       $("#rbbtn").onclick = (e) => { if (!loggedIn()) { e.preventDefault(); signIn("signup"); } };
     }
     $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true), up ? "Upcoming" : "Results", card.runs[0] && card.runs[0].rail ? "Rail: " + card.runs[0].rail : ""].filter(Boolean).join(" · ");
@@ -1341,6 +1341,41 @@
 
 
   // ---------------------------------------------- 7. Racebook (members): a print-ready form guide for a whole meeting
+  // ---------------------------------------------- Silks of the day: every runner's silk, race by race, printable to PDF
+  pages["silks"] = async function () {
+    const t = qs("track"), d = qs("date"), out = $("#silkbook");
+    $("#rbback").href = meetingURL(t, d);
+    let card;
+    try { card = await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`); } catch (e) { return fail(out, e); }
+    const tr = track(t, card.runs[0]), races = groupBy(card.runs, (r) => r.race);
+    const nums = Object.keys(races).map(Number).sort((a, b) => a - b);
+    if (!nums.length) { out.innerHTML = `<p class="pad">No races found for ${esc(tr.name)} on ${fmtDate(d, true)}.</p>`; return; }
+    document.title = `${tr.name} silks ${fmtDate(d)} | The Sporting Almanac`;
+    $("#rbtitle").textContent = `${tr.name} Silks`;
+    $("#rbsub").textContent = [fmtDate(d, true), tr.state].filter(Boolean).join(" · ");
+    const head = `<div class="rbhead"><span>THE <b>SPORTING</b> ALMANAC</span><span>${esc(tr.name)} · ${esc(fmtDate(d, true))} · Silks</span></div>`;
+    out.innerHTML = nums.map((n, i) => {
+      const runs = [...races[n]].sort((a, b) => isScr(a) - isScr(b) || (num(a.number) || num(a.barrier) || 99) - (num(b.number) || num(b.barrier) || 99)), r0 = runs[0];
+      return `<section class="skrace">${i === 0 ? head : ""}
+        <div class="rbracehead"><div class="rbno">R${n}</div><div><h2>${esc(raceName(r0.race_name) || "Race " + n)}</h2>
+          <div class="mini">${[r0.start_time ? fmtTime(r0.start_time) : "", num(r0.distance) ? num(r0.distance) + "m" : "", runs.filter((r) => !isScr(r)).length + " runners"].filter(Boolean).join(" · ")}</div></div></div>
+        <div class="skgrid">${runs.map((r) => `<div class="skcard${isScr(r) ? " scr" : ""}">
+          <div class="skimg">${r.silk ? `<img src="${esc(r.silk)}" alt="">` : `<span class="silk none big"></span>`}</div>
+          <div class="sknum">${esc(r.number || "")}</div>
+          <div class="skname">${esc(r.horse)}${isScr(r) ? " <small>SCR</small>" : ""}</div>
+          <div class="skmeta">${r.barrier ? `Barrier ${esc(r.barrier)}` : ""}${r.jockey ? `<br>${esc(r.jockey)}` : ""}${r.trainer ? `<br><span>${esc(r.trainer)}</span>` : ""}</div></div>`).join("")}</div></section>`;
+    }).join("");
+    const pageEach = $("#skpage"); pageEach.onchange = () => out.classList.toggle("skpaged", pageEach.checked);
+    // wait for every silk to load before printing, so none are missing from the PDF
+    const imgs = $$("img", out); let left = imgs.length;
+    const ready = () => { $("#rbprint").disabled = false; $("#rbprint").textContent = "🖨 Print / Save as PDF"; };
+    if (!left) ready(); else { $("#rbprint").textContent = `Loading silks… (${left})`;
+      imgs.forEach((im) => { const done = () => { left--; if (left <= 0) ready(); else $("#rbprint").textContent = `Loading silks… (${left})`; };
+        if (im.complete) done(); else { im.onload = done; im.onerror = () => { im.replaceWith(Object.assign(document.createElement("span"), { className: "silk none big" })); done(); }; } }); }
+    setTimeout(ready, 15000);
+    $("#rbprint").onclick = () => window.print();
+  };
+
   pages["racebook"] = async function () {
     const t = qs("track"), d = qs("date"), only = Number(qs("race")) || 0, out = $("#racebook");
     $("#rbback").href = meetingURL(t, d);
