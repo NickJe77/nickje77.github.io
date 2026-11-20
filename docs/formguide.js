@@ -623,13 +623,13 @@
     const bcell = (m, k) => { const top = Math.max(...Object.values(m.bar)); return `<td class="${m.bar[k] && m.bar[k] === top ? "railtop" : ""}">${m.bar[k] || "·"}</td>`; };
     host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">Rail history · last ${H.length} meetings at ${esc(tr.name)}</h3><span class="mini">Today's rail: <b>${esc(today || "not listed yet")}</b></span></div>
       <div class="tablewrap"><table class="railhist"><thead>
-        <tr><th rowspan="2" class="name">Meeting</th><th rowspan="2" class="name">Rail</th><th rowspan="2">Going</th><th rowspan="2">Races</th><th colspan="5">Where the winners settled</th><th colspan="3">Winners' barriers (share of field)</th></tr>
+        <tr><th rowspan="2" class="name">Meeting</th><th rowspan="2" class="name">Rail</th><th rowspan="2">Going</th><th rowspan="2">Races</th><th colspan="5">Where the winners were at the 400m</th><th colspan="3">Winners' barriers (share of field)</th></tr>
         <tr>${SETTLE.map((k) => `<th>${k}</th>`).join("")}<th>Inside</th><th>Middle</th><th>Outside</th></tr></thead><tbody>
         ${H.map((m) => `<tr><td class="name"><a href="${meetingURL(code, m.date)}">${esc(fmtDate(m.date))}</a></td>
           <td class="name">${esc(m.rail || "—")}${today && m.rail && rk(m.rail) === rk(today) ? ' <span class="pill sameRail">same as today</span>' : ""}</td>
           <td>${esc(m.going || "—")}</td><td title="${esc(m.winners.map((w) => `R${w.race}: barrier ${w.barrier || "?"}${w.field ? " of " + w.field : ""}`).join("\n"))}">${m.races}</td>${SETTLE.map((k) => cell(m, k)).join("")}${["Inside", "Middle", "Outside"].map((k) => bcell(m, k)).join("")}</tr>`).join("")}
       </tbody></table></div>
-      <p class="mini" style="margin:6px 0 0">Settled = position at the 800m (1200m in races of 1400m+). Barriers are split into thirds of each race's field (barrier 8 of 8 = outside, 8 of 15 = middle). Shaded = where most winners came from that day.${H.some((m) => !m.rail) ? " Rail shows — for meetings before we started saving rail positions." : ""}</p>`;
+      <p class="mini" style="margin:6px 0 0">Position at the 400m as a share of the field (1st = Leader). Barriers are split into thirds of each race's field (barrier 8 of 8 = outside, 8 of 15 = middle). Shaded = where most winners came from that day.${H.some((m) => !m.rail) ? " Rail shows — for meetings before we started saving rail positions." : ""}</p>`;
     host.classList.remove("hidden");
   }
 
