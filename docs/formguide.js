@@ -160,7 +160,8 @@
   function runTime(v) {
     let t = String(v || "").trim(), m;
     if ((m = t.match(/^([A-Za-z]{3})[-:\s]?(\d{1,2})(\.\d+)?$/)) && MON.includes(m[1].toLowerCase())) t = `${MON.indexOf(m[1].toLowerCase()) + 1}:${m[2].padStart(2, "0")}${m[3] || ".00"}`;
-    else if ((m = t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})$/)) && MON.includes(m[2].toLowerCase())) t = `${MON.indexOf(m[2].toLowerCase()) + 1}:${m[1].padStart(2, "0")}.00`;
+    // "1-Apr" is Excel's day-month reading of 1-04, i.e. 1:04 (day = minutes, month = seconds)
+    else if ((m = t.match(/^(\d{1,2})[-\s]([A-Za-z]{3})$/)) && MON.includes(m[2].toLowerCase())) t = `${Number(m[1])}:${String(MON.indexOf(m[2].toLowerCase()) + 1).padStart(2, "0")}.00`;
     return dash(t.replace("-", ":"));
   }
   // a race time for a table cell: the time, or a blank cell with the reason on hover
