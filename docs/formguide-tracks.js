@@ -466,6 +466,8 @@ window.TRACKS = {
   "SEYM": ["Seymour", "VIC", "Provincial"],
   "SHTN": ["Sha Tin", "HK", "International"],
   "SING": ["Kranji (Singapore)", "SIN", "International"],
+  "SINGAPORE": ["Kranji (Singapore)", "SIN", "International"],
+  "KRANJI": ["Kranji (Singapore)", "SIN", "International"],
   "SLIG": ["Sligo", "IRE", "International"],
   "SONO": ["Sonoda", "JPN", "International"],
   "SSRE": ["Springsure", "QLD", "Country"],

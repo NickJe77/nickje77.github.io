@@ -220,6 +220,14 @@
   // Groups of runs that are one horse. Within a country, different trainers at the same time = different horses;
   // a trainer change from one period to the next = the same horse changing stables.
   function horseGroups(runs) {
+    // the same run stored twice under two codes for one track (SING and SINGAPORE): keep one, preferring a known code
+    const once = new Map();
+    runs.forEach((r) => {
+      const k = [r.date, nameKey(track(r.track, r).name), parseInt(r.distance, 10) || "", String(r.position || "").trim(), String(r.finish_time || r.margin || "").trim()].join("|");
+      const o = once.get(k);
+      if (!o || (!TRACKS[String(o.track).toUpperCase()] && TRACKS[String(r.track).toUpperCase()])) once.set(k, r);
+    });
+    runs = [...once.values()];
     const units = {};                                   // region|trainer -> runs
     runs.forEach((r) => { const k = regionOf(r) + "|" + (trainerKeys(r.trainer)[0] || "?"); (units[k] ||= []).push(r); });
     const keys = Object.keys(units), parent = Object.fromEntries(keys.map((k) => [k, k]));
@@ -242,7 +250,7 @@
         for (let i = 0; i < live.length && !changed; i++) for (let j = i + 1; j < live.length && !changed; j++) {
           const A = live[i], B = live[j], gap = days(A.s[1], B.s[0]);
           // one ends (give or take two weeks) before the other starts: same horse, new stable
-          if (gap >= -14 && !live.some((C, n) => n !== i && n !== j && C.s[0] < B.s[0] && C.s[1] > A.s[1])) { join(A.k, B.k); changed = true; }
+          if (gap >= -14 && gap <= 1095 && !live.some((C, n) => n !== i && n !== j && C.s[0] < B.s[0] && C.s[1] > A.s[1])) { join(A.k, B.k); changed = true; }
         }
       }
       // runs with no trainer go with the biggest group in that region
