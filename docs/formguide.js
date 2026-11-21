@@ -193,16 +193,16 @@
     if (!a || a.n < 3 || t === null) return null;
     return Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10;
   }
-  function vsAverage(r, avgs) {
+  function vsAverage(r, avgs, noun = "races") {
     const band = classBand(r), t = timeSecs(r.finish_time);
     let a = band !== "Other" && avgs && avgs[avgKey(r, band)], same = true;
     if (!a || a.n < 3) { a = avgs && avgs[avgKey(r, "*")]; same = false; }
-    if (!a || a.n < 3 || t === null) return `<td class="mini" title="${t === null ? (pos(r) ? "No time recorded for this race" : "Didn't finish") : a ? "Only " + a.n + " race" + (a.n === 1 ? "" : "s") + " here to average" : "Not enough races here to average"}"></td>`;
+    if (!a || a.n < 3 || t === null) return `<td class="mini" title="${t === null ? (pos(r) ? "No time recorded" : "Didn't finish") : a ? "Only " + a.n + " " + noun.replace(/s$/, "") + (a.n === 1 ? "" : "s") + " here to average" : "Not enough " + noun + " here to average"}"></td>`;
     const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
     const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
     const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
-    const what = same ? BAND_NAME[band] + " races" : "races of all classes" + (band !== "Other" ? " (not enough " + BAND_NAME[band] + " races yet)" : "");
-    return `<td style="background:${bg};font-weight:600" title="Average winning time: ${avgTxt} — ${a.n} ${esc(what)} at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L${same ? "" : '<span class="mini">*</span>'}</td>`;
+    const what = noun !== "races" ? noun : same ? BAND_NAME[band] + " races" : "races of all classes" + (band !== "Other" ? " (not enough " + BAND_NAME[band] + " races yet)" : "");
+    return `<td style="background:${bg};font-weight:600" title="Average ${noun === "races" ? "" : "trial "}winning time: ${avgTxt} — ${a.n} ${esc(what)} at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L${same || noun !== "races" ? "" : '<span class="mini">*</span>'}</td>`;
   }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
   const meetingURL = (t, d) => `meeting.html?track=${encodeURIComponent(t)}&date=${d}`;
@@ -613,18 +613,21 @@
     }
     const b = $('[data-panel="trials"]'); if (b) b.textContent = T.length ? `Trials (${T.length})` : "Trials";
     if (!T.length) { box.innerHTML = `<h3>Trial History</h3><p class="note">No barrier trials or jump-outs on record (trials are kept from mid 2024).</p>`; return; }
+    const trs = [...new Set(T.map((t) => String(t.track).toUpperCase()))];
+    const avgs = Object.assign({}, ...(await Promise.all(Array.from({ length: Math.ceil(trs.length / 60) }, (_, i) =>
+      get("/api/avgtimes?table=trials&tracks=" + encodeURIComponent(trs.slice(i * 60, i * 60 + 60).join(","))).catch(() => ({}))))));
     const kind = (t) => /jump/i.test(t.race_name || "") ? "Jump-out" : "Trial";
     const topTxt = (t) => (t.top || []).filter((x) => x.horse_key !== t.horse_key || x.position !== t.position).map((x) =>
       `${posLabel(x)} <a href="${horseURL(x.horse)}">${esc(x.horse)}</a>`).join(", ");
     box.innerHTML = `<h3>Trial History</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Track</th><th class="name">Trial</th><th>Dist</th><th>Going</th>
-      <th>Pos</th><th>Margin</th><th>Time</th><th>Jockey</th><th class="name">Winner / 2nd</th></tr></thead><tbody>${T.map((t) => {
+      <th>Pos</th><th>Margin</th><th>Time</th><th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Jockey</th><th class="name">Winner / 2nd</th></tr></thead><tbody>${T.map((t) => {
         const p = pos(t), won = p === 1;
         return `<tr><td>${fmtDate(t.date)}</td><td>${esc(track(t.track, t).name)}</td>
-          <td class="name">${esc(raceName(t.race_name) || kind(t))} <span class="mini">${kind(t)}</span></td><td>${dash(t.distance)}</td><td>${esc(goingLabel(t)) || "—"}</td>
+          <td class="name">${esc(raceName(t.race_name) || kind(t))}${/tri?a?l|trl|jump/i.test(t.race_name || "") ? "" : ` <span class="mini">${kind(t)}</span>`}</td><td>${dash(t.distance)}</td><td>${esc(goingLabel(t)) || "—"}</td>
           <td><b>${p ? posLabel(t) : dash(t.position)}</b>${t.starters ? `<span class="mini">/${esc(t.starters)}</span>` : ""}</td>
-          <td>${won ? "—" : t.margin ? esc(t.margin) + "L" : "—"}</td><td>${runTime(t.finish_time) !== "—" ? (/time_estimated/.test(t.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(t.finish_time)}</span>` : runTime(t.finish_time)) : (t.top || [])[0] && runTime(t.top[0].finish_time) !== "—" ? `<span class="mini" title="Winner's time">${runTime(t.top[0].finish_time)} (w)</span>` : "—"}</td>
+          <td>${won ? "—" : t.margin ? esc(t.margin) + "L" : "—"}</td><td>${runTime(t.finish_time) !== "—" ? (/time_estimated/.test(t.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(t.finish_time)}</span>` : runTime(t.finish_time)) : (t.top || [])[0] && runTime(t.top[0].finish_time) !== "—" ? `<span class="mini" title="Winner's time">${runTime(t.top[0].finish_time)} (w)</span>` : "—"}</td>${vsAverage(t, avgs, "trials")}
           <td>${esc(dash(t.jockey))}</td><td class="name">${topTxt(t) || "—"}</td></tr>`; }).join("")}</tbody></table></div>
-      <p class="mini">Trials and jump-outs never count in the horse's record, stats or speed figures. ≈ = worked out from the winner's time and the margin, where the horse's own time wasn't recorded.</p>`;
+      <p class="mini">Average = lengths faster (green) or slower (red) than the average trial winner at that track, distance and going (trials only, never mixed with race times). Trials and jump-outs never count in the horse's record, stats or speed figures. ≈ = worked out from the winner's time and the margin, where the horse's own time wasn't recorded.</p>`;
   }
 
   // ------------------------------------------------------------ track leaders: last 12 months at this track, jockeys and trainers
