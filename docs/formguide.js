@@ -617,7 +617,7 @@
     const avgs = Object.assign({}, ...(await Promise.all(Array.from({ length: Math.ceil(trs.length / 60) }, (_, i) =>
       get("/api/avgtimes?table=trials&tracks=" + encodeURIComponent(trs.slice(i * 60, i * 60 + 60).join(","))).catch(() => ({}))))));
     const kind = (t) => /jump/i.test(t.race_name || "") ? "Jump-out" : "Trial";
-    const topTxt = (t) => (t.top || []).filter((x) => x.horse_key !== t.horse_key || x.position !== t.position).map((x) =>
+    const topTxt = (t) => (t.top || []).filter((x) => x.horse_key !== horseKey(t.horse)).map((x) =>
       `${posLabel(x)} <a href="${horseURL(x.horse)}">${esc(x.horse)}</a>`).join(", ");
     box.innerHTML = `<h3>Trial History</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Track</th><th class="name">Trial</th><th>Dist</th><th>Going</th>
       <th>Pos</th><th>Margin</th><th>Time</th><th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Jockey</th><th class="name">Winner / 2nd</th></tr></thead><tbody>${T.map((t) => {
