@@ -599,6 +599,33 @@
         : `<p class="mini" style="margin:4px 0 0">None yet.</p>`}</div>`;
   }
 
+  // ---- barrier trials and jump-outs (kept apart from race form): the horse page's Trials tab
+  async function loadTrials(name, groupRuns, entries) {
+    const box = $('[data-tabcontent="trials"]'); if (!box) return;
+    let T = [];
+    try { T = await get(`/api/trials?horse=${encodeURIComponent(name)}`); } catch (e) { return; }
+    // several horses with this name: keep the trials from this one's stables (trials are Australian)
+    if (groupRuns) {
+      const ks = new Set([...groupRuns, ...entries].flatMap((r) => trainerKeys(r.trainer)));
+      const anz = groupRuns.some((r) => regionOf(r) === "ANZ");
+      T = anz ? T.filter((t) => trainerKeys(t.trainer).some((k) => ks.has(k))) : [];
+    }
+    const b = $('[data-panel="trials"]'); if (b) b.textContent = T.length ? `Trials (${T.length})` : "Trials";
+    if (!T.length) { box.innerHTML = `<h3>Trial History</h3><p class="note">No barrier trials or jump-outs on record (trials are kept from mid 2024).</p>`; return; }
+    const kind = (t) => /jump/i.test(t.race_name || "") ? "Jump-out" : "Trial";
+    const topTxt = (t) => (t.top || []).filter((x) => x.horse_key !== t.horse_key || x.position !== t.position).map((x) =>
+      `${posLabel(x)} <a href="${horseURL(x.horse)}">${esc(x.horse)}</a>`).join(", ");
+    box.innerHTML = `<h3>Trial History</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Track</th><th class="name">Trial</th><th>Dist</th><th>Going</th>
+      <th>Pos</th><th>Margin</th><th>Time</th><th>Jockey</th><th class="name">Winner / 2nd</th></tr></thead><tbody>${T.map((t) => {
+        const p = pos(t), won = p === 1;
+        return `<tr><td>${fmtDate(t.date)}</td><td>${esc(track(t.track, t).name)}</td>
+          <td class="name">${esc(raceName(t.race_name) || kind(t))} <span class="mini">${kind(t)}</span></td><td>${dash(t.distance)}</td><td>${esc(goingLabel(t)) || "—"}</td>
+          <td><b>${p ? posLabel(t) : dash(t.position)}</b>${t.starters ? `<span class="mini">/${esc(t.starters)}</span>` : ""}</td>
+          <td>${won ? "—" : t.margin ? esc(t.margin) + "L" : "—"}</td><td>${runTime(t.finish_time) !== "—" ? (/time_estimated/.test(t.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(t.finish_time)}</span>` : runTime(t.finish_time)) : (t.top || [])[0] && runTime(t.top[0].finish_time) !== "—" ? `<span class="mini" title="Winner's time">${runTime(t.top[0].finish_time)} (w)</span>` : "—"}</td>
+          <td>${esc(dash(t.jockey))}</td><td class="name">${topTxt(t) || "—"}</td></tr>`; }).join("")}</tbody></table></div>
+      <p class="mini">Trials and jump-outs never count in the horse's record, stats or speed figures. ≈ = worked out from the winner's time and the margin, where the horse's own time wasn't recorded.</p>`;
+  }
+
   // ------------------------------------------------------------ track leaders: last 12 months at this track, jockeys and trainers
   async function trackLeaders(host, code, r0, runs) {
     if (!host) return;
@@ -1116,6 +1143,7 @@
       `<tr style="${isScr(e) ? "opacity:.45;text-decoration:line-through" : ""}"><td>${fmtDate(e.date)}</td><td>${esc(fmtTime(e.start_time))}</td><td>${esc(track(e.track, e).name)}</td><td class="name"><a href="${raceURL(e)}">${esc(raceName(e.race_name)) || "Race " + e.race}</a></td><td>${dash(e.distance)}</td><td>${dash(e.number)}</td><td>${dash(e.barrier)}</td><td>${wt(e)}</td><td>${dash(e.jockey)}</td></tr>`).join("")}</tbody></table></div>`
       : `<p class="note">No upcoming starts in the next few days.</p>`);
     if (entries.length) { const b = $('[data-panel="entries"]'); if (b) b.textContent = `Entries (${entries.length})`; }
+    loadTrials(name, groups.length > 1 ? runs : null, entries);
     const next = entries.find((e) => !isScr(e)) || entries[0];
     const star = (disp) => { const on = !!book()[disp]; $("#star").textContent = on ? "★" : "☆"; $("#star").classList.toggle("on", on); };
     if (!runs.length) {
