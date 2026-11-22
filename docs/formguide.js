@@ -984,12 +984,33 @@
         .filter((m) => (m.t.name + " " + m.track).toLowerCase().includes(q))
         .sort((a, b) => (b.t.aus - a.t.aus) || (TYPE_ORDER.indexOf(a.t.type) - TYPE_ORDER.indexOf(b.t.type)) || a.t.name.localeCompare(b.t.name));
       $("#count").textContent = list.length + " meetings · " + fmtDate(data.date, true) + (data.date === data.today ? " (today)" : "");
+      shown = list; nextUp();
       rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a></td>
         <td>${esc(({ GBR: "GB", UK: "GB", IRL: "IRE" })[m.t.state] || m.t.state) || "—"}</td><td>${m.races}</td><td>${m.runners}</td>
         <td>${esc(goingLabel(m)) || "—"}</td><td>${m.upcoming ? esc(fmtTime(m.first_race)) || "—" : '<span class="pill">Results</span>'}</td>
         <td><a class="btn" href="${meetingURL(m.track, data.date)}">${m.upcoming ? "Form Guide →" : "View Meeting →"}</a></td></tr>`).join("")
         || `<tr><td colspan="7">No meetings${data.meetings.length ? " match" : " on this date"}.</td></tr>`;
     }
+    // "Next up": the next few races still to jump today (follows the state filter and search), counting down
+    let shown = [];
+    function nextUp() {
+      const box = $("#nextup"); if (!box) return;
+      const now = Date.now(), keep = new Map(shown.map((m) => [String(m.track).toUpperCase(), m]));
+      const next = data && data.date === data.today ? (data.schedule || [])
+        .filter((x) => keep.has(String(x.track).toUpperCase()) && new Date(x.start_time).getTime() > now - 60000)
+        .sort((a, b) => new Date(a.start_time) - new Date(b.start_time)).slice(0, 4) : [];
+      if (!next.length) { box.classList.add("hidden"); return; }
+      const until = (iso) => { const m = Math.round((new Date(iso).getTime() - now) / 60000);
+        return m <= 0 ? "jumping now" : m < 60 ? `in ${m} min` : `in ${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
+      box.innerHTML = `<div class="rowbetween"><h3 style="margin:0">Next up</h3><span class="mini">It's ${new Date(now).toLocaleTimeString("en-AU", { timeZone: "Australia/Melbourne", hour: "numeric", minute: "2-digit" })} in Melbourne</span></div>
+        <div class="nextup">${next.map((x, i) => { const m = keep.get(String(x.track).toUpperCase());
+          return `<a class="nu${i === 0 ? " first" : ""}" href="${meetingURL(m.track, data.date)}&race=${x.race}">
+            <span class="nut">${esc(fmtTime(x.start_time))} <small>${until(x.start_time)}</small></span>
+            <span class="nun">${esc(m.t.name)} R${x.race}</span>
+            <span class="nur">${esc(raceName(x.race_name) || "")}${num(x.distance) ? ` · ${num(x.distance)}m` : ""}</span></a>`; }).join("")}</div>`;
+      box.classList.remove("hidden");
+    }
+    setInterval(() => data && nextUp(), 20000);
     $$("#states button").forEach((b) => b.onclick = () => { $$("#states button").forEach((x) => x.classList.toggle("active", x === b)); state = b.dataset.state; render(); });
     $("#q").oninput = () => data && render();
     $("#date").onchange = () => load($("#date").value);
