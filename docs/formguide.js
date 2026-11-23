@@ -240,6 +240,17 @@
     Object.values(byTrainer).forEach((set) => { const l = [...set]; l.slice(1).forEach((k) => join(l[0], k)); });
     // within a region: join stables one after the other; keep apart stables racing at the same time
     const span = (k) => { const ds = keys.filter((x) => find(x) === k).flatMap((x) => units[x].map((r) => r.date)).sort(); return [ds[0], ds[ds.length - 1]]; };
+    const runsIn = (k) => keys.filter((x) => find(x) === k).flatMap((x) => units[x]);
+    const foalOf = (rs) => { const y = rs.map((r) => parseInt(r.date, 10) - parseInt(r.horse_age, 10)).filter((x) => x > 1990).sort(); return y.length ? y[Math.floor(y.length / 2)] : null; };
+    const nested = (a, b) => {   // all of b's runs fall in one break in a's career, of at most 3 years
+      const A = runsIn(a).map((r) => r.date).sort(), B = runsIn(b).map((r) => r.date).sort();
+      if (!A.length || !B.length) return false;
+      const b0 = B[0], b1 = B[B.length - 1], before = A.filter((d) => d < b0), after = A.filter((d) => d > b1);
+      if (!before.length || !after.length || before.length + after.length !== A.length) return false;
+      if (days(before[before.length - 1], after[0]) > 1095) return false;
+      const fa = foalOf(runsIn(a)), fb = foalOf(runsIn(b));
+      return !!(fa && fb && Math.abs(fa - fb) <= 1);
+    };
     const byRegion = {};
     keys.forEach((k) => (byRegion[k.split("|")[0]] ||= new Set()).add(find(k)));
     Object.values(byRegion).forEach((set) => {
@@ -252,6 +263,9 @@
           const A = live[i], B = live[j], gap = days(A.s[1], B.s[0]);
           // one ends (give or take two weeks) before the other starts: same horse, new stable
           if (gap >= -14 && gap <= 1095 && !live.some((C, n) => n !== i && n !== j && C.s[0] < B.s[0] && C.s[1] > A.s[1])) { join(A.k, B.k); changed = true; }
+          // a stint with another stable that sits in a break between A's runs, then back to A (Grantham -> Leek for a
+          // Melbourne spring -> Grantham): A never raced while B did, and the ages agree -> same horse
+          else if (nested(A.k, B.k) || nested(B.k, A.k)) { join(A.k, B.k); changed = true; }
         }
       }
       // runs with no trainer go with the biggest group in that region
