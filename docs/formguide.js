@@ -1037,6 +1037,27 @@
       $("#tback").onclick = (e) => { e.preventDefault(); cardBox.innerHTML = ""; $("#tlist").classList.remove("hidden"); setHead(); history.replaceState(null, "", "?date=" + data.date); };
     }
     rows.addEventListener("click", (e) => { const a = e.target.closest("[data-t]"); if (!a) return; e.preventDefault(); showCard(a.dataset.t); });
+    // find a venue: type its name, pick it, then pick one of its trial days
+    let venues = [];
+    get("/api/trial-venues").then((v) => {
+      venues = v.map((x) => ({ ...x, t: track(x.track, x) }));
+      $("#venuelist").innerHTML = [...new Map(venues.map((x) => [x.t.name, x])).values()].sort((a, b) => a.t.name.localeCompare(b.t.name))
+        .map((x) => `<option value="${esc(x.t.name)}">${esc(x.t.state || "")} · ${x.days} trial days</option>`).join("");
+    }).catch(() => {});
+    async function showVenue(name) {
+      const hits = venues.filter((x) => nameKey(x.t.name) === nameKey(name) || String(x.track).toUpperCase() === String(name).toUpperCase());
+      if (!hits.length) return;
+      const box = $("#vdates"); box.classList.remove("hidden"); $("#vtitle").textContent = `Trial days at ${hits[0].t.name}`; loading($("#vrows"));
+      let D = [];
+      try { D = (await Promise.all(hits.map((x) => get(`/api/trial-dates?track=${encodeURIComponent(x.track)}`).then((r) => r.map((d) => ({ ...d, track: x.track })))))).flat(); } catch (e) { return fail($("#vrows"), e); }
+      D.sort((a, b) => b.date.localeCompare(a.date));
+      $("#vcount").textContent = D.length + " days";
+      $("#vrows").innerHTML = D.map((d) => `<tr><td class="name"><a href="?date=${d.date}&track=${encodeURIComponent(d.track)}">${esc(fmtDate(d.date, true))}</a></td>
+        <td>${d.heats}${d.jumpouts ? ' <span class="mini">incl. jump-outs</span>' : ""}</td><td>${d.runners}</td><td>${esc(goingLabel(d)) || "—"}</td>
+        <td><a class="btn" href="?date=${d.date}&track=${encodeURIComponent(d.track)}">Results →</a></td></tr>`).join("") || `<tr><td colspan="5">No trials found.</td></tr>`;
+    }
+    $("#venue").addEventListener("change", () => showVenue($("#venue").value.trim()));
+    $("#venue").addEventListener("keydown", (e) => { if (e.key === "Enter") showVenue($("#venue").value.trim()); });
     $$("#states button").forEach((b) => b.onclick = () => { $$("#states button").forEach((x) => x.classList.toggle("active", x === b)); state = b.dataset.state; render(); });
     $("#q").oninput = () => data && render();
     $("#date").onchange = () => load($("#date").value);
