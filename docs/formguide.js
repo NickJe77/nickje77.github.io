@@ -622,7 +622,7 @@
     box.innerHTML = `<h3>Trial History</h3><div class="tablewrap"><table><thead><tr><th>Date</th><th>Track</th><th class="name">Trial</th><th>Dist</th><th>Going</th>
       <th>Pos</th><th>Margin</th><th>Time</th><th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Jockey</th><th class="name">Winner / 2nd</th></tr></thead><tbody>${T.map((t) => {
         const p = pos(t), won = p === 1;
-        return `<tr><td>${fmtDate(t.date)}</td><td>${esc(track(t.track, t).name)}</td>
+        return `<tr><td><a href="trials.html?date=${t.date}&track=${encodeURIComponent(t.track)}" title="All the trials at this venue that day">${fmtDate(t.date)}</a></td><td>${esc(track(t.track, t).name)}</td>
           <td class="name">${esc(raceName(t.race_name) || kind(t))}${/tri?a?l|trl|jump/i.test(t.race_name || "") ? "" : ` <span class="mini">${kind(t)}</span>`}</td><td>${dash(t.distance)}</td><td>${esc(goingLabel(t)) || "—"}</td>
           <td><b>${p ? posLabel(t) : dash(t.position)}</b>${t.starters ? `<span class="mini">/${esc(t.starters)}</span>` : ""}</td>
           <td>${won ? "—" : t.margin ? esc(t.margin) + "L" : "—"}</td><td>${runTime(t.finish_time) !== "—" ? (/time_estimated/.test(t.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(t.finish_time)}</span>` : runTime(t.finish_time)) : (t.top || [])[0] && runTime(t.top[0].finish_time) !== "—" ? `<span class="mini" title="Winner's time">${runTime(t.top[0].finish_time)} (w)</span>` : "—"}</td>${vsAverage(t, avgs, "trials")}
@@ -960,6 +960,77 @@
   const pages = {};
 
   // ---------------------------------------------- 1. Form Guide homepage
+  // ---------------------------------------------- Trials: a day's trial venues, and every heat at one venue
+  pages["trials"] = async function () {
+    let state = "ALL", data = null;
+    const rows = $("#rows"), cardBox = $("#tcard");
+    async function load(date) {
+      loading(rows);
+      try {
+        data = await get("/api/trial-meetings" + (date ? "?date=" + date : ""));
+        $("#date").value = data.date || "";
+        const tk = qs("track");
+        history.replaceState(null, "", "?date=" + data.date + (tk && date === qs("date") ? "&track=" + encodeURIComponent(tk) : ""));
+        render();
+        if (tk && data.meetings.some((m) => String(m.track).toUpperCase() === tk.toUpperCase())) showCard(tk); else { cardBox.innerHTML = ""; $("#tlist").classList.remove("hidden"); setHead(); }
+      } catch (e) { fail(rows, e); }
+    }
+    function setHead(m) {
+      $("#ttitle").textContent = m ? `${m.t.name} Trials` : "Barrier Trials";
+      $("#tcrumbs").innerHTML = m ? `<a href="trials.html?date=${data.date}">Trials</a> / ${esc(m.t.name)}` : `<a href="trials.html">Trials</a>`;
+      $("#tsub").textContent = m ? [fmtDate(data.date, true), m.t.state, goingLabel(m), m.heats + " heats", m.runners + " runners"].filter(Boolean).join(" · ")
+        : "Barrier trials and jump-outs — pick a date and a venue to see every heat. Kept apart from race form.";
+      document.title = (m ? m.t.name + " Trials " + fmtDate(data.date) : "Trials") + " | The Sporting Almanac";
+    }
+    function list() {
+      const q = $("#q").value.toLowerCase();
+      return data.meetings.map((m) => ({ ...m, t: track(m.track, m) }))
+        .filter((m) => state === "ALL" || m.t.state === state)
+        .filter((m) => (m.t.name + " " + m.track).toLowerCase().includes(q))
+        .sort((a, b) => (TYPE_ORDER.indexOf(a.t.type) - TYPE_ORDER.indexOf(b.t.type)) || a.t.name.localeCompare(b.t.name));
+    }
+    function render() {
+      const L = list();
+      $("#count").textContent = L.length + " venues · " + fmtDate(data.date, true);
+      rows.innerHTML = L.map((m) => `<tr><td class="name"><a href="?date=${data.date}&track=${encodeURIComponent(m.track)}" data-t="${esc(m.track)}">${esc(m.t.name)}</a></td>
+        <td>${esc(m.t.state) || "—"}</td><td>${m.heats}${m.jumpouts ? ' <span class="mini">incl. jump-outs</span>' : ""}</td><td>${m.runners}</td><td>${esc(goingLabel(m)) || "—"}</td>
+        <td><a class="btn" href="?date=${data.date}&track=${encodeURIComponent(m.track)}" data-t="${esc(m.track)}">Results →</a></td></tr>`).join("")
+        || `<tr><td colspan="6">No trials${data.meetings.length ? " match" : " on this date"}.</td></tr>`;
+    }
+    async function showCard(code) {
+      const m = list().find((x) => String(x.track).toUpperCase() === code.toUpperCase()) || { ...data.meetings.find((x) => String(x.track).toUpperCase() === code.toUpperCase()) };
+      m.t = m.t || track(m.track, m);
+      history.replaceState(null, "", `?date=${data.date}&track=${encodeURIComponent(m.track)}`);
+      setHead(m); $("#tlist").classList.add("hidden"); loading(cardBox);
+      let runs, avgs = {};
+      try { runs = await get(`/api/trial-card?track=${encodeURIComponent(m.track)}&date=${data.date}`); } catch (e) { return fail(cardBox, e); }
+      try { avgs = await get(`/api/avgtimes?table=trials&tracks=${encodeURIComponent(m.track)}`); } catch (e) {}
+      const heats = groupBy(runs, (r) => r.race), nums = Object.keys(heats).map(Number).sort((a, b) => a - b);
+      cardBox.innerHTML = `<p><a href="?date=${data.date}" id="tback">← All trial venues on ${esc(fmtDate(data.date, true))}</a></p>` + nums.map((n) => {
+        const H = heats[n], h0 = H[0], kind = /jump/i.test(h0.race_name || "") ? "Jump-out" : "Trial";
+        return `<section class="panel"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}</span>
+          <span class="mini">${[num(h0.distance) ? num(h0.distance) + "m" : "", goingLabel(h0), H.length + " runners"].filter(Boolean).join(" · ")}</span></div>
+          <div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>Margin</th><th>Time</th>
+          <th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Barrier</th><th>Jockey</th><th>Trainer</th></tr></thead><tbody>
+          ${H.map((r) => { const p = pos(r);
+            return `<tr class="${p === 1 ? "winner" : ""}"><td><b>${p ? posLabel(r) : dash(r.position)}</b></td>
+              <td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a></td>
+              <td>${p === 1 ? "—" : r.margin ? esc(r.margin) + "L" : "—"}</td>
+              <td>${runTime(r.finish_time) === "—" ? "—" : /time_estimated/.test(r.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(r.finish_time)}</span>` : runTime(r.finish_time)}</td>
+              ${vsAverage(r, avgs, "trials")}<td>${dash(r.barrier)}</td><td>${esc(dash(r.jockey))}</td><td>${esc(dash(r.trainer))}</td></tr>`; }).join("")}
+          </tbody></table></div></section>`; }).join("") +
+        `<p class="mini">Average = lengths faster (green) or slower (red) than the average trial winner at ${esc(m.t.name)} over that distance and going. ≈ = worked out from the winner's time and the margin.</p>`;
+      $("#tback").onclick = (e) => { e.preventDefault(); cardBox.innerHTML = ""; $("#tlist").classList.remove("hidden"); setHead(); history.replaceState(null, "", "?date=" + data.date); };
+    }
+    rows.addEventListener("click", (e) => { const a = e.target.closest("[data-t]"); if (!a) return; e.preventDefault(); showCard(a.dataset.t); });
+    $$("#states button").forEach((b) => b.onclick = () => { $$("#states button").forEach((x) => x.classList.toggle("active", x === b)); state = b.dataset.state; render(); });
+    $("#q").oninput = () => data && render();
+    $("#date").onchange = () => load($("#date").value);
+    $("#prev").onclick = () => data && data.prev && load(data.prev);
+    $("#next").onclick = () => data && data.next && load(data.next);
+    load(qs("date"));
+  };
+
   pages["form-guide"] = async function () {
     let state = "ALL", data = null;
     const rows = $("#rows");
