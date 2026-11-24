@@ -1018,17 +1018,36 @@
       setHead(m); $("#tlist").classList.add("hidden"); loading(cardBox);
       let runs, avgs = {};
       try { runs = await get(`/api/trial-card?track=${encodeURIComponent(m.track)}&date=${data.date}`); } catch (e) { return fail(cardBox, e); }
-      try { avgs = await get(`/api/avgtimes?table=trials&tracks=${encodeURIComponent(m.track)}`); } catch (e) {}
+      let WO = { wins: [], raced: [] };
+      [avgs, WO] = await Promise.all([get(`/api/avgtimes?table=trials&tracks=${encodeURIComponent(m.track)}`).catch(() => ({})),
+        get(`/api/trial-winners-out?track=${encodeURIComponent(m.track)}&date=${data.date}`).catch(() => WO)]);
       const heats = groupBy(runs, (r) => r.race), nums = Object.keys(heats).map(Number).sort((a, b) => a - b);
+      // winners out of each heat: the trial runner's later race wins (same-name horses left out), first win shown
+      const wonSince = new Map();
+      runs.forEach((r) => {
+        const wins = WO.wins.filter((x) => x.horse_key === r.horse_key && Number(x.race) === Number(r.race)).map((x) => ({ ...x, position: "1", race: x.wrace }));
+        if (!wins.length) return;
+        const mine = sameHorse([r, ...wins], r).filter((x) => x !== r && wins.includes(x));
+        if (mine.length) wonSince.set(r, { first: mine.sort((a, b) => a.date.localeCompare(b.date))[0], n: mine.length });
+      });
+      const racedSince = (r) => WO.raced.some((x) => x.horse_key === r.horse_key && Number(x.race) === Number(r.race));
+      const woBox = (H) => {
+        const out = H.filter((r) => wonSince.has(r)).map((r) => ({ r, ...wonSince.get(r) })).sort((a, b) => a.first.date.localeCompare(b.first.date));
+        const ran = H.filter(racedSince).length;
+        return `<div class="wout" style="margin:0 12px 10px"><p class="settlehead mini"><b>${out.length} winner${out.length === 1 ? "" : "s"} out of this ${/jump/i.test(H[0].race_name || "") ? "jump-out" : "trial"}</b> · ${ran} of ${H.length} have raced since</p>
+          ${out.length ? `<ul>${out.map((o) => `<li><a href="${horseURL(o.r.horse)}"><b>${esc(o.r.horse)}</b></a> <span class="mini">(${posLabel(o.r)} here)</span> — won ${fmtDate(o.first.date)} at
+            <a href="${raceURL(o.first)}">${esc(track(o.first.track, o.first).name)}</a> <span class="mini">${esc(classLabel(o.first) || "")}${o.n > 1 ? ` · ${o.n} wins since` : ""}</span></li>`).join("")}</ul>` : ""}</div>`;
+      };
       cardBox.innerHTML = `<p><a href="?date=${data.date}" id="tback">← All trial venues on ${esc(fmtDate(data.date, true))}</a></p>` + nums.map((n) => {
         const H = heats[n], h0 = H[0], kind = /jump/i.test(h0.race_name || "") ? "Jump-out" : "Trial";
         return `<section class="panel"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}</span>
           <span class="mini">${[num(h0.distance) ? num(h0.distance) + "m" : "", goingLabel(h0), H.length + " runners"].filter(Boolean).join(" · ")}</span></div>
+          ${woBox(H)}
           <div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>Margin</th><th>Time</th>
           <th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Barrier</th><th>Jockey</th><th>Trainer</th></tr></thead><tbody>
           ${H.map((r) => { const p = pos(r);
             return `<tr class="${p === 1 ? "winner" : ""}"><td><b>${p ? posLabel(r) : dash(r.position)}</b></td>
-              <td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a></td>
+              <td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a>${wonSince.has(r) ? ` <span class="pill wonsince" title="Won ${wonSince.get(r).n} race${wonSince.get(r).n > 1 ? "s" : ""} since">W since</span>` : ""}</td>
               <td>${p === 1 ? "—" : r.margin ? esc(r.margin) + "L" : "—"}</td>
               <td>${runTime(r.finish_time) === "—" ? "—" : /time_estimated/.test(r.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(r.finish_time)}</span>` : runTime(r.finish_time)}</td>
               ${vsAverage(r, avgs, "trials")}<td>${dash(r.barrier)}</td><td>${esc(dash(r.jockey))}</td><td>${esc(dash(r.trainer))}</td></tr>`; }).join("")}
