@@ -8,6 +8,12 @@ on:
         required: true
         default: "2026"
 
+# Only one data-push job at a time; extra runs wait their turn instead of racing.
+# Use this same group name in any other workflow that commits to this repo.
+concurrency:
+  group: data-push
+  cancel-in-progress: false
+
 jobs:
   scrape:
     runs-on: ubuntu-latest
@@ -42,12 +48,23 @@ jobs:
           echo "=== boxscore count ==="
           find docs/data/nfl/boxscores/${{ github.event.inputs.season }} -name "*.json" 2>/dev/null | wc -l
 
-      - name: Commit
+      - name: Commit and push (with retry)
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs/data/nfl/
           git diff --cached --quiet && echo "No changes to commit" && exit 0
           git commit -m "NFL scrape: season ${{ github.event.inputs.season }}"
-          git pull --rebase origin main
-          git push origin HEAD
+
+          for i in 1 2 3 4 5; do
+            # -X theirs: on a conflict, keep this run's freshly scraped files
+            if git pull --rebase -X theirs origin main && git push origin HEAD:main; then
+              echo "Pushed on attempt $i"
+              exit 0
+            fi
+            git rebase --abort 2>/dev/null || true
+            echo "Push failed (attempt $i), retrying in $((i * 10))s..."
+            sleep $((i * 10))
+          done
+          echo "Push failed after 5 attempts"
+          exit 1
