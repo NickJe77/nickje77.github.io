@@ -667,23 +667,35 @@
   }
 
   // ------------------------------------------------------------ rail history: last 5 meetings here, and where the winners came from
-  async function railHistory(host, code, r0, d) {
+  async function railHistory(host, code, r0, d, mode) {
     if (!host) return;
-    let H; try { H = await get(`/api/rail-history?tracks=${encodeURIComponent(sameTrackCodes(code, r0).join(","))}&before=${d}&n=5`); } catch (e) { return; }
-    if (!H || !H.length) return;
-    const tr = track(code, r0), today = String(r0.rail || "").trim(), rk = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9.]/g, "");
+    const today = String(r0.rail || "").trim();
+    const rk = (x) => { const t = String(x || "").toLowerCase().trim(), m = t.match(/(\d+(?:\.\d+)?)/);   // "+9m" = "Out 9m Entire Circuit"
+      return m ? (Number(m[1]) === 0 ? "true" : Number(m[1]) + "m") : /true/.test(t) ? "true" : t.replace(/[^a-z0-9]/g, ""); };
+    mode = mode || (today ? "same" : "last");
+    const codes = encodeURIComponent(sameTrackCodes(code, r0).join(","));
+    let H; try { H = await get(`/api/rail-history?tracks=${codes}&before=${d}&n=5${mode === "same" ? "&same=" + encodeURIComponent(today) : ""}`); } catch (e) { return; }
+    if (!H) return;
+    if (!H.length && mode === "same") return railHistory(host, code, r0, d, "last");   // never been on this rail: show the last 5
+    if (!H.length) return;
+    const tr = track(code, r0);
     const cell = (m, k) => { const top = Math.max(...SETTLE.map((x) => m[x])); return `<td class="${m[k] && m[k] === top ? "railtop" : ""}">${m[k] || "·"}</td>`; };
     const bcell = (m, k) => { const top = Math.max(...Object.values(m.bar)); return `<td class="${m.bar[k] && m.bar[k] === top ? "railtop" : ""}">${m.bar[k] || "·"}</td>`; };
-    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">Rail history · last ${H.length} meetings at ${esc(tr.name)}</h3><span class="mini">Today's rail: <b>${esc(today || "not listed yet")}</b></span></div>
+    const title = mode === "same" ? `Rail positions · last ${H.length} meeting${H.length === 1 ? "" : "s"} at ${esc(tr.name)} with the rail ${esc(today)}`
+      : `Rail positions · last ${H.length} meetings at ${esc(tr.name)}`;
+    const toggle = today ? `<span class="railtoggle"><button class="filter ${mode === "same" ? "active" : ""}" data-mode="same">Same rail as today</button><button class="filter ${mode === "last" ? "active" : ""}" data-mode="last">Last 5 meetings</button></span>` : "";
+    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">${title}</h3><span class="mini">Today's rail: <b>${esc(today || "not listed yet")}</b> ${toggle}</span></div>
+      ${mode === "same" && H.length < 5 ? `<p class="mini" style="margin:4px 0 0">Only ${H.length} earlier meeting${H.length === 1 ? "" : "s"} here on this rail.</p>` : ""}
       <div class="tablewrap"><table class="railhist"><thead>
         <tr><th rowspan="2" class="name">Meeting</th><th rowspan="2" class="name">Rail</th><th rowspan="2">Going</th><th rowspan="2">Races</th><th colspan="5">Where the winners were at the 400m</th><th colspan="3">Winners' barriers (share of field)</th></tr>
         <tr>${SETTLE.map((k) => `<th>${k}</th>`).join("")}<th>Inside</th><th>Middle</th><th>Outside</th></tr></thead><tbody>
         ${H.map((m) => `<tr><td class="name"><a href="${meetingURL(code, m.date)}">${esc(fmtDate(m.date))}</a></td>
-          <td class="name">${esc(m.rail || "—")}${today && m.rail && rk(m.rail) === rk(today) ? ' <span class="pill sameRail">same as today</span>' : ""}</td>
+          <td class="name">${esc(m.rail || "—")}${mode === "last" && today && m.rail && rk(m.rail) === rk(today) ? ' <span class="pill sameRail">same as today</span>' : ""}</td>
           <td>${esc(m.going || "—")}</td><td title="${esc(m.winners.map((w) => `R${w.race}: barrier ${w.barrier || "?"}${w.field ? " of " + w.field : ""}`).join("\n"))}">${m.races}</td>${SETTLE.map((k) => cell(m, k)).join("")}${["Inside", "Middle", "Outside"].map((k) => bcell(m, k)).join("")}</tr>`).join("")}
       </tbody></table></div>
-      <p class="mini" style="margin:6px 0 0">Position at the 400m as a share of the field (1st = Leader). Barriers are split into thirds of each race's field (barrier 8 of 8 = outside, 8 of 15 = middle). Shaded = where most winners came from that day.${H.some((m) => !m.rail) ? " Rail shows — for meetings before we started saving rail positions." : ""}</p>`;
+      <p class="mini" style="margin:6px 0 0">Position at the 400m as a share of the field (1st = Leader). Barriers are split into thirds of each race's field (barrier 8 of 8 = outside, 8 of 15 = middle). Shaded = where most winners came from that day.</p>`;
     host.classList.remove("hidden");
+    $$("[data-mode]", host).forEach((b) => b.onclick = () => railHistory(host, code, r0, d, b.dataset.mode));
   }
 
   // ------------------------------------------------------------ virtual race
