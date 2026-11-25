@@ -348,7 +348,7 @@
     const oldest = {}; (card.runs || []).forEach((r) => { const a = parseInt(r.horse_age, 10) || 0; oldest[r.race] = Math.max(oldest[r.race] || 0, a); });
     (card.runs || []).forEach((r) => { if (r.field_age == null && oldest[r.race]) r.field_age = oldest[r.race]; });
     (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
-  const personURL = (type, n) => `person.html?type=${type}&name=${encodeURIComponent(n)}`;
+  const personURL = (type, n) => `person.html?${type === "trainer" ? "trainer" : "jockey"}=${encodeURIComponent(n)}`;
   const personLink = (type, n) => { const t = String(n || "").trim(); return t && t !== "-" && t !== "—" ? `<a class="plink" href="${personURL(type, t)}">${esc(t)}</a>` : "—"; };
   const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "")
     + (r && trainerKeys(r.trainer)[0] ? "&t=" + encodeURIComponent(trainerKeys(r.trainer)[0]) : "");
@@ -1281,19 +1281,39 @@
 
   // ------------------------------------------------------------ jockey / trainer page (last 12 months)
   pages["person"] = async function () {
-    const type = qs("type") === "trainer" ? "trainer" : "jockey", name = qs("name"), other = type === "jockey" ? "trainer" : "jockey";
+    // boxes: Jockey, Trainer, Track (any combination). Old links: ?type=jockey&name=...
+    let jq = qs("jockey"), tq = qs("trainer");
+    if (!jq && !tq && qs("name")) { if (qs("type") === "trainer") tq = qs("name"); else jq = qs("name"); }
+    const trackCodes = qs("track").split(",").filter(Boolean);
+    const type = jq ? "jockey" : "trainer", name = jq || tq, withName = jq ? tq : "", other = type === "jockey" ? "trainer" : "jockey";
     const T = type === "jockey" ? "Jockey" : "Trainer", O = other === "jockey" ? "Jockey" : "Trainer";
-    $$("[data-ptype]").forEach((b) => { b.classList.toggle("active", b.dataset.ptype === type); b.onclick = () => { $$("[data-ptype]").forEach((x) => x.classList.toggle("active", x === b)); }; });
-    $("#pfind").onsubmit = (e) => { e.preventDefault(); const n = $("#pname").value.trim(), t = ($("[data-ptype].active") || {}).dataset?.ptype || "jockey"; if (n) location.href = personURL(t, n); };
+    const trackName = trackCodes.length ? track(trackCodes[0]).name : "";
+    $("#pjockey").value = jq; $("#ptrainer").value = tq; $("#ptrack").value = trackName;
+    // predictive boxes
+    const suggest = (input, list, kind) => { let tm = null, last = "";
+      input.addEventListener("input", () => { clearTimeout(tm); const q = input.value.trim(); if (q.length < 2 || q === last) return;
+        tm = setTimeout(async () => { last = q; const L = await get(`/api/people?type=${kind}&q=${encodeURIComponent(q)}`).catch(() => []);
+          list.innerHTML = L.map((x) => `<option value="${esc(x.name)}">${x.n} ${kind === "jockey" ? "rides" : "runners"} in the last 12 months</option>`).join(""); }, 180); }); };
+    suggest($("#pjockey"), $("#pjlist"), "jockey"); suggest($("#ptrainer"), $("#ptlist"), "trainer");
+    const tnames = [...new Set(Object.values(TRACKS).map((v) => v[0]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    $("#ptklist").innerHTML = tnames.map((n) => `<option value="${esc(n)}">`).join("");
+    $("#pfind").onsubmit = (e) => { e.preventDefault();
+      const j = $("#pjockey").value.trim(), t = $("#ptrainer").value.trim(), k = $("#ptrack").value.trim().toLowerCase();
+      const codes = k ? Object.entries(TRACKS).filter(([, v]) => String(v[0]).toLowerCase() === k).map(([c]) => c) : [];
+      if (!j && !t) { $("#pbody").innerHTML = `<div class="pad note">Type a jockey or a trainer (or both), and a track if you like.</div>`; return; }
+      if (k && !codes.length) { $("#pbody").innerHTML = `<div class="pad note">Pick a track from the list as you type.</div>`; return; }
+      location.href = `person.html?${j ? "jockey=" + encodeURIComponent(j) + "&" : ""}${t ? "trainer=" + encodeURIComponent(t) + "&" : ""}${codes.length ? "track=" + encodeURIComponent(codes.join(",")) : ""}`.replace(/&$/, ""); };
     if (!name) { $("#ptitle").textContent = "Jockeys & Trainers"; return; }
-    $("#pname").value = name;
-    $("#ptitle").textContent = name; document.title = name + " | The Sporting Almanac";
-    $("#pcrumb").textContent = T + "s";
+    const title = [jq, tq].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
+    $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
+    $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?type=${type}&name=${encodeURIComponent(name)}`); } catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
-    if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for “${esc(name)}” in the last 12 months. Check the spelling, or try just the surname.</div>`; return; }
-    $("#ptitle").textContent = P.name; document.title = P.name + " | The Sporting Almanac";
-    $("#psub").textContent = `${T} · last 12 months (since ${fmtDate(P.since)})`;
+    let P; try { P = await get(`/api/person?type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
+    if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
+    const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
+    $("#ptitle").textContent = shownTitle; document.title = shownTitle + " | The Sporting Almanac";
+    $("#psub").textContent = `${withName ? "Jockey & trainer together" : T}${trackName ? " at " + trackName : ""} · last 12 months (since ${fmtDate(P.since)})`;
     const roiTxt = (v) => v === null || v === undefined ? "—" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%</span>`;
     const o = P.overall, ride = type === "jockey" ? "Rides" : "Runners";
     // tracks: one row per track name (Randwick and its inner track kept apart, as named)
@@ -1319,12 +1339,12 @@
           <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th></tr></thead><tbody>${P.upcoming.map((x) =>
             `<tr><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
              <td class="name"><a href="${horseURL(x.horse)}">${esc(x.horse)}</a></td><td>${dash(x.barrier)}</td><td class="name">${personLink(other, x[other])}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
-        <section class="panel"><div class="panelhead">By track</div><div class="tablewrap"><table><thead>${head([["name", "Track", "name"], ...statCols], tSort, "t")}</thead><tbody>
-          ${sorted(tracks, tSort).map((t) => `<tr><td class="name">${esc(t.name)}</td>${statTds(t)}</tr>`).join("")}</tbody></table></div></section>
-        <section class="panel"><div class="panelhead"><span>Best ${O.toLowerCase()}s with ${esc(P.name)}</span>
+        ${trackCodes.length ? "" : `<section class="panel"><div class="panelhead">By track</div><div class="tablewrap"><table><thead>${head([["name", "Track", "name"], ...statCols], tSort, "t")}</thead><tbody>
+          ${sorted(tracks, tSort).map((t) => `<tr><td class="name">${esc(t.name)}</td>${statTds(t)}</tr>`).join("")}</tbody></table></div></section>`}
+        ${withName ? "" : `<section class="panel"><div class="panelhead"><span>Best ${O.toLowerCase()}s with ${esc(P.name)}${trackName ? " at " + esc(trackName) : ""}</span>
           <span class="filters" style="margin:0">${[3, 5, 10, 20].map((n) => `<button class="filter ${minRides === n ? "active" : ""}" data-min="${n}">${n}+ ${type === "jockey" ? "rides" : "rides"}</button>`).join("")}</span></div>
           <div class="tablewrap"><table><thead>${head([["name", O, "name"], ...statCols], pSort, "p")}</thead><tbody>
-          ${sorted(parts, pSort).map((x) => `<tr><td class="name">${personLink(other, x.name)}</td>${statTds(x)}</tr>`).join("") || `<tr><td colspan="8">None with ${minRides}+ rides together.</td></tr>`}</tbody></table></div></section>
+          ${sorted(parts, pSort).map((x) => `<tr><td class="name">${personLink(other, x.name)}</td>${statTds(x)}</tr>`).join("") || `<tr><td colspan="8">None with ${minRides}+ rides together.</td></tr>`}</tbody></table></div></section>`}
         ${type === "trainer" && P.asStable.length > 1 ? `<section class="panel"><div class="panelhead">By stable name</div><div class="tablewrap"><table><thead><tr><th class="name">Trained as</th>${statCols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
           ${P.asStable.map((x) => `<tr><td class="name">${personLink("trainer", x.name)}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
         <section class="panel"><div class="panelhead">Latest ${type === "jockey" ? "rides" : "runners"}</div><div class="tablewrap"><table>
