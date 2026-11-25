@@ -191,13 +191,15 @@
     return "O";
   }
   const AGE_NAME = { 2: "2yo", 3: "3yo", O: "open-age" };
-  const avgKey = (r, b, ag) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}${ag ? "|" + ag : ""}`;
-  // the closest average with at least 3 winners: same class & age -> same age, any class -> same class, any age -> everything
+  // fillies & mares only (FanOdds: every runner female), or the race name / class says so
+  const sexGroup = (r) => Number(r.fm) === 1 || /FILLIES|MARES|F\s*&\s*M|\(F\)/i.test(String(r.race_name || "") + " " + String(r.class || "")) ? "F" : "O";
+  const avgKey = (r, b, ag, sx) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}${ag ? "|" + ag : ""}${sx ? "|" + sx : ""}`;
+  // the closest average with at least 3 winners: same class, age and sex first, widening one step at a time
   function bestAvg(r, avgs, withAge = true) {
-    const band = classBand(r), ag = withAge ? ageGroup(r) : "";
-    const tries = (ag ? [[band, ag], ["*", ag]] : []).concat([[band, ""], ["*", ""]]).filter(([b]) => b !== "Other");
-    for (const [b, x] of tries) { const c = avgs && avgs[avgKey(r, b, x)]; if (c && c.n >= 3) return { a: c, b, x, band, ag, same: b === band && x === ag }; }
-    return { a: null, b: "*", x: "", band, ag, same: false };
+    const band = classBand(r), ag = withAge ? ageGroup(r) : "", sx = withAge ? sexGroup(r) : "";
+    const tries = (ag ? [[band, ag, sx], ["*", ag, sx], [band, ag, ""], ["*", ag, ""]] : []).concat([[band, "", ""], ["*", "", ""]]).filter(([b]) => b !== "Other");
+    for (const [b, x, y] of tries) { const c = avgs && avgs[avgKey(r, b, x, y)]; if (c && c.n >= 3) return { a: c, b, x, y, band, ag, sx, same: b === band && x === ag && y === sx }; }
+    return { a: null, b: "*", x: "", y: "", band, ag, sx, same: false };
   }
   // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far.
   // lengths faster (+) or slower (-) than the average winner of this class and age at this track/distance/going, or null
@@ -212,8 +214,9 @@
     const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
     const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
     const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
-    const what = noun !== "races" ? noun : (B.x ? AGE_NAME[B.x] + " " : "") + (B.b === "*" ? "races of all classes" : BAND_NAME[B.b] + " races")
-      + (same ? "" : ` (not enough ${B.ag ? AGE_NAME[B.ag] + " " : ""}${BAND_NAME[B.band] || ""} races here yet)`);
+    const sxName = (y) => y === "F" ? "fillies & mares " : y === "O" ? "open-sex " : "";
+    const what = noun !== "races" ? noun : (B.x ? AGE_NAME[B.x] + " " : "") + sxName(B.y) + (B.b === "*" ? "races of all classes" : BAND_NAME[B.b] + " races")
+      + (same ? "" : ` (not enough ${B.ag ? AGE_NAME[B.ag] + " " : ""}${B.sx === "F" ? "fillies & mares " : ""}${BAND_NAME[B.band] || ""} races here yet)`);
     return `<td style="background:${bg};font-weight:600" title="Average ${noun === "races" ? "" : "trial "}winning time: ${avgTxt} — ${a.n} ${esc(what)} at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L${same || noun !== "races" ? "" : '<span class="mini">*</span>'}</td>`;
   }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
@@ -917,14 +920,48 @@
   const mapKey = (r) => `${r.track}|${r.date}|${r.race}`;
 
   // upcoming field table (shared by meeting and race pages)
-  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th>Last 10</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
+  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th title="How many horses from each runner's last start have won since">Last Start Winners</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
+  // "Last start winners": how many from each runner's last race have won since. Cells are filled in once the page is up.
+  function lswCell(prior, r) {
+    const l = prior[0];
+    if (!l) return `<td class="mini">1st start</td>`;
+    setTimeout(fillLSW, 0);
+    return `<td class="lsw" data-k="${esc(String(l.track).toUpperCase() + "|" + l.date + "|" + l.race)}" data-before="${esc(r.date || "")}" data-pos="${esc(posLabel(l) || l.position || "")}"
+      data-where="${esc(fmtDate(l.date) + " " + track(l.track, l).name)}"><span class="mini">…</span></td>`;
+  }
+  let lswBusy = false;
+  async function fillLSW() {
+    if (lswBusy) return; lswBusy = true;
+    await new Promise((res) => setTimeout(res, 50));
+    const cells = $$("td.lsw:not([data-done])"); lswBusy = false;
+    if (!cells.length) return;
+    const groups = groupBy(cells, (c) => c.dataset.before);
+    for (const [before, cs] of Object.entries(groups)) {
+      const keys = [...new Set(cs.map((c) => c.dataset.k))];
+      for (let i = 0; i < keys.length; i += 40) {
+        const part = keys.slice(i, i + 40), races = part.map((k) => { const [t, d, rc] = k.split("|"); return [t, d, Number(rc)]; });
+        let R = {};
+        try { R = await get(`/api/last-start-winners?races=${encodeURIComponent(JSON.stringify(races))}&before=${before}`); } catch (e) {}
+        cs.filter((c) => part.includes(c.dataset.k)).forEach((c) => {
+          c.dataset.done = "1";
+          const x = R[c.dataset.k];
+          if (!x) { c.innerHTML = "—"; return; }
+          const w = x.winners || [];
+          c.innerHTML = `<b class="${w.length ? "lswyes" : ""}">${w.length}</b><span class="mini"> of ${x.starters}</span>`;
+          c.title = `Last start: ${c.dataset.where} (${c.dataset.pos}). ` + (w.length ? "Won since: " + w.sort((a, b) => a.first_win.localeCompare(b.first_win))
+            .map((h) => `${h.horse} (${h.position ? posLabel(h) : "?"} that day) — won ${fmtDate(h.first_win)}${h.track ? " at " + track(h.track).name : ""}${h.wins > 1 ? `, ${h.wins} wins` : ""}`).join("; ")
+            : "No winners out of that race yet.");
+        });
+      }
+    }
+  }
   function fieldRows(runs, history) {
     const b = book();
     return runs.map((r) => {
       const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
         <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
-        <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td><td>${s.last10}</td><td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
+        <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td><td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
     }).join("");
   }
