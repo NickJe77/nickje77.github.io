@@ -920,8 +920,8 @@
   const mapKey = (r) => `${r.track}|${r.date}|${r.race}`;
 
   // upcoming field table (shared by meeting and race pages)
-  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th title="How many horses from each runner's last start have won since">Last Start Winners</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
-  // "Last start winners": how many from each runner's last race have won since. Cells are filled in once the page is up.
+  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th title="Winners out of each runner's last start: how many horses from that race have won since">Winners Out</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
+  // "Winners out": how many from each runner's last race have won since. Cells are filled in once the page is up.
   function lswCell(prior, r) {
     const l = prior[0];
     if (!l) return `<td class="mini">1st start</td>`;
@@ -947,8 +947,8 @@
           const x = R[c.dataset.k];
           if (!x) { c.innerHTML = "—"; return; }
           const w = x.winners || [];
-          c.innerHTML = `<b class="${w.length ? "lswyes" : ""}">${w.length}</b><span class="mini"> of ${x.starters}</span>`;
-          c.title = `Last start: ${c.dataset.where} (${c.dataset.pos}). ` + (w.length ? "Won since: " + w.sort((a, b) => a.first_win.localeCompare(b.first_win))
+          c.innerHTML = `<b class="${w.length ? "lswyes" : ""}">${w.length}</b><span class="mini"> from ${x.starters}</span>`;
+          c.title = `Winners out of its last start, ${c.dataset.where} (ran ${c.dataset.pos}). ` + (w.length ? "Won since: " + w.sort((a, b) => a.first_win.localeCompare(b.first_win))
             .map((h) => `${h.horse} (${h.position ? posLabel(h) : "?"} that day) — won ${fmtDate(h.first_win)}${h.track ? " at " + track(h.track).name : ""}${h.wins > 1 ? `, ${h.wins} wins` : ""}`).join("; ")
             : "No winners out of that race yet.");
         });
@@ -1267,6 +1267,33 @@
   };
 
   // ---------------------------------------------- 3. Race
+  // ---- blackbook a race: an email whenever a runner from it is entered to run (needs an account: the emails come from there)
+  let savedRaces = null;
+  async function bookedRaces(force) {
+    if (!loggedIn()) return [];
+    if (!savedRaces || force) savedRaces = await api("/api/blackbook/races").catch(() => []);
+    return savedRaces;
+  }
+  async function raceBookButton(r0, t, d, n) {
+    const h = $("#rtitle"); if (!h || $("#racebook-btn")) return;
+    const b = document.createElement("button"); b.id = "racebook-btn"; b.className = "racebookbtn"; h.after(b);
+    const isIn = async () => (await bookedRaces()).some((x) => x.track === String(t).toUpperCase() && x.date === d && Number(x.race) === Number(n));
+    const show = async () => { const on = loggedIn() && await isIn();
+      b.innerHTML = on ? "★ Race in your blackbook" : "☆ Blackbook this race"; b.classList.toggle("on", on);
+      b.title = "Get an email whenever a runner from this race is entered to run"; };
+    b.onclick = async () => {
+      if (!loggedIn()) { signIn("login"); return; }
+      b.disabled = true;
+      try {
+        if (await isIn()) await api(`/api/blackbook/races?track=${encodeURIComponent(t)}&date=${d}&race=${n}`, "DELETE");
+        else await api("/api/blackbook/races", "PUT", { track: t, date: d, race: n, race_name: raceName(r0.race_name) || "" });
+        await bookedRaces(true);
+      } catch (e) { alert(e.message); }
+      b.disabled = false; show();
+    };
+    show();
+  }
+
   pages["race"] = async function () {
     const t = qs("track"), d = qs("date"), n = Number(qs("race")) || 1;
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Choose a race from the <a href="form-guide.html">Form Guide</a>.</p>`; return; }
@@ -1284,6 +1311,7 @@
       $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}${r0.start_time ? " · " + fmtTime(r0.start_time) : ""}`;
       $("#rtitle").textContent = raceName(r0.race_name) || "Race " + n;
       $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), goingLabel(r0), r0.rail && "Rail: " + r0.rail].filter((x) => x && x !== "—").join(" · ");
+      raceBookButton(r0, t, d, n);
       $("#field").closest("table").querySelector("thead").innerHTML = FIELD_HEAD;
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
       draw();
@@ -1298,6 +1326,7 @@
     document.title = `${raceName(r0.race_name) || "Race " + n} | The Sporting Almanac`;
     $("#rbadge").textContent = `Race ${n} · ${tr.name} · ${fmtDate(d, true)}`;
     $("#rtitle").textContent = raceName(r0.race_name) || "Race " + n;
+    raceBookButton(r0, t, d, n);
     $("#rmeta").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0), money(runs.reduce((a, r) => a + (num(r.prize_money) || 0), 0)), goingLabel(r0)].filter((x) => x && x !== "—").join(" · ");
     function render() {
       const b = book();
@@ -1726,6 +1755,32 @@
       }
     }
     render();
+    renderRaces();
+    async function renderRaces() {
+      const box = $("#bookraces"); if (!box) return;
+      if (!loggedIn()) { box.innerHTML = `<p class="note pad">Blackbook a race from any race page (☆ Blackbook this race) to get an email whenever one of its runners is entered. <a href="#" id="bbrlogin">Log in</a> to use it.</p>`;
+        const l = $("#bbrlogin"); if (l) l.onclick = (e) => { e.preventDefault(); signIn("login"); }; return; }
+      const R = await bookedRaces(true);
+      $("#racecount").textContent = R.length + (R.length === 1 ? " race" : " races");
+      if (!R.length) { box.innerHTML = `<p class="note pad">No races saved yet. Open any race and tap <b>☆ Blackbook this race</b> — you'll get an email whenever one of its runners is entered to run.</p>`; return; }
+      box.innerHTML = `<div class="tablewrap"><table><thead><tr><th class="name">Race</th><th>Date</th><th>Track</th><th class="name">Runners from it entered to run</th><th></th></tr></thead><tbody>
+        ${R.map((x) => `<tr><td class="name"><a href="race.html?track=${encodeURIComponent(x.track)}&date=${x.date}&race=${x.race}">${esc(x.race_name || "Race " + x.race)}</a> <span class="mini">R${x.race}</span></td>
+          <td>${esc(fmtDate(x.date))}</td><td>${esc(track(x.track).name)}</td><td class="name mini" data-rup="${esc(x.track + "|" + x.date + "|" + x.race)}">…</td>
+          <td><button data-rrm="${esc(x.track + "|" + x.date + "|" + x.race)}">Remove</button></td></tr>`).join("")}</tbody></table></div>`;
+      $$("[data-rrm]", box).forEach((el) => el.onclick = async () => { const [t, d, rc] = el.dataset.rrm.split("|");
+        await api(`/api/blackbook/races?track=${encodeURIComponent(t)}&date=${d}&race=${rc}`, "DELETE").catch(() => {}); renderRaces(); });
+      for (const x of R) {
+        const cell = $$("[data-rup]", box).find((c) => c.dataset.rup === x.track + "|" + x.date + "|" + x.race); if (!cell) continue;
+        try {
+          const card = await get(`/api/card?track=${encodeURIComponent(x.track)}&date=${x.date}&race=${x.race}`);
+          const keys = [...new Set((card.runs || []).map((r) => r.horse_key))];
+          const up = keys.length ? await get("/api/upcoming?keys=" + encodeURIComponent(keys.join(","))) : [];
+          const live = up.filter((e) => !isScr(e));
+          cell.innerHTML = live.length ? live.map((e) => `<div><a href="${raceURL(e)}"><b>${esc(e.horse)}</b> · ${fmtDate(e.date)} ${esc(fmtTime(e.start_time))} · ${esc(track(e.track, e).name)} R${e.race}</a></div>`).join("")
+            : "None entered at the moment";
+        } catch (e) { cell.textContent = "—"; }
+      }
+    }
   };
 
   // ------------------------------------------------------------ start
