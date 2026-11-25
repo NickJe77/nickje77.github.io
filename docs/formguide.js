@@ -1266,7 +1266,7 @@
         : `<div class="pad note">The stewards made no comments on runners in this race.</div>`)
       + (gen ? `<div class="pad stewgen"><b>Also in this race</b><p>${esc(gen.comment).replace(/\n/g, "<br>")}</p></div>` : "")
       + (x.meeting.general ? `<details class="pad stewgen"><summary>Meeting notes (stewards panel, rider changes, fines, suspensions)</summary><p>${esc(x.meeting.general).replace(/\n/g, "<br>")}</p></details>` : "")
-      + (x.meeting.url ? `<p class="pad note">From the official stewards' report · <a href="${esc(x.meeting.url)}" target="_blank" rel="noopener">read the full report ↗</a></p>` : "");
+      + `<p class="pad note">From the official stewards' report.</p>`;
   }
 
   pages["meeting"] = async function () {
