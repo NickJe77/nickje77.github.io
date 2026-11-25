@@ -182,26 +182,38 @@
     return "Other";
   }
   const BAND_NAME = { G1: "Group 1", G2: "Group 2", G3: "Group 3", LR: "Listed", High: "BM78+ / Open", Mid: "BM64–77", Low: "BM63 & below / Maiden" };
-  const avgKey = (r, b) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}`;
+  // age group of a race: 2yo, 3yo-only, or open/older (same rules as the averages on the server)
+  function ageGroup(r) {
+    const t = (String(r.race_name || "") + " " + String(r.class || "")).toUpperCase();
+    if (/2YO|2-Y-O|2 YO|2 Y\.O|TWO YEAR|JUVENILE/.test(t) || String(r.horse_age || "").trim() === "2") return "2";
+    if (/3YO|3-Y-O|3 YO|3 Y\.O|THREE YEAR/.test(t) && !/&\s*UP|AND UP|\+|UPWARD|OLDER/.test(t)) return "3";
+    if (String(r.horse_age || "").trim() === "3" && Number(r.field_age) === 3) return "3";   // nobody older than 3 in the race (Guineas, Derby)
+    return "O";
+  }
+  const AGE_NAME = { 2: "2yo", 3: "3yo", O: "open-age" };
+  const avgKey = (r, b, ag) => `${String(r.track || "").toUpperCase()}|${parseInt(r.distance, 10) || 0}|${going(r)}|${b}${ag ? "|" + ag : ""}`;
+  // the closest average with at least 3 winners: same class & age -> same age, any class -> same class, any age -> everything
+  function bestAvg(r, avgs, withAge = true) {
+    const band = classBand(r), ag = withAge ? ageGroup(r) : "";
+    const tries = (ag ? [[band, ag], ["*", ag]] : []).concat([[band, ""], ["*", ""]]).filter(([b]) => b !== "Other");
+    for (const [b, x] of tries) { const c = avgs && avgs[avgKey(r, b, x)]; if (c && c.n >= 3) return { a: c, b, x, band, ag, same: b === band && x === ag }; }
+    return { a: null, b: "*", x: "", band, ag, same: false };
+  }
   // "+2.4L" (faster than the average winner) / "−1.1L" (slower), shaded green/red by how far.
-  // Compared with winners of the same class band; falls back to all classes when there are fewer than 3.
-  // lengths faster (+) or slower (-) than the average winner of this class at this track/distance/going, or null
+  // lengths faster (+) or slower (-) than the average winner of this class and age at this track/distance/going, or null
   function lengthsVsAvg(r, avgs) {
-    const band = classBand(r), t = timeSecs(r.finish_time);
-    let a = band !== "Other" && avgs && avgs[avgKey(r, band)];
-    if (!a || a.n < 3) a = avgs && avgs[avgKey(r, "*")];
-    if (!a || a.n < 3 || t === null) return null;
+    const { a } = bestAvg(r, avgs), t = timeSecs(r.finish_time);
+    if (!a || t === null) return null;
     return Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10;
   }
   function vsAverage(r, avgs, noun = "races") {
-    const band = classBand(r), t = timeSecs(r.finish_time);
-    let a = band !== "Other" && avgs && avgs[avgKey(r, band)], same = true;
-    if (!a || a.n < 3) { a = avgs && avgs[avgKey(r, "*")]; same = false; }
+    const B = bestAvg(r, avgs, noun === "races"), a = B.a, same = B.same, t = timeSecs(r.finish_time);
     if (!a || a.n < 3 || t === null) return `<td class="mini" title="${t === null ? (pos(r) ? "No time recorded" : "Didn't finish") : a ? "Only " + a.n + " " + noun.replace(/s$/, "") + (a.n === 1 ? "" : "s") + " here to average" : "Not enough " + noun + " here to average"}"></td>`;
     const L = Math.round((a.avg - t) / SECS_PER_LENGTH * 10) / 10, k = Math.min(1, Math.abs(L) / 8);
     const bg = L > 0 ? `rgba(22,163,74,${(0.08 + 0.32 * k).toFixed(2)})` : L < 0 ? `rgba(220,38,38,${(0.08 + 0.32 * k).toFixed(2)})` : "transparent";
     const avgTxt = Math.floor(a.avg / 60) + ":" + (a.avg % 60).toFixed(2).padStart(5, "0");
-    const what = noun !== "races" ? noun : same ? BAND_NAME[band] + " races" : "races of all classes" + (band !== "Other" ? " (not enough " + BAND_NAME[band] + " races yet)" : "");
+    const what = noun !== "races" ? noun : (B.x ? AGE_NAME[B.x] + " " : "") + (B.b === "*" ? "races of all classes" : BAND_NAME[B.b] + " races")
+      + (same ? "" : ` (not enough ${B.ag ? AGE_NAME[B.ag] + " " : ""}${BAND_NAME[B.band] || ""} races here yet)`);
     return `<td style="background:${bg};font-weight:600" title="Average ${noun === "races" ? "" : "trial "}winning time: ${avgTxt} — ${a.n} ${esc(what)} at ${esc(track(r.track).name)} ${parseInt(r.distance, 10)}m, ${esc(going(r) || "any going")}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L${same || noun !== "races" ? "" : '<span class="mini">*</span>'}</td>`;
   }
   const raceURL = (r) => `race.html?track=${encodeURIComponent(r.track)}&date=${r.date}&race=${r.race}`;
@@ -328,7 +340,11 @@
       || gs.filter((x) => x.regions.has(rg)).sort((a, b) => Math.abs(days(a.latest.date, ref.date || todayISO())) - Math.abs(days(b.latest.date, ref.date || todayISO())))[0];
     return g ? g.runs : [];
   }
-  const fixHistory = (card) => { (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
+  const fixHistory = (card) => {
+    // oldest horse in each race of the card (3 = a 3yo-only race), for the age-matched averages
+    const oldest = {}; (card.runs || []).forEach((r) => { const a = parseInt(r.horse_age, 10) || 0; oldest[r.race] = Math.max(oldest[r.race] || 0, a); });
+    (card.runs || []).forEach((r) => { if (r.field_age == null && oldest[r.race]) r.field_age = oldest[r.race]; });
+    (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
   const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "")
     + (r && trainerKeys(r.trainer)[0] ? "&t=" + encodeURIComponent(trainerKeys(r.trainer)[0]) : "");
   const silk = (r, big) => r && r.silk ? `<img class="silk${big ? " big" : ""}" src="${esc(r.silk)}" alt="" loading="lazy">` : `<span class="silk none${big ? " big" : ""}"></span>`;
