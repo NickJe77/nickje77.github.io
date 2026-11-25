@@ -931,7 +931,51 @@
   const mapKey = (r) => `${r.track}|${r.date}|${r.race}`;
 
   // upcoming field table (shared by meeting and race pages)
-  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th title="Winners out of each runner's last start: how many horses from that race have won since">Winners Out</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th>Blackbook</th></tr>`;
+  const FIELD_HEAD = `<tr><th>No.</th><th class="name">Horse</th><th>Barrier</th><th>Weight</th><th>Jockey</th><th>Trainer</th><th title="Winners out of each runner's last start: how many horses from that race have won since">Winners Out</th><th>Career</th><th>At Dist</th><th>On Going</th><th>Days</th><th title="Your own rated price for each runner. Saved in this browser. The % under it is the chance that price means (100 ÷ price); the total is at the bottom">My Price</th><th>Blackbook</th></tr>`;
+  // ---- "My Price": your own rated market. 100 ÷ price = the chance it means; all runners added up = your market %
+  // (a bookmaker's market adds up to more than 100% - that's their margin; a fair market of your own is 100%)
+  const MYP = "tsa-myprices";
+  const mypAll = () => { try { return JSON.parse(store.get(MYP) || "{}"); } catch (e) { return {}; } };
+  const mypKey = (r) => `${String(r.track).toUpperCase()}|${r.date}|${r.race}|${r.horse_key || nameKey(r.horse)}`;
+  function parsePrice(v) {
+    const t = String(v || "").replace(/[$\s]/g, "");
+    const f = t.match(/^(\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?)$/);                    // 9/2 -> $5.50
+    const p = f ? 1 + Number(f[1]) / Number(f[2]) : Number(t);
+    return p > 1 ? p : null;
+  }
+  const pctTxt = (p) => p ? (100 / p).toFixed(1) + "%" : "";
+  function mypCell(r, scr) {
+    const v = mypAll()[mypKey(r)] || "";
+    return `<td class="myp"><input class="mypin" inputmode="decimal" placeholder="$" value="${esc(v)}" data-k="${esc(mypKey(r))}" ${scr ? "disabled" : ""}
+      aria-label="My price for ${esc(r.horse)}"><div class="mini myppct">${scr ? "" : pctTxt(parsePrice(v))}</div></td>`;
+  }
+  function mypTotal(tbody) {
+    const ins = $$("input.mypin:not([disabled])", tbody), ps = ins.map((i) => parsePrice(i.value)).filter(Boolean);
+    const tot = ps.reduce((a, p) => a + 100 / p, 0), row = $("tr.myprow", tbody);
+    if (!row) return;
+    const cls = !ps.length ? "" : Math.abs(tot - 100) < 0.5 ? "mypok" : tot > 100 ? "mypover" : "mypunder";
+    $("td.myptot", row).innerHTML = !ps.length ? `<span class="mini">Type your own price for each runner (e.g. 4.50 or 7/2) to frame your market.</span>`
+      : `<b>Your market: <span class="${cls}">${tot.toFixed(1)}%</span></b> <span class="mini">· ${ps.length} of ${ins.length} runners priced${ps.length < ins.length ? " (fill them all in for the full market)" : ""}
+         · 100% = a fair market; over 100% = you've priced runners too short overall, under 100% = too long</span> <button class="filter mypclear">Clear</button>`;
+  }
+  document.addEventListener("input", (e) => {
+    const i = e.target; if (!i.classList || !i.classList.contains("mypin")) return;
+    const all = mypAll(); if (i.value.trim()) all[i.dataset.k] = i.value.trim(); else delete all[i.dataset.k];
+    store.set(MYP, JSON.stringify(all));
+    const pc = i.parentElement.querySelector(".myppct"); if (pc) pc.textContent = pctTxt(parsePrice(i.value));
+    mypTotal(i.closest("tbody"));
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.classList || !e.target.classList.contains("mypclear")) return;
+    const tb = e.target.closest("tbody"), all = mypAll();
+    $$("input.mypin", tb).forEach((i) => { delete all[i.dataset.k]; i.value = ""; i.parentElement.querySelector(".myppct").textContent = ""; });
+    store.set(MYP, JSON.stringify(all)); mypTotal(tb);
+  });
+  // tidy: forget prices for races more than 60 days old
+  { const all = mypAll(), cut = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10); let ch = false;
+    for (const k of Object.keys(all)) if ((k.split("|")[1] || "") < cut) { delete all[k]; ch = true; }
+    if (ch) store.set(MYP, JSON.stringify(all)); }
+
   // "Winners out": how many from each runner's last race have won since. Cells are filled in once the page is up.
   function lswCell(prior, r) {
     const l = prior[0];
@@ -983,8 +1027,9 @@
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
         <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
         <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
-        <td>${s.daysSince ?? "1st"}</td><td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
-    }).join("");
+        <td>${s.daysSince ?? "1st"}</td>${mypCell(r, scr)}<td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
+    }).join("") + `<tr class="myprow"><td colspan="13" class="myptot"></td></tr>`
+      + (setTimeout(() => $$("tr.myprow").forEach((x) => mypTotal(x.closest("tbody"))), 0), "");
   }
   function fieldStats(runs, history) {
     const live = runs.filter((r) => !isScr(r)).map((r) => ({ r, s: horseStats(history[r.horse_key] || [], r) }));
