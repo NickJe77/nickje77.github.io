@@ -1308,7 +1308,7 @@
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    let P; try { P = await get(`/api/person?v=3&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
     catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
     const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
@@ -1342,7 +1342,7 @@
               const c = x.combo || {}, h = x.onHorse || {};
               return `<tr><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
              <td class="name"><a href="${horseURL(x.horse)}">${esc(x.horse)}</a></td><td>${dash(x.barrier)}</td><td class="name">${personLink(other, x[other])}</td>
-             <td>${c.rides ? `<b>${c.strike.toFixed(1)}%</b> <span class="mini">${c.wins}/${c.rides}</span>` : `<span class="mini">first time together</span>`}</td>
+             <td>${c.rides ? `<b>${c.strike.toFixed(1)}%</b> <span class="mini">${c.wins}/${c.rides}</span>` : `<span class="mini">none in 12 months</span>`}</td>
              <td>${c.rides ? roiTxt(c.roi) : "—"}</td>
              <td>${h.starts ? `<b>${h.starts}: ${h.wins}-${h.seconds}-${h.thirds}</b>` : `<span class="mini">${type === "jockey" ? "first ride" : "first start"}</span>`}</td></tr>`; }).join("")}</tbody></table></div></section>` : ""}
         ${trackCodes.length ? "" : `<section class="panel"><div class="panelhead">By track</div><div class="tablewrap"><table><thead>${head([["name", "Track", "name"], ...statCols], tSort, "t")}</thead><tbody>
