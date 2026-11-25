@@ -66,6 +66,7 @@ window.TRACKS = {
   "BOWN": ["Bowen", "QLD", "Country"],
   "BRAT": ["Ballarat", "VIC", "Provincial"],
   "BRBA": ["Barraba", "NSW", "Country"],
+  "BVLE": ["Bowraville", "NSW", "Country"],
   "BRKE": ["Bourke", "NSW", "Country"],
   "BRME": ["Broome", "WA", "Country"],
   "BRTS": ["Ballarat Synthetic", "VIC", "Provincial"],
