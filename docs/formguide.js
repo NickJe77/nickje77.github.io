@@ -348,6 +348,8 @@
     const oldest = {}; (card.runs || []).forEach((r) => { const a = parseInt(r.horse_age, 10) || 0; oldest[r.race] = Math.max(oldest[r.race] || 0, a); });
     (card.runs || []).forEach((r) => { if (r.field_age == null && oldest[r.race]) r.field_age = oldest[r.race]; });
     (card.runs || []).forEach((r) => { if (card.history && card.history[r.horse_key]) card.history[r.horse_key] = sameHorse(card.history[r.horse_key], r); }); return card; };
+  const personURL = (type, n) => `person.html?type=${type}&name=${encodeURIComponent(n)}`;
+  const personLink = (type, n) => { const t = String(n || "").trim(); return t && t !== "-" && t !== "—" ? `<a class="plink" href="${personURL(type, t)}">${esc(t)}</a>` : "—"; };
   const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "")
     + (r && trainerKeys(r.trainer)[0] ? "&t=" + encodeURIComponent(trainerKeys(r.trainer)[0]) : "");
   const silk = (r, big) => r && r.silk ? `<img class="silk${big ? " big" : ""}" src="${esc(r.silk)}" alt="" loading="lazy">` : `<span class="silk none${big ? " big" : ""}"></span>`;
@@ -678,7 +680,7 @@
     const here = { jockey: new Set(live.map((r) => String(personName(r.jockey || "")).toLowerCase())), trainer: new Set(live.map((r) => stableKey(r.trainer))) };
     const isHere = (who, n) => who === "jockey" ? here.jockey.has(String(personName(n)).toLowerCase()) : here.trainer.has(stableKey(n));
     const roiTxt = (v) => v === null ? "—" : (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(1) + "%";
-    const list = (who, rows, kind) => rows.length ? `<ol>${rows.map((x) => `<li class="${isHere(who, x.name) ? "here" : ""}"><span class="ln">${esc(personName(x.name))}${isHere(who, x.name) ? ' <span class="heredot" title="Engaged at this meeting">●</span>' : ""}</span>
+    const list = (who, rows, kind) => rows.length ? `<ol>${rows.map((x) => `<li class="${isHere(who, x.name) ? "here" : ""}"><span class="ln"><a class="plink" href="${personURL(who, x.name)}">${esc(personName(x.name))}</a>${isHere(who, x.name) ? ' <span class="heredot" title="Engaged at this meeting">●</span>' : ""}</span>
       <span class="lv">${kind === "wins" ? `<b>${x.wins}</b> wins <small>${x.rides} · ${x.strike.toFixed(0)}%</small>` : `<b class="${x.roi >= 0 ? "pos" : "neg"}">${roiTxt(x.roi)}</b> <small>${x.wins}/${x.priced}</small>`}</span></li>`).join("")}</ol>` : `<p class="mini">Not enough rides yet.</p>`;
     const tr = track(code, r0);
     host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">${esc(tr.name)} leaders · last 12 months</h3><span class="mini"><span class="heredot">●</span> at this meeting · ROI = $1 on every ride at SP (min ${L.jockeys.minRides} rides) · ${L.runs.toLocaleString()} runners</span></div>
@@ -1026,7 +1028,7 @@
       const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
         <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
-        <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
+        <td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td>${mypCell(r, scr)}<td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
     }).join("") + `<tr class="myprow"><td colspan="13" class="myptot"></td></tr>`
       + (setTimeout(() => $$("tr.myprow").forEach((x) => mypTotal(x.closest("tbody"))), 0), "");
@@ -1276,6 +1278,65 @@
   };
 
   // ---------------------------------------------- 2. Meeting
+
+  // ------------------------------------------------------------ jockey / trainer page (last 12 months)
+  pages["person"] = async function () {
+    const type = qs("type") === "trainer" ? "trainer" : "jockey", name = qs("name"), other = type === "jockey" ? "trainer" : "jockey";
+    const T = type === "jockey" ? "Jockey" : "Trainer", O = other === "jockey" ? "Jockey" : "Trainer";
+    $$("[data-ptype]").forEach((b) => { b.classList.toggle("active", b.dataset.ptype === type); b.onclick = () => { $$("[data-ptype]").forEach((x) => x.classList.toggle("active", x === b)); }; });
+    $("#pfind").onsubmit = (e) => { e.preventDefault(); const n = $("#pname").value.trim(), t = ($("[data-ptype].active") || {}).dataset?.ptype || "jockey"; if (n) location.href = personURL(t, n); };
+    if (!name) { $("#ptitle").textContent = "Jockeys & Trainers"; return; }
+    $("#pname").value = name;
+    $("#ptitle").textContent = name; document.title = name + " | The Sporting Almanac";
+    $("#pcrumb").textContent = T + "s";
+    loading($("#pbody"));
+    let P; try { P = await get(`/api/person?type=${type}&name=${encodeURIComponent(name)}`); } catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
+    if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for “${esc(name)}” in the last 12 months. Check the spelling, or try just the surname.</div>`; return; }
+    $("#ptitle").textContent = P.name; document.title = P.name + " | The Sporting Almanac";
+    $("#psub").textContent = `${T} · last 12 months (since ${fmtDate(P.since)})`;
+    const roiTxt = (v) => v === null || v === undefined ? "—" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%</span>`;
+    const o = P.overall, ride = type === "jockey" ? "Rides" : "Runners";
+    // tracks: one row per track name (Randwick and its inner track kept apart, as named)
+    const byName = new Map();
+    for (const x of P.byTrack) { const nm = track(x.key).name || x.key, t = byName.get(nm);
+      if (!t) byName.set(nm, { ...x, name: nm, code: x.key }); else ["rides", "wins", "seconds", "thirds", "places", "priced"].forEach((k) => t[k] += x[k]); }
+    const tracks = [...byName.values()].map((t) => ({ ...t, strike: t.rides ? t.wins / t.rides * 100 : 0, place: t.rides ? t.places / t.rides * 100 : 0,
+      roi: P.byTrack.filter((x) => (track(x.key).name || x.key) === t.name).reduce((a, x) => a + (x.roi === null ? 0 : x.roi * x.priced), 0) / (t.priced || 1) }));
+    tracks.forEach((t) => { if (!t.priced) t.roi = null; });
+    let tSort = { k: "rides", d: -1 }, pSort = { k: "wins", d: -1 }, minRides = 5;
+    const head = (cols, st, id) => `<tr>${cols.map(([k, lab, cls]) => `<th class="${cls || ""} sortable" data-sort="${k}" data-tbl="${id}">${lab}${st.k === k ? (st.d < 0 ? " ▾" : " ▴") : ""}</th>`).join("")}</tr>`;
+    const sorted = (list, st) => [...list].sort((a, b) => { const x = a[st.k], y = b[st.k]; if (typeof x === "string") return st.d * String(x).localeCompare(String(y));
+      return st.d * ((x ?? -1e9) - (y ?? -1e9)); });
+    const statCols = [["rides", ride], ["wins", "Wins"], ["seconds", "2nds"], ["thirds", "3rds"], ["strike", "Strike"], ["place", "Place %"], ["roi", "ROI"]];
+    const statTds = (x) => `<td>${x.rides}</td><td><b>${x.wins}</b></td><td>${x.seconds}</td><td>${x.thirds}</td><td>${x.strike.toFixed(1)}%</td><td>${x.place.toFixed(1)}%</td><td>${roiTxt(x.roi)}</td>`;
+    function draw() {
+      const parts = P.partners.filter((x) => x.rides >= minRides);
+      $("#pbody").innerHTML = `
+        <div class="grid stats5">${[[ride, o.rides], ["Wins", o.wins], ["Strike rate", o.strike.toFixed(1) + "%"], ["Place %", o.place.toFixed(1) + "%"], ["ROI", roiTxt(o.roi)]]
+          .map(([k, v]) => `<div class="stat"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+        <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
+        ${P.upcoming.length ? `<section class="panel"><div class="panelhead">Coming up · ${P.upcoming.length} ${type === "jockey" ? "ride" : "runner"}${P.upcoming.length === 1 ? "" : "s"}</div><div class="tablewrap"><table>
+          <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th></tr></thead><tbody>${P.upcoming.map((x) =>
+            `<tr><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
+             <td class="name"><a href="${horseURL(x.horse)}">${esc(x.horse)}</a></td><td>${dash(x.barrier)}</td><td class="name">${personLink(other, x[other])}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+        <section class="panel"><div class="panelhead">By track</div><div class="tablewrap"><table><thead>${head([["name", "Track", "name"], ...statCols], tSort, "t")}</thead><tbody>
+          ${sorted(tracks, tSort).map((t) => `<tr><td class="name">${esc(t.name)}</td>${statTds(t)}</tr>`).join("")}</tbody></table></div></section>
+        <section class="panel"><div class="panelhead"><span>Best ${O.toLowerCase()}s with ${esc(P.name)}</span>
+          <span class="filters" style="margin:0">${[3, 5, 10, 20].map((n) => `<button class="filter ${minRides === n ? "active" : ""}" data-min="${n}">${n}+ ${type === "jockey" ? "rides" : "rides"}</button>`).join("")}</span></div>
+          <div class="tablewrap"><table><thead>${head([["name", O, "name"], ...statCols], pSort, "p")}</thead><tbody>
+          ${sorted(parts, pSort).map((x) => `<tr><td class="name">${personLink(other, x.name)}</td>${statTds(x)}</tr>`).join("") || `<tr><td colspan="8">None with ${minRides}+ rides together.</td></tr>`}</tbody></table></div></section>
+        ${type === "trainer" && P.asStable.length > 1 ? `<section class="panel"><div class="panelhead">By stable name</div><div class="tablewrap"><table><thead><tr><th class="name">Trained as</th>${statCols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
+          ${P.asStable.map((x) => `<tr><td class="name">${personLink("trainer", x.name)}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
+        <section class="panel"><div class="panelhead">Latest ${type === "jockey" ? "rides" : "runners"}</div><div class="tablewrap"><table>
+          <thead><tr><th>Date</th><th class="name">Track</th><th>Race</th><th class="name">Horse</th><th>Pos</th><th>SP</th><th class="name">${O}</th></tr></thead><tbody>${P.recent.map((x) =>
+            `<tr class="${pos(x) === 1 ? "win" : ""}"><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
+             <td class="name"><a href="${horseURL(x.horse, x)}">${esc(x.horse)}</a></td><td><b>${posLabel(x)}</b></td><td>${dash(x.starting_odds)}</td><td class="name">${personLink(other, x[other])}</td></tr>`).join("")}</tbody></table></div></section>`;
+      $$("th.sortable", $("#pbody")).forEach((h) => h.onclick = () => { const st = h.dataset.tbl === "t" ? tSort : pSort;
+        if (st.k === h.dataset.sort) st.d = -st.d; else { st.k = h.dataset.sort; st.d = h.dataset.sort === "name" ? 1 : -1; } draw(); });
+      $$("[data-min]", $("#pbody")).forEach((b) => b.onclick = () => { minRides = Number(b.dataset.min); draw(); });
+    }
+    draw();
+  };
   // ---------------------------------------------- stewards' reports (every Australian state)
   const STEW_STATES = new Set(["VIC", "NSW", "ACT", "QLD", "SA", "WA", "TAS", "NT"]);
   const stewMeet = {};
@@ -1375,7 +1436,7 @@
       }
       $("#runners").innerHTML = byFinish(runs).map((r) => {
         const s = horseStats(card.history[r.horse_key] || [], r);
-        return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.trainer)}</td><td>${dash(r.jockey)}</td><td>${dash(r.weight)}</td>
+        return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${personLink("trainer", r.trainer)}</td><td>${personLink("jockey", r.jockey)}</td><td>${dash(r.weight)}</td>
           <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r, runs)}</td></tr>`;
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
@@ -1455,7 +1516,7 @@
       const b = book();
       $("#field").innerHTML = runs.map((r) => {
         const s = horseStats(card.history[r.horse_key] || [], r);
-        return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td><td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td>
+        return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td><td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}</td>
           <td>${s.last5}</td><td>${s.career.text}</td><td>${s.dist.text}</td><td>${dash(r.starting_odds)}</td>
           <td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
       }).join("");
@@ -1522,7 +1583,7 @@
         $("#horseName").textContent = disp.toUpperCase();
         $("#silk").innerHTML = silk(next, true);
         $("#trainerlabel").textContent = "Trainer";
-        $("#trainer").textContent = dash(next.trainer);
+        $("#trainer").innerHTML = personLink("trainer", next.trainer);
         $("#star").onclick = () => { toggleBook(disp); star(disp); }; star(disp);
         const first = `<p class="note">First starter — no race record yet.</p>`;
         $("#m-dist").textContent = next.distance ? next.distance + "m" : "—";
@@ -1544,8 +1605,8 @@
     $("#horseName").textContent = disp.toUpperCase();
     $("#silk").innerHTML = silk(last.silk ? last : next || last, true);
     // current trainer: from the next start's field if there is one, else the last start
-    if (next && next.trainer) { $("#trainerlabel").textContent = "Trainer"; $("#trainer").textContent = next.trainer; }
-    else $("#trainer").textContent = dash(last.trainer);
+    if (next && next.trainer) { $("#trainerlabel").textContent = "Trainer"; $("#trainer").innerHTML = personLink("trainer", next.trainer); }
+    else $("#trainer").innerHTML = personLink("trainer", last.trainer);
     $("#star").onclick = () => { toggleBook(disp); star(disp); }; star(disp);
     if (!$("#cmpbtn")) $("#star").insertAdjacentHTML("afterend", `<a id="cmpbtn" class="btn" style="margin-left:8px" href="comparison.html?a=${encodeURIComponent(disp)}">Compare ⇄</a>`);
 
@@ -1590,7 +1651,7 @@
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${marginTxt(r)}</td>${raceWOCell(r)}<td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
-          <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
+          <td>${personLink("jockey", r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`
           + ((c) => c ? `<tr class="stewrow"><td></td><td colspan="19">🗒 <b>Stewards:</b> ${esc(c)}</td></tr>` : "")(stew[r.date + "|" + String(r.track).toUpperCase() + "|" + r.race]);
