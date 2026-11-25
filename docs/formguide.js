@@ -688,7 +688,12 @@
   // ------------------------------------------------------------ rail history: last 5 meetings here, and where the winners came from
   async function railHistory(host, code, r0, d, mode) {
     if (!host) return;
-    const today = String(r0.rail || "").trim();
+    let today = String(r0.rail || "").trim();
+    if (!today) {        // results days: the rail isn't on the runners, so look it up
+      const x = await get(`/api/rail-of?tracks=${encodeURIComponent(sameTrackCodes(code, r0).join(","))}&date=${d}`).catch(() => null);
+      today = String((x && x.rail) || "").trim();
+      if (today) { r0 = { ...r0, rail: today }; const m = $("#meta"); if (m && !/Rail:/.test(m.textContent)) m.textContent += " · Rail: " + today; }
+    }
     const rk = (x) => { const t = String(x || "").toLowerCase().trim(), m = t.match(/(\d+(?:\.\d+)?)/);   // "+9m" = "Out 9m Entire Circuit"
       return m ? (Number(m[1]) === 0 ? "true" : Number(m[1]) + "m") : /true/.test(t) ? "true" : t.replace(/[^a-z0-9]/g, ""); };
     mode = mode || (today ? "same" : "last");
@@ -702,8 +707,8 @@
     const bcell = (m, k) => { const top = Math.max(...Object.values(m.bar)); return `<td class="${m.bar[k] && m.bar[k] === top ? "railtop" : ""}">${m.bar[k] || "·"}</td>`; };
     const title = mode === "same" ? `Rail positions · last ${H.length} meeting${H.length === 1 ? "" : "s"} at ${esc(tr.name)} with the rail ${esc(today)}`
       : `Rail positions · last ${H.length} meetings at ${esc(tr.name)}`;
-    const toggle = today ? `<span class="railtoggle"><button class="filter ${mode === "same" ? "active" : ""}" data-mode="same">Same rail as today</button><button class="filter ${mode === "last" ? "active" : ""}" data-mode="last">Last 5 meetings</button></span>` : "";
-    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">${title}</h3><span class="mini">Today's rail: <b>${esc(today || "not listed yet")}</b> ${toggle}</span></div>
+    const toggle = today ? `<span class="railtoggle"><button class="filter ${mode === "same" ? "active" : ""}" data-mode="same">Same rail as ${d < todayISO() ? "this meeting" : "today"}</button><button class="filter ${mode === "last" ? "active" : ""}" data-mode="last">Last 5 meetings</button></span>` : "";
+    host.innerHTML = `<div class="rowbetween"><h3 style="margin:0">${title}</h3><span class="mini">${d < todayISO() ? "This meeting's rail" : "Today's rail"}: <b>${esc(today || "not listed yet")}</b> ${toggle}</span></div>
       ${mode === "same" && H.length < 5 ? `<p class="mini" style="margin:4px 0 0">Only ${H.length} earlier meeting${H.length === 1 ? "" : "s"} here on this rail.</p>` : ""}
       <div class="tablewrap"><table class="railhist"><thead>
         <tr><th rowspan="2" class="name">Meeting</th><th rowspan="2" class="name">Rail</th><th rowspan="2">Going</th><th rowspan="2">Races</th><th colspan="5">Where the winners were at the 400m</th><th colspan="3">Winners' barriers (share of field)</th></tr>
