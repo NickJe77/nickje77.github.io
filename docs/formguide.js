@@ -384,12 +384,13 @@
     });
     return out || "—";
   }
-  // tag each run (oldest first) as first-up / second-up
+  // tag each run (oldest first) as first-up / second-up / third-up
   function upTags(desc) {
     const asc = [...desc].reverse(), tag = new Map();
     asc.forEach((r, i) => {
       if (i === 0 || days(asc[i - 1].date, r.date) >= SPELL_DAYS) tag.set(r, 1);
       else if (tag.get(asc[i - 1]) === 1) tag.set(r, 2);
+      else if (tag.get(asc[i - 1]) === 2) tag.set(r, 3);
     });
     return tag;
   }
@@ -410,6 +411,7 @@
       jockey: at ? record(prior.filter((r) => r.jockey && r.jockey === at.jockey)) : null,
       firstUp: record(prior.filter((r) => tags.get(r) === 1)),
       secondUp: record(prior.filter((r) => tags.get(r) === 2)),
+      thirdUp: record(prior.filter((r) => tags.get(r) === 3)),
       daysSince: at && last ? days(last.date, at.date) : null,
       last,
     };
@@ -938,7 +940,14 @@
     return `<td class="lsw" data-k="${esc(String(l.track).toUpperCase() + "|" + l.date + "|" + l.race)}" data-before="${esc(r.date || "")}" data-pos="${esc(posLabel(l) || l.position || "")}"
       data-where="${esc(fmtDate(l.date) + " " + track(l.track, l).name)}"><span class="mini">…</span></td>`;
   }
+  // the same for any race in a horse's form: the other runners from that race that have won since
+  function raceWOCell(r) {
+    setTimeout(fillLSW, 0);
+    return `<td class="lsw" data-k="${esc(String(r.track).toUpperCase() + "|" + r.date + "|" + r.race)}" data-before="9999-12-31" data-self="${esc(nameKey(r.horse || ""))}"
+      data-label="Winners out of this race" data-pos="${esc(posLabel(r) || r.position || "")}" data-where="${esc(fmtDate(r.date) + " " + track(r.track, r).name)}"><span class="mini">…</span></td>`;
+  }
   let lswBusy = false;
+  const LSW_CACHE = {};
   async function fillLSW() {
     if (lswBusy) return; lswBusy = true;
     await new Promise((res) => setTimeout(res, 50));
@@ -946,18 +955,21 @@
     if (!cells.length) return;
     const groups = groupBy(cells, (c) => c.dataset.before);
     for (const [before, cs] of Object.entries(groups)) {
-      const keys = [...new Set(cs.map((c) => c.dataset.k))];
-      for (let i = 0; i < keys.length; i += 40) {
-        const part = keys.slice(i, i + 40), races = part.map((k) => { const [t, d, rc] = k.split("|"); return [t, d, Number(rc)]; });
+      const keys = [...new Set(cs.map((c) => c.dataset.k))], need = keys.filter((k) => !((before + "|" + k) in LSW_CACHE));
+      for (let i = 0; i < need.length; i += 40) {
+        const part = need.slice(i, i + 40), races = part.map((k) => { const [t, d, rc] = k.split("|"); return [t, d, Number(rc)]; });
         let R = {};
         try { R = await get(`/api/last-start-winners?races=${encodeURIComponent(JSON.stringify(races))}&before=${before}`); } catch (e) {}
-        cs.filter((c) => part.includes(c.dataset.k)).forEach((c) => {
+        part.forEach((k) => LSW_CACHE[before + "|" + k] = R[k] || null);
+      }
+      {
+        $$("td.lsw:not([data-done])").filter((c) => c.dataset.before === before && (before + "|" + c.dataset.k) in LSW_CACHE).forEach((c) => {
           c.dataset.done = "1";
-          const x = R[c.dataset.k];
+          const x = LSW_CACHE[before + "|" + c.dataset.k];
           if (!x) { c.innerHTML = "—"; return; }
-          const w = x.winners || [];
+          const w = (x.winners || []).filter((h) => !c.dataset.self || nameKey(h.horse || "") !== c.dataset.self);
           c.innerHTML = `<b class="${w.length ? "lswyes" : ""}">${w.length}</b><span class="mini"> from ${x.starters}</span>`;
-          c.title = `Winners out of its last start, ${c.dataset.where} (ran ${c.dataset.pos}). ` + (w.length ? "Won since: " + w.sort((a, b) => a.first_win.localeCompare(b.first_win))
+          c.title = `${c.dataset.label || "Winners out of its last start"}, ${c.dataset.where} (ran ${c.dataset.pos}). ` + (w.length ? "Won since: " + w.sort((a, b) => a.first_win.localeCompare(b.first_win))
             .map((h) => `${h.horse} (${h.position ? posLabel(h) : "?"} that day) — won ${fmtDate(h.first_win)}${h.track ? " at " + track(h.track).name : ""}${h.wins > 1 ? `, ${h.wins} wins` : ""}`).join("; ")
             : "No winners out of that race yet.");
         });
@@ -1458,7 +1470,7 @@
     const next = entries.find((e) => !isScr(e)) || entries[0];
     const star = (disp) => { const on = !!book()[disp]; $("#star").textContent = on ? "★" : "☆"; $("#star").classList.toggle("on", on); };
     if (!runs.length) {
-      $("#formrows").innerHTML = `<tr><td colspan="19">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
+      $("#formrows").innerHTML = `<tr><td colspan="20">${entries.length ? "No starts yet — see Entries for its first run." : "No runs found for " + esc(name) + "."}</td></tr>`;
       if (next) {
         const disp = next.horse;
         document.title = `${disp} | The Sporting Almanac`;
@@ -1507,7 +1519,7 @@
     $("#goingrec").innerHTML = ["Good", "Soft", "Heavy", "Synthetic", "Firm"].map((g) => [g, record(runs.filter((r) => going(r) === g))])
       .filter(([, r]) => r.n).map(([g, r]) => `<p>${g}: <b>${r.text}</b></p>`).join("") || "<p>—</p>";
     const s = horseStats(runs.slice(1), last), tags = upTags(runs);
-    $("#fresh").innerHTML = `<p>First-up: <b>${record(runs.filter((r) => tags.get(r) === 1)).text}</b></p><p>Second-up: <b>${record(runs.filter((r) => tags.get(r) === 2)).text}</b></p>
+    $("#fresh").innerHTML = `<p>First-up: <b>${record(runs.filter((r) => tags.get(r) === 1)).text}</b></p><p>Second-up: <b>${record(runs.filter((r) => tags.get(r) === 2)).text}</b></p><p>Third-up: <b>${record(runs.filter((r) => tags.get(r) === 3)).text}</b></p>
       <p>${esc(track(last.track).name)}: <b>${record(runs.filter((r) => sameTrack(r.track, last.track))).text}</b></p>
       <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => sameTrack(r.track, last.track) && near(dist(r), dist(last)))).text}</b></p>`;
     { const nx = next && !isScr(next) && next.jockey ? next : null, who = nx || last, sk = stableKey((nx && nx.trainer) || last.trainer);
@@ -1532,12 +1544,12 @@
         const i = runs.indexOf(r), p = runs[i + 1];
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
-          <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${marginTxt(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
+          <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${marginTxt(r)}</td>${raceWOCell(r)}<td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
           <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`
-          + ((c) => c ? `<tr class="stewrow"><td></td><td colspan="18">🗒 <b>Stewards:</b> ${esc(c)}</td></tr>` : "")(stew[r.date + "|" + String(r.track).toUpperCase() + "|" + r.race]);
-      }).join("") || `<tr><td colspan="19">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
+          + ((c) => c ? `<tr class="stewrow"><td></td><td colspan="19">🗒 <b>Stewards:</b> ${esc(c)}</td></tr>` : "")(stew[r.date + "|" + String(r.track).toUpperCase() + "|" + r.race]);
+      }).join("") || `<tr><td colspan="20">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
     }
     $$("[data-scope]").forEach((b) => b.onclick = () => { $$("[data-scope]").forEach((x) => x.classList.toggle("active", x === b)); scope = b.dataset.scope; renderForm(); });
     renderForm();
@@ -1573,7 +1585,7 @@
       ["Jockey", (r) => dash(r.jockey)], ["Trainer", (r) => dash(r.trainer)], up ? ["Gear changes", (r) => dash(r.gear)] : ["Starting price", (r) => dash(r.starting_odds)],
       ["Recent form", (r) => stats.get(r).last10], ["Career", (r) => stats.get(r).career.text], ["At this distance", (r) => stats.get(r).dist.text],
       ["On this going", (r) => stats.get(r).going.text], ["At this track", (r) => stats.get(r).track.text], ["With this jockey", (r) => stats.get(r).jockey.text],
-      ["First-up / second-up", (r) => stats.get(r).firstUp.text + " / " + stats.get(r).secondUp.text], ["Days since last run", (r) => dash(stats.get(r).daysSince)],
+      ["First / second / third-up", (r) => stats.get(r).firstUp.text + " / " + stats.get(r).secondUp.text + " / " + stats.get(r).thirdUp.text], ["Days since last run", (r) => dash(stats.get(r).daysSince)],
       ["Last start", (r) => { const l = stats.get(r).last; return l ? `${posLabel(l)} · ${esc(track(l.track).name)} ${dash(l.distance)}m · ${fmtDate(l.date)}` : "First start"; }],
     ];
     function comp() {
@@ -1778,7 +1790,7 @@
           return `<div class="rbrunner"><div class="rbtop"><span class="rbnum">${esc(r.number || "")}</span>${silk(r)}
               <div class="rbname"><b>${esc(r.horse)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}<div class="mini">Barrier ${dash(r.barrier)} · ${wt(r)}kg · ${esc(r.jockey || "—")} · Trainer: ${esc(r.trainer || "—")}</div></div>
               <div class="rbcareer"><div><span class="mini">Career</span> <b>${s.career.text}</b></div><div><span class="mini">Last 10</span> <b>${s.last10 || "—"}</b></div>${fig === null ? "" : `<div><span class="mini">Speed (${f5.length} run${f5.length === 1 ? "" : "s"})</span> <b>${figTxt(fig)}</b></div>`}</div></div>
-            <div class="rbstats">Track ${rec(s.track)} · Dist ${rec(s.dist)} · Trk/Dist ${rec(s.trackDist)} · Good ${gd("Good")} · Soft ${gd("Soft")} · Heavy ${gd("Heavy")} · 1st up ${rec(s.firstUp)} · 2nd up ${rec(s.secondUp)} · ${s.daysSince === null ? "First starter" : s.daysSince + " days since run"}${r.gear ? ` · <b>Gear:</b> ${esc(r.gear)}` : ""}</div>
+            <div class="rbstats">Track ${rec(s.track)} · Dist ${rec(s.dist)} · Trk/Dist ${rec(s.trackDist)} · Good ${gd("Good")} · Soft ${gd("Soft")} · Heavy ${gd("Heavy")} · 1st up ${rec(s.firstUp)} · 2nd up ${rec(s.secondUp)} · 3rd up ${rec(s.thirdUp)} · ${s.daysSince === null ? "First starter" : s.daysSince + " days since run"}${r.gear ? ` · <b>Gear:</b> ${esc(r.gear)}` : ""}</div>
             ${last3 ? `<table class="rblast">${last3}</table>` : `<p class="mini" style="margin:2px 0 0">No race starts yet.</p>`}</div>`;
         }).join("")}
         <p class="rbfoot">thesportingalmanac.com · Printed for ${esc(store.get(EMAIL))} · Speed = lengths faster (+) or slower (−) than the average winner of that class at that track, distance and going. Form is each horse's record before this meeting. Check final scratchings and fields before betting.</p></section>`;
