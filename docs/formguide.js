@@ -960,7 +960,7 @@
     return runs.map((r) => {
       const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
-        <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
+        <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
         <td>${dash(r.jockey)}</td><td>${dash(r.trainer)}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td><td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
     }).join("");
@@ -1210,6 +1210,60 @@
   };
 
   // ---------------------------------------------- 2. Meeting
+  // ---------------------------------------------- stewards' reports (every Australian state)
+  const STEW_STATES = new Set(["VIC", "NSW", "ACT", "QLD", "SA", "WA", "TAS", "NT"]);
+  const stewMeet = {};
+  const stewardsFor = (t, d) => stewMeet[t + "|" + d] ||= get(`/api/stewards?track=${encodeURIComponent(t)}&date=${d}`).catch(() => null);
+  const STEW_LAST = {};
+  // each runner's latest stewards' comment, for the "Last start" line under its name in upcoming fields
+  async function loadLastStewards(runs) {
+    const keys = [...new Set(runs.map((r) => r.horse_key).filter((k) => k && !(k in STEW_LAST)))];
+    for (let i = 0; i < keys.length; i += 100) {
+      const part = keys.slice(i, i + 100);
+      part.forEach((k) => STEW_LAST[k] = null);
+      const rows = await get("/api/stewards?keys=" + encodeURIComponent(part.join(","))).catch(() => []);
+      for (const x of rows) STEW_LAST[x.horse_key] = x;
+    }
+  }
+  const lastStew = (r, history) => { const s = STEW_LAST[r.horse_key], h0 = (history[r.horse_key] || [])[0];
+    return s && h0 && s.date === h0.date && String(s.track).toUpperCase() === String(h0.track).toUpperCase() ? s : null; };
+  const stewLine = (s) => s ? `<div class="mini stew" title="Click to read it all">🗒 <b>Last start:</b> ${esc(s.comment)}</div>` : "";
+  document.addEventListener("click", (e) => { const x = e.target.closest && e.target.closest(".stew"); if (x) x.classList.toggle("open"); });
+  const stewNone = (t, d) => `<div class="pad note">${STEW_STATES.has(track(t).state) || !track(t).state
+    ? `No stewards' report for this meeting yet. They're usually published the evening after racing and appear here soon after.`
+    : `Stewards' reports are collected for Australian meetings.`}</div>`;
+  // the Stewards tab: this race's comments (finishing order), notes for the race, and the meeting's opening notes
+  async function stewardsPanel(el, t, d, n, runs, up, history) {
+    if (!el) return;
+    if (up) {
+      await loadLastStewards(runs);
+      const rows = runs.filter((r) => !isScr(r)).map((r) => {
+        const s = STEW_LAST[r.horse_key], h0 = (history[r.horse_key] || [])[0];
+        const last = s && h0 && s.date === h0.date;
+        return `<tr><td><b>${dash(r.number)}</b></td><td class="name">${horseCell(r)}</td><td class="mini">${s ? `<a href="${raceURL(s)}">${fmtDate(s.date)} ${esc(track(s.track).name)}</a>${last ? "" : "<br><i>not its last start</i>"}` : "—"}</td>
+          <td class="name stewtext">${s ? esc(s.comment) : `<span class="mini">${h0 ? "No comment from the stewards at its last start." : "First starter."}</span>`}</td></tr>`;
+      }).join("");
+      el.innerHTML = `<div class="tablewrap"><table><thead><tr><th>No.</th><th class="name">Horse</th><th>From</th><th class="name">Latest stewards' comment</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <p class="pad note">The stewards' latest comment on each runner. The report for this race appears here after it's run.</p>`;
+      return;
+    }
+    loading(el);
+    const x = await stewardsFor(t, d);
+    if (!x || !x.meeting || !x.meeting.found) { el.innerHTML = stewNone(t, d); return; }
+    const mine = x.rows.filter((r) => Number(r.race) === Number(n));
+    const byKey = Object.fromEntries(mine.filter((r) => r.horse_key).map((r) => [r.horse_key, r]));
+    const order = byFinish(runs).filter((r) => byKey[r.horse_key]);
+    const extra = mine.filter((r) => r.horse_key && !order.some((o) => o.horse_key === r.horse_key));
+    const gen = mine.find((r) => !r.horse_key);
+    el.innerHTML = (order.length || extra.length ? `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th class="name">Stewards' comment</th></tr></thead><tbody>${
+        order.map((r) => `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td class="name stewtext">${esc(byKey[r.horse_key].comment)}</td></tr>`).join("")
+        + extra.map((r) => `<tr><td>—</td><td class="name">${esc(r.horse)}</td><td class="name stewtext">${esc(r.comment)}</td></tr>`).join("")}</tbody></table></div>`
+        : `<div class="pad note">The stewards made no comments on runners in this race.</div>`)
+      + (gen ? `<div class="pad stewgen"><b>Also in this race</b><p>${esc(gen.comment).replace(/\n/g, "<br>")}</p></div>` : "")
+      + (x.meeting.general ? `<details class="pad stewgen"><summary>Meeting notes (stewards panel, rider changes, fines, suspensions)</summary><p>${esc(x.meeting.general).replace(/\n/g, "<br>")}</p></details>` : "")
+      + (x.meeting.url ? `<p class="pad note">From the official stewards' report · <a href="${esc(x.meeting.url)}" target="_blank" rel="noopener">read the full report ↗</a></p>` : "");
+  }
+
   pages["meeting"] = async function () {
     const t = qs("track"), d = qs("date");
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Choose a meeting from the <a href="form-guide.html">Form Guide</a>.</p>`; return; }
@@ -1247,9 +1301,10 @@
       $("#racedetails").textContent = [r0.distance && r0.distance + "m", r0.class || classLabel(r0),
         runs.filter((r) => !isScr(r)).length + " runners", goingLabel(r0), r0.rail && "Rail: " + r0.rail].filter((x) => x && !x.startsWith("—")).join("  |  ");
       if (up) {
-        const draw = () => { $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
+        const draw = () => { if (active !== n) return; $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
         draw();
         speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
+        stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw);
         return;
       }
       $("#runners").innerHTML = byFinish(runs).map((r) => {
@@ -1258,6 +1313,7 @@
           <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r)}</td></tr>`;
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
+      stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, false, card.history);
     }
     $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
       return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(raceName(r0.race_name))}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
@@ -1316,6 +1372,7 @@
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
       draw();
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
+      stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw);
       $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats");
       $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
       $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
@@ -1345,6 +1402,7 @@
       `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${timeCell(r)}</td><td>${marginTxt(r)}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
+    stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, false, card.history);
     tabs("#racetabs");
   };
 
@@ -1453,7 +1511,11 @@
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
 
-    let scope = "all", avgs = null;
+    let scope = "all", avgs = null, stew = {};
+    get("/api/stewards?horse=" + encodeURIComponent(disp)).then((x) => {
+      stew = Object.fromEntries((x || []).map((c) => [c.date + "|" + String(c.track).toUpperCase() + "|" + c.race, c.comment]));
+      if (Object.keys(stew).length) renderForm();
+    }).catch(() => {});
     get("/api/avgtimes?tracks=" + encodeURIComponent([...new Set(runs.map((r) => String(r.track).toUpperCase()))].join(","))).then((x) => { avgs = x; renderForm(); }).catch(() => {});
     function renderForm() {
       const list = runs.filter((r) => scope === "all" || (scope === "aus" ? track(r.track).aus : !track(r.track).aus));
@@ -1464,7 +1526,8 @@
           <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
           <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
-          <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`;
+          <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`
+          + ((c) => c ? `<tr class="stewrow"><td></td><td colspan="18">🗒 <b>Stewards:</b> ${esc(c)}</td></tr>` : "")(stew[r.date + "|" + String(r.track).toUpperCase() + "|" + r.race]);
       }).join("") || `<tr><td colspan="19">No ${scope === "aus" ? "Australian" : "international"} runs.</td></tr>`;
     }
     $$("[data-scope]").forEach((b) => b.onclick = () => { $$("[data-scope]").forEach((x) => x.classList.toggle("active", x === b)); scope = b.dataset.scope; renderForm(); });
