@@ -1336,9 +1336,15 @@
           .map(([k, v]) => `<div class="stat"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
         <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
         ${P.upcoming.length ? `<section class="panel"><div class="panelhead">Coming up · ${P.upcoming.length} ${type === "jockey" ? "ride" : "runner"}${P.upcoming.length === 1 ? "" : "s"}</div><div class="tablewrap"><table>
-          <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th></tr></thead><tbody>${P.upcoming.map((x) =>
-            `<tr><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
-             <td class="name"><a href="${horseURL(x.horse)}">${esc(x.horse)}</a></td><td>${dash(x.barrier)}</td><td class="name">${personLink(other, x[other])}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+          <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th>
+            <th title="This jockey and trainer together over the last 12 months">Strike with ${O.toLowerCase()}</th><th title="$1 on every ride together at SP, last 12 months">ROI with ${O.toLowerCase()}</th>
+            <th title="${type === "jockey" ? "This jockey's record on the horse" : "This trainer's record with the horse"} (starts: wins-seconds-thirds)">${type === "jockey" ? "Record on horse" : "Record with horse"}</th></tr></thead><tbody>${P.upcoming.map((x) => {
+              const c = x.combo || {}, h = x.onHorse || {};
+              return `<tr><td>${fmtDate(x.date)}</td><td class="name"><a href="${meetingURL(x.track, x.date)}">${esc(track(x.track).name)}</a></td><td><a href="${raceURL(x)}">R${x.race}</a>${x.distance ? ` <span class="mini">${esc(x.distance)}m</span>` : ""}</td>
+             <td class="name"><a href="${horseURL(x.horse)}">${esc(x.horse)}</a></td><td>${dash(x.barrier)}</td><td class="name">${personLink(other, x[other])}</td>
+             <td>${c.rides ? `<b>${c.strike.toFixed(1)}%</b> <span class="mini">${c.wins}/${c.rides}</span>` : `<span class="mini">first time together</span>`}</td>
+             <td>${c.rides ? roiTxt(c.roi) : "—"}</td>
+             <td>${h.starts ? `<b>${h.starts}: ${h.wins}-${h.seconds}-${h.thirds}</b>` : `<span class="mini">${type === "jockey" ? "first ride" : "first start"}</span>`}</td></tr>`; }).join("")}</tbody></table></div></section>` : ""}
         ${trackCodes.length ? "" : `<section class="panel"><div class="panelhead">By track</div><div class="tablewrap"><table><thead>${head([["name", "Track", "name"], ...statCols], tSort, "t")}</thead><tbody>
           ${sorted(tracks, tSort).map((t) => `<tr><td class="name">${esc(t.name)}</td>${statTds(t)}</tr>`).join("")}</tbody></table></div></section>`}
         ${withName ? "" : `<section class="panel"><div class="panelhead"><span>Best ${O.toLowerCase()}s with ${esc(P.name)}${trackName ? " at " + esc(trackName) : ""}</span>
