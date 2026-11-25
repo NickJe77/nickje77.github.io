@@ -589,7 +589,11 @@
 
   // ------------------------------------------------------------ finishing order: finishers 1st..last, then BD / F / FTF / LR etc.
   const byFinish = (runs) => [...runs].sort((a, b) => (isScr(a) - isScr(b)) || ((pos(a) || 999) - (pos(b) || 999)));
-  const marginTxt = (r) => { const p = pos(r), m = num(r.margin); return !p || p === 1 || !m ? "—" : r.margin + "L"; };
+  // winners show what they won by: the second horse's margin (from the server, or from the race's own runners)
+  const winBy = (r, all) => r.win_margin || ((all || []).find((x) => pos(x) === 2 && num(x.margin)) || {}).margin || "";
+  const marginTxt = (r, all) => { const p = pos(r), m = num(r.margin);
+    if (p === 1) { const w = winBy(r, all); return w ? `<span class="winby" title="Won by ${esc(w)} lengths">${esc(w)}L</span>` : "—"; }
+    return !p || !m ? "—" : r.margin + "L"; };
 
   // ------------------------------------------------------------ above a race: where winners settle here, and winners out of the race
   const SETTLE = ["Leader", "On Pace", "Midfield", "Off Pace", "Backmarker"];
@@ -1315,7 +1319,7 @@
       $("#runners").innerHTML = byFinish(runs).map((r) => {
         const s = horseStats(card.history[r.horse_key] || [], r);
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.trainer)}</td><td>${dash(r.jockey)}</td><td>${dash(r.weight)}</td>
-          <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r)}</td></tr>`;
+          <td>${s.last10}</td><td>${s.career.text}</td><td>${dash(r.starting_odds)}</td><td>${marginTxt(r, runs)}</td></tr>`;
       }).join("");
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
       stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, false, card.history);
@@ -1404,7 +1408,7 @@
     speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
     $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
     $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
-      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${timeCell(r)}</td><td>${marginTxt(r)}</td></tr>`).join("")}</tbody></table></div>
+      `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${timeCell(r)}</td><td>${marginTxt(r, runs)}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
     stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, false, card.history);
@@ -1528,7 +1532,7 @@
         const i = runs.indexOf(r), p = runs[i + 1];
         return `<tr class="${pos(r) === 1 ? "win" : ""}"><td>${fmtDate(r.date)}</td><td><a href="${meetingURL(r.track, r.date)}">${esc(track(r.track).name)}</a></td>
           <td class="name"><a href="${raceURL(r)}">${esc(raceName(r.race_name)) || "Race " + r.race}</a></td><td>${dash(r.distance)}</td><td>${esc(goingLabel(r)) || "—"}</td><td>${esc(classLabel(r)) || "—"}</td>
-          <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${r.margin && pos(r) !== 1 ? r.margin + "L" : "—"}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
+          <td><b>${posLabel(r)}</b>${r.starters ? `<span class="mini">/${esc(r.starters)}</span>` : ""}</td><td>${marginTxt(r)}</td><td>${dash(r.barrier)}</td><td>${dash(r.weight)}</td>
           <td>${dash(r.jockey)}</td><td>${dash(r.starting_odds)}</td><td>${timeCell(r)}</td>${avgs ? vsAverage(r, avgs) : `<td class="mini">…</td>`}<td>${dash(r.pos_400)}</td><td>${dash(r.pos_800)}</td>
           <td>${p ? fmtDelta(num(r.weight), num(p.weight), "") : "—"}</td><td>${p ? fmtDelta(dist(r), dist(p), "") : "—"}</td>
           <td>${p && classLabel(p) !== classLabel(r) ? esc(classLabel(p) + " → " + classLabel(r)) : "—"}</td></tr>`
