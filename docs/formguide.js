@@ -1043,7 +1043,7 @@
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
         <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
         <td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}${((st) => st && st.n < 3
-          ? `<div class="mini newstable" title="Previously trained by ${esc(st.from)}">New stable · ${ordStart(st.n + 1)} start (was ${esc(st.from)})</div>` : "")(stableStint(r.trainer, history[r.horse_key]))}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
+          ? `<div class="mini newstable" title="Previously trained by ${esc(st.from)}"><b>New stable</b> · ${ordStart(st.n + 1)} start<br>was ${esc(st.from)}</div>` : "")(stableStint(r.trainer, history[r.horse_key]))}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td>${mypCell(r, scr)}<td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
     }).join("") + `<tr class="myprow"><td colspan="13" class="myptot"></td></tr>`
 
