@@ -1037,7 +1037,8 @@
   }
   function fieldRows(runs, history) {
     const b = book();
-    return runs.map((r) => {
+    return (runs.length && !runs.some((r) => Number(r.barrier) > 0) ? `<tr class="nomrow"><td colspan="13"><b>Nominations</b> · this isn't the final field: barriers, weights and the final list come with acceptances, usually 2–4 days before the race.</td></tr>` : "")
+      + runs.map((r) => {
       const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
       return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
         <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
@@ -1045,6 +1046,7 @@
           ? `<div class="mini newstable" title="Previously trained by ${esc(st.from)}">New stable · ${ordStart(st.n + 1)} start (was ${esc(st.from)})</div>` : "")(stableStint(r.trainer, history[r.horse_key]))}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td>${mypCell(r, scr)}<td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
     }).join("") + `<tr class="myprow"><td colspan="13" class="myptot"></td></tr>`
+
       + (setTimeout(() => $$("tr.myprow").forEach((x) => mypTotal(x.closest("tbody"))), 0), "");
   }
   function fieldStats(runs, history) {
@@ -1257,11 +1259,24 @@
         .sort((a, b) => (b.t.aus - a.t.aus) || (TYPE_ORDER.indexOf(a.t.type) - TYPE_ORDER.indexOf(b.t.type)) || a.t.name.localeCompare(b.t.name));
       $("#count").textContent = list.length + " meetings · " + fmtDate(data.date, true) + (data.date === data.today ? " (today)" : "");
       shown = list; nextUp();
-      rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a></td>
+      dayTabs();
+      rows.innerHTML = list.map((m) => `<tr><td class="name"><a href="${meetingURL(m.track, data.date)}">${esc(m.t.name)}</a>${m.noms ? ` <span class="pill nompill" title="Nominations: the field isn't final until acceptances">Nominations</span>` : ""}</td>
         <td>${esc(({ GBR: "GB", UK: "GB", IRL: "IRE" })[m.t.state] || m.t.state) || "—"}</td><td>${m.races}</td><td>${m.runners}</td>
         <td>${esc(goingLabel(m)) || "—"}</td><td>${m.upcoming ? esc(fmtTime(m.first_race)) || "—" : '<span class="pill">Results</span>'}</td>
         <td><a class="btn" href="${meetingURL(m.track, data.date)}">${m.upcoming ? "Form Guide →" : "View Meeting →"}</a></td></tr>`).join("")
         || `<tr><td colspan="7">No meetings${data.meetings.length ? " match" : " on this date"}.</td></tr>`;
+    }
+    // day tabs: today and every coming day that has fields or nominations
+    function dayTabs() {
+      const box = $("#daytabs"); if (!box || !data.days) return;
+      const days = data.days.slice(0, 10);
+      if (!days.some((x) => x.date === data.date) && data.date >= data.today) days.push({ date: data.date, meetings: 0 });
+      const tmr = new Date(Date.parse(data.today + "T12:00:00Z") + 864e5).toISOString().slice(0, 10);
+      const lab = (d) => d === data.today ? "Today" : d === tmr ? "Tomorrow"
+        : new Date(d + "T00:00:00").toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short" });
+      box.innerHTML = days.sort((a, b) => a.date.localeCompare(b.date)).map((x) => `<button class="daytab ${x.date === data.date ? "active" : ""}" data-d="${x.date}">
+        <b>${esc(lab(x.date))}</b><small>${x.meetings ? x.meetings + " meeting" + (x.meetings === 1 ? "" : "s") : ""}${x.noms ? " · noms" : ""}</small></button>`).join("");
+      $$(".daytab", box).forEach((b) => b.onclick = () => load(b.dataset.d));
     }
     // "Next up": the next few races still to jump today (follows the state filter and search), counting down
     let shown = [];
