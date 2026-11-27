@@ -227,6 +227,11 @@
   const CC = { NZL: "NZ", UK: "GBR", GB: "GBR", ENG: "GBR", IRL: "IRE", RSA: "SAF", ZAF: "SAF", US: "USA", HKG: "HK", JAP: "JPN" };
   const countryOf = (r) => { const t = track(r.track, r); if (t.aus) return "AUS"; const c = String(t.state || "").toUpperCase().replace(/[^A-Z]/g, ""); return CC[c] || c || "INT"; };
   const regionOf = (r) => { const c = countryOf(r); return c === "AUS" || c === "NZ" ? "ANZ" : c === "GBR" || c === "IRE" ? "GBI" : c; };
+  // year of birth from a run's age. Southern-hemisphere horses turn a year older on 1 August (a 3yo in March 2026 was
+  // foaled in spring 2022); northern ones on 1 January (a 2yo in 2026 was foaled in 2024)
+  const SOUTH = new Set(["AUS", "NZ", "SAF", "ARG", "BRZ", "CHI", "URU"]);
+  const foalYear = (r) => { const y = parseInt(r.date, 10), a = parseInt(r.horse_age, 10), m = parseInt(String(r.date).slice(5, 7), 10);
+    if (!(y > 1990) || !(a > 0)) return null; return SOUTH.has(countryOf(r)) ? y - a - (m >= 8 ? 0 : 1) : y - a; };
   const trainerKeys = (t) => String(t || "").toLowerCase().split(/\s*(?:&|\/|,|\band\b)\s*/).map((x) => {
     const w = x.replace(/[^a-z\s]/g, " ").trim().split(/\s+/).filter(Boolean); return w.length ? (w.length > 1 ? w[0][0] : "") + w[w.length - 1] : ""; }).filter((k) => k.length > 2);
   // one key per stable, however the name is written: "Mick Price & Michael Kent Jnr" = "M Price & M Kent (Jnr)" -> "mkent|mprice"
@@ -269,7 +274,7 @@
     // within a region: join stables one after the other; keep apart stables racing at the same time
     const span = (k) => { const ds = keys.filter((x) => find(x) === k).flatMap((x) => units[x].map((r) => r.date)).sort(); return [ds[0], ds[ds.length - 1]]; };
     const runsIn = (k) => keys.filter((x) => find(x) === k).flatMap((x) => units[x]);
-    const foalOf = (rs) => { const y = rs.map((r) => parseInt(r.date, 10) - parseInt(r.horse_age, 10)).filter((x) => x > 1990).sort(); return y.length ? y[Math.floor(y.length / 2)] : null; };
+    const foalOf = (rs) => { const y = rs.map(foalYear).filter((x) => x > 1990).sort(); return y.length ? y[Math.floor(y.length / 2)] : null; };
     const nested = (a, b) => {   // all of b's runs fall in one break in a's career, of at most 3 years
       const A = runsIn(a).map((r) => r.date).sort(), B = runsIn(b).map((r) => r.date).sort();
       if (!A.length || !B.length) return false;
@@ -312,7 +317,7 @@
     // horses that move country (an Irish import to Ciaron Maher, an Australian horse sold to Hong Kong):
     // one career ends before the other starts, within two years, and the ages agree -> the same horse
     const span2 = (g) => [g.runs[g.runs.length - 1].date, g.runs[0].date];
-    const foaled = (g) => { const y = g.runs.map((r) => parseInt(r.date, 10) - parseInt(r.horse_age, 10)).filter((x) => x > 1990); return y.length ? y.sort()[Math.floor(y.length / 2)] : null; };
+    const foaled = (g) => { const y = g.runs.map(foalYear).filter((x) => x > 1990); return y.length ? y.sort()[Math.floor(y.length / 2)] : null; };
     // where the horse was bred, from the name: "Beautiful You (NZ)" -> NZ (most common across the group's runs)
     const BRED = { GB: "GBR", UK: "GBR", IRE: "IRE", IRL: "IRE", NZ: "NZ", NZL: "NZ", USA: "USA", US: "USA", FR: "FR", FRA: "FR", JPN: "JPN", GER: "GER", AUS: "AUS", ARG: "ARG", BRZ: "BRZ", SAF: "SAF", CHI: "CHI", ITY: "ITY", HK: "HK" };
     const bredIn = (g) => { const n = {}; g.runs.forEach((r) => { const m = String(r.horse || "").match(/\(([A-Za-z]{2,4})\)\s*$/); if (m) { const c = BRED[m[1].toUpperCase()] || m[1].toUpperCase(); n[c] = (n[c] || 0) + 1; } });
