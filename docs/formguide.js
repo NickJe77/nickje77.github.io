@@ -379,7 +379,7 @@
   function comboLine(el, trainer, jockey, nextStart) {
     if (!el || !trainer || !jockey || trainer === "—" || jockey === "—") return;
     const box = document.createElement("div"); box.className = "combo";
-    const head = `<small>${nextStart ? "Next start" : "Last start"}</small><div class="combonames">${esc(trainer)} + ${esc(jockey)}</div>`;
+    const head = `<small>${nextStart ? "Next start" : "Last start"}</small><div class="combonames"><a class="plink" href="person.html?jockey=${encodeURIComponent(jockey)}&trainer=${encodeURIComponent(trainer)}">${esc(trainer)} + ${esc(jockey)}</a></div>`;
     box.innerHTML = head + `<div class="mini">Loading…</div>`; el.prepend(box);
     const stat = (v, l, cls = "") => `<div><b class="${cls}">${v}</b><span>${l}</span></div>`;
     get(`/api/combo?trainer=${encodeURIComponent(trainer)}&jockey=${encodeURIComponent(jockey)}`).then((c) => {
@@ -704,7 +704,7 @@
           <td class="name">${esc(raceName(t.race_name) || kind(t))}${/tri?a?l|trl|jump/i.test(t.race_name || "") ? "" : ` <span class="mini">${kind(t)}</span>`}</td><td>${dash(t.distance)}</td><td>${esc(goingLabel(t)) || "—"}</td>
           <td><b>${p ? posLabel(t) : dash(t.position)}</b>${t.starters ? `<span class="mini">/${esc(t.starters)}</span>` : ""}</td>
           <td>${won ? "—" : t.margin ? esc(t.margin) + "L" : "—"}</td><td>${runTime(t.finish_time) !== "—" ? (/time_estimated/.test(t.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(t.finish_time)}</span>` : runTime(t.finish_time)) : (t.top || [])[0] && runTime(t.top[0].finish_time) !== "—" ? `<span class="mini" title="Winner's time">${runTime(t.top[0].finish_time)} (w)</span>` : "—"}</td>${vsAverage(t, avgs, "trials")}
-          <td>${esc(dash(t.jockey))}</td><td class="name">${topTxt(t) || "—"}</td></tr>`; }).join("")}</tbody></table></div>
+          <td>${personLink("jockey", t.jockey)}</td><td class="name">${topTxt(t) || "—"}</td></tr>`; }).join("")}</tbody></table></div>
       <p class="mini">Average = lengths faster (green) or slower (red) than the average trial winner at that track, distance and going (trials only, never mixed with race times). Trials and jump-outs never count in the horse's record, stats or speed figures. ≈ = worked out from the winner's time and the margin, where the horse's own time wasn't recorded.</p>`;
   }
 
@@ -1110,7 +1110,7 @@
       const byDate = groupBy(d.runs.filter((x) => x.date !== r.date), (x) => x.date);
       const rows = Object.keys(byDate).sort().reverse().map((dt) => {
         const w = byDate[dt].find((x) => pos(x) === 1) || byDate[dt][0];
-        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${dash(w.jockey)}</td><td>${dash(w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${timeCell(w)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
+        return `<tr><td>${fmtDate(dt)}</td><td class="name">${horseCell(w)}</td><td>${dash(w.barrier)}</td><td>${personLink("jockey", w.jockey)}</td><td>${personLink("trainer", w.trainer)}</td><td>${dash(w.starting_odds)}</td><td>${timeCell(w)}</td><td><a href="${raceURL(w)}">Race →</a></td></tr>`;
       });
       el.innerHTML = rows.length ? `<div class="tablewrap"><table><thead><tr><th>Date</th><th class="name">Winner</th><th>Barrier</th><th>Jockey</th><th>Trainer</th><th>SP</th><th>Time</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`
         : `<div class="pad note">No earlier runnings of "${esc(raceName(r.race_name))}" at ${esc(track(r.track).name)} in the database.</div>`;
@@ -1242,7 +1242,7 @@
               <td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a>${wonSince.has(r) ? ` <span class="pill wonsince" title="Won ${wonSince.get(r).n} race${wonSince.get(r).n > 1 ? "s" : ""} since">W since</span>` : ""}</td>
               <td>${p === 1 ? "—" : r.margin ? esc(r.margin) + "L" : "—"}</td>
               <td>${runTime(r.finish_time) === "—" ? "—" : /time_estimated/.test(r.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(r.finish_time)}</span>` : runTime(r.finish_time)}</td>
-              ${vsAverage(r, avgs, "trials")}<td>${dash(r.barrier)}</td><td>${esc(dash(r.jockey))}</td><td>${esc(dash(r.trainer))}</td></tr>`; }).join("")}
+              ${vsAverage(r, avgs, "trials")}<td>${dash(r.barrier)}</td><td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}</td></tr>`; }).join("")}
           </tbody></table></div></section>`; }).join("") +
         `<p class="mini">Average = lengths faster (green) or slower (red) than the average trial winner at ${esc(m.t.name)} over that distance and going. ≈ = worked out from the winner's time and the margin.</p>`;
       $("#tback").onclick = (e) => { e.preventDefault(); cardBox.innerHTML = ""; $("#tlist").classList.remove("hidden"); setHead(); history.replaceState(null, "", "?date=" + data.date); };
@@ -1396,7 +1396,7 @@
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?v=3&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    let P; try { P = await get(`/api/person?v=4&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
     catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
     const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
@@ -1423,6 +1423,9 @@
       $("#pbody").innerHTML = `
         <div class="grid stats5">${[[ride, o.rides], ["Wins", o.wins], ["Strike rate", o.strike.toFixed(1) + "%"], ["Place %", o.place.toFixed(1) + "%"], ["ROI", roiTxt(o.roi)]]
           .map(([k, v]) => `<div class="stat"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
+        ${P.form ? `<section class="panel"><div class="panelhead">Recent form</div><div class="tablewrap"><table><thead><tr><th class="name"></th><th>${ride}</th><th>Wins</th><th>2nds</th><th>3rds</th><th>Strike</th><th>Place %</th><th>ROI</th></tr></thead><tbody>
+          ${[["Last 50", P.form.last50], ["Last 100", P.form.last100], ["Last 12 months", o]].filter(([, x]) => x && x.rides).map(([k, x]) =>
+            `<tr><td class="name"><b>${k}</b>${k !== "Last 12 months" && x.rides < (k === "Last 50" ? 50 : 100) ? ` <span class="mini">(${x.rides} in 12 months)</span>` : ""}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
         <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
         ${P.upcoming.length ? `<section class="panel"><div class="panelhead">Coming up · ${P.upcoming.length} ${type === "jockey" ? "ride" : "runner"}${P.upcoming.length === 1 ? "" : "s"}</div><div class="tablewrap"><table>
           <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th>
@@ -1709,7 +1712,7 @@
         $("#winrange").textContent = "—"; $("#goingrec").innerHTML = first; $("#fresh").innerHTML = first;
         $("#lastcmp").closest(".panel").querySelector("h3").textContent = "Next Start";
         $("#lastcmp").innerHTML = `<p><a href="${raceURL(next)}">${fmtDate(next.date)} ${esc(fmtTime(next.start_time))} · ${esc(track(next.track, next).name)} R${next.race}</a></p>
-          <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${esc(dash(next.jockey))}</b></p>`;
+          <p>${esc(raceName(next.race_name))}</p><p>${dash(next.distance)}m · Barrier <b>${dash(next.barrier)}</b> · ${wt(next)}kg</p><p>Jockey: <b>${personLink("jockey", next.jockey)}</b></p>`;
         $("#tjbox").innerHTML = ""; comboLine($("#tjbox"), next.trainer, next.jockey, true);
         $$('[data-panel="entries"]').forEach((b) => b.click());
       }
@@ -1747,8 +1750,8 @@
       <p>${esc(track(last.track).name)} ${dash(last.distance)}m: <b>${record(runs.filter((r) => sameTrack(r.track, last.track) && near(dist(r), dist(last)))).text}</b></p>`;
     { const nx = next && !isScr(next) && next.jockey ? next : null, who = nx || last, sk = stableKey((nx && nx.trainer) || last.trainer);
       const withTr = runs.filter((r) => stableKey(r.trainer) === sk), tr = (withTr[0] && withTr[0].trainer) || (nx && nx.trainer) || last.trainer;
-      $("#tjbox").innerHTML = `<p>${esc(dash(who.jockey))} on this horse: <b>${runs.some((r) => r.jockey === who.jockey) ? record(runs.filter((r) => r.jockey === who.jockey)).text : "first ride"}</b></p>
-        <p>${esc(dash((nx && nx.trainer) || tr))} with this horse: <b>${withTr.length ? record(withTr).text : "first start"}</b></p>`;
+      $("#tjbox").innerHTML = `<p>${personLink("jockey", who.jockey)} on this horse: <b>${runs.some((r) => r.jockey === who.jockey) ? record(runs.filter((r) => r.jockey === who.jockey)).text : "first ride"}</b></p>
+        <p>${personLink("trainer", (nx && nx.trainer) || tr)} with this horse: <b>${withTr.length ? record(withTr).text : "first start"}</b></p>`;
       comboLine($("#tjbox"), tr, who.jockey, !!nx);
       // new to the stable: how this trainer's arrivals go at this stage
       const st = nx ? stableStint(nx.trainer, [...runs].sort((a, b) => String(b.date).localeCompare(String(a.date)))) : null;
@@ -1761,7 +1764,7 @@
           <span class="mini">· ${a.starts ? `${a.starts}: ${a.wins}-${a.seconds}-${a.thirds}, ${a.strike.toFixed(1)}%` : "none"} all years</span>`;
         $("#tjbox").appendChild(p); });
     }
-    $("#lastcmp").innerHTML = `${last.jockey ? `<p>Jockey: <b>${esc(last.jockey)}</b>${prev && prev.jockey && prev.jockey !== last.jockey ? ` <span class="mini">(was ${esc(prev.jockey)})</span>` : ""}</p>` : ""}
+    $("#lastcmp").innerHTML = `${last.jockey ? `<p>Jockey: <b>${personLink("jockey", last.jockey)}</b>${prev && prev.jockey && prev.jockey !== last.jockey ? ` <span class="mini">(was ${personLink("jockey", prev.jockey)})</span>` : ""}</p>` : ""}
       ${prev ? `<p>Weight change: <b>${fmtDelta(num(last.weight), num(prev.weight), "kg")}</b></p><p>Distance change: <b>${fmtDelta(dist(last), dist(prev), "m")}</b></p>
       <p>Class: <b>${classLabel(prev) && classLabel(last) && classLabel(prev) !== classLabel(last) ? esc(classLabel(prev) + " → " + classLabel(last)) : "same"}</b></p>` : "<p>First start.</p>"}
       <p>Days between last two runs: <b>${prev ? days(prev.date, last.date) : "—"}</b></p>`;
@@ -1816,7 +1819,7 @@
     $("#horses").innerHTML = runs.map((r, i) => `<option value="${i}">${esc(r.horse)}</option>`).join("");
     const rowsDef = [
       ["Silk", (r) => silk(r, true)], up ? ["Number", (r) => `<b>${dash(r.number)}</b>`] : ["Finished", (r) => `<b>${posLabel(r)}</b>`], ["Barrier", (r) => dash(r.barrier)], ["Weight", (r) => wt(r)],
-      ["Jockey", (r) => dash(r.jockey)], ["Trainer", (r) => dash(r.trainer)], up ? ["Gear changes", (r) => dash(r.gear)] : ["Starting price", (r) => dash(r.starting_odds)],
+      ["Jockey", (r) => personLink("jockey", r.jockey)], ["Trainer", (r) => personLink("trainer", r.trainer)], up ? ["Gear changes", (r) => dash(r.gear)] : ["Starting price", (r) => dash(r.starting_odds)],
       ["Recent form", (r) => stats.get(r).last10], ["Career", (r) => stats.get(r).career.text], ["At this distance", (r) => stats.get(r).dist.text],
       ["On this going", (r) => stats.get(r).going.text], ["At this track", (r) => stats.get(r).track.text], ["With this jockey", (r) => stats.get(r).jockey.text],
       ["First / second / third-up", (r) => stats.get(r).firstUp.text + " / " + stats.get(r).secondUp.text + " / " + stats.get(r).thirdUp.text], ["Days since last run", (r) => dash(stats.get(r).daysSince)],
@@ -1877,7 +1880,7 @@
       const rate = (rec) => rec.n >= 2 ? rec.place : null;       // compare records by place rate, once there are 2+ runs
       const rows = [
         ["", (x) => `<span class="h2hsilk">${silk(x.last || x.h.entries[0], true)}</span>`, null],
-        ["Trainer", (x) => esc(dash((x.h.entries[0] || x.last || {}).trainer)), null],
+        ["Trainer", (x) => personLink("trainer", (x.h.entries[0] || x.last || {}).trainer), null],
         ["Age", (x) => x.last && x.last.horse_age ? esc(String(Number(x.last.horse_age) + Math.floor(days(x.last.date, todayISO()) / 365))) : "—", null],
         ["Last start", (x) => x.last ? `<a href="${raceURL(x.last)}">${posLabel(x.last)}${x.last.starters ? "/" + esc(x.last.starters) : ""} · ${esc(track(x.last.track, x.last).name)} ${dash(x.last.distance)}m</a><div class="mini">${fmtDate(x.last.date)} · ${esc(classLabel(x.last) || "")}</div>` : "First starter", null],
         ["Days since run", (x) => x.last ? days(x.last.date, todayISO()) : "—", null],
