@@ -1211,9 +1211,20 @@
           ${out.length ? `<ul>${out.map((o) => `<li><a href="${horseURL(o.r.horse)}"><b>${esc(o.r.horse)}</b></a> <span class="mini">(${posLabel(o.r)} here)</span> — won ${fmtDate(o.first.date)} at
             <a href="${raceURL(o.first)}">${esc(track(o.first.track, o.first).name)}</a> <span class="mini">${esc(classLabel(o.first) || "")}${o.n > 1 ? ` · ${o.n} wins since` : ""}</span></li>`).join("")}</ul>` : ""}</div>`;
       };
-      cardBox.innerHTML = `<p><a href="?date=${data.date}" id="tback">← All trial venues on ${esc(fmtDate(data.date, true))}</a></p>` + nums.map((n) => {
+      // best of the morning: the fastest runners over each distance, across all the heats
+      const tShow = (r) => /time_estimated/.test(r.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(r.finish_time)}</span>` : runTime(r.finish_time);
+      const byDist = groupBy(runs.filter((r) => timeSecs(r.finish_time) !== null && num(r.distance)), (r) => num(r.distance));
+      const dists = Object.keys(byDist).map(Number).sort((a, b) => a - b);
+      const best = dists.length ? `<section class="panel"><div class="panelhead"><span>Best of the morning</span><span class="mini">fastest 3 over each distance, all heats</span></div>
+        ${dists.map((dd) => { const L = byDist[dd].sort((a, b) => timeSecs(a.finish_time) - timeSecs(b.finish_time)).slice(0, 3), nh = new Set(byDist[dd].map((r) => r.race)).size;
+          return `<div class="bestdist"><h4>${dd}m <span class="mini">· ${nh} heat${nh === 1 ? "" : "s"}, ${byDist[dd].length} runners</span></h4>
+            <div class="tablewrap"><table><thead><tr><th></th><th class="name">Horse</th><th>Heat</th><th>Time</th><th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th class="name">Trainer</th></tr></thead><tbody>
+            ${L.map((r, i) => `<tr class="${i === 0 ? "winner" : ""}"><td><b>${i + 1}</b></td><td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a></td>
+              <td><a href="#heat${r.race}">Heat ${r.race}</a> <span class="mini">${pos(r) ? posLabel(r) : ""}</span></td><td><b>${tShow(r)}</b></td>${vsAverage(r, avgs, "trials")}<td class="name">${personLink("trainer", r.trainer)}</td></tr>`).join("")}
+            </tbody></table></div></div>`; }).join("")}</section>` : "";
+      cardBox.innerHTML = `<p><a href="?date=${data.date}" id="tback">← All trial venues on ${esc(fmtDate(data.date, true))}</a></p>` + best + nums.map((n) => {
         const H = heats[n], h0 = H[0], kind = /jump/i.test(h0.race_name || "") ? "Jump-out" : "Trial";
-        return `<section class="panel"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}</span>
+        return `<section class="panel" id="heat${n}"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}</span>
           <span class="mini">${[num(h0.distance) ? num(h0.distance) + "m" : "", goingLabel(h0), H.length + " runners"].filter(Boolean).join(" · ")}</span></div>
           ${woBox(H)}
           <div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>Margin</th><th>Time</th>
