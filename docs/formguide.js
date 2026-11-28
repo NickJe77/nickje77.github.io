@@ -1395,30 +1395,32 @@
     const type = jq ? "jockey" : "trainer", name = jq || tq, withName = jq ? tq : "", other = type === "jockey" ? "trainer" : "jockey";
     const T = type === "jockey" ? "Jockey" : "Trainer", O = other === "jockey" ? "Jockey" : "Trainer";
     const trackName = trackCodes.length ? track(trackCodes[0]).name : "";
-    $("#pjockey").value = jq; $("#ptrainer").value = tq; $("#ptrack").value = trackName;
+    const hq = qs("horse");
+    $("#pjockey").value = jq; $("#ptrainer").value = tq; $("#ptrack").value = trackName; if ($("#phorse")) $("#phorse").value = hq;
     // predictive boxes
     const suggest = (input, list, kind) => { let tm = null, last = "";
       input.addEventListener("input", () => { clearTimeout(tm); const q = input.value.trim(); if (q.length < 2 || q === last) return;
         tm = setTimeout(async () => { last = q; const L = await get(`/api/people?type=${kind}&q=${encodeURIComponent(q)}`).catch(() => []);
-          list.innerHTML = L.map((x) => `<option value="${esc(x.name)}">${x.n} ${kind === "jockey" ? "rides" : "runners"} in the last 12 months</option>`).join(""); }, 180); }); };
-    suggest($("#pjockey"), $("#pjlist"), "jockey"); suggest($("#ptrainer"), $("#ptlist"), "trainer");
+          list.innerHTML = L.map((x) => `<option value="${esc(x.name)}">${kind === "horse" ? `${x.n} start${x.n === 1 ? "" : "s"} · last ${fmtDate(x.last)}` : `${x.n} ${kind === "jockey" ? "rides" : "runners"} in the last 12 months`}</option>`).join(""); }, 180); }); };
+    suggest($("#pjockey"), $("#pjlist"), "jockey"); suggest($("#ptrainer"), $("#ptlist"), "trainer"); if ($("#phorse")) suggest($("#phorse"), $("#phlist"), "horse");
     const tnames = [...new Set(Object.values(TRACKS).map((v) => v[0]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     $("#ptklist").innerHTML = tnames.map((n) => `<option value="${esc(n)}">`).join("");
     $("#pfind").onsubmit = (e) => { e.preventDefault();
-      const j = $("#pjockey").value.trim(), t = $("#ptrainer").value.trim(), k = $("#ptrack").value.trim().toLowerCase();
+      const j = $("#pjockey").value.trim(), t = $("#ptrainer").value.trim(), k = $("#ptrack").value.trim().toLowerCase(), h = $("#phorse") ? $("#phorse").value.trim() : "";
+      if (h && !j && !t) { location.href = horseURL(h); return; }              // a horse on its own: its own page
       const codes = k ? Object.entries(TRACKS).filter(([, v]) => String(v[0]).toLowerCase() === k).map(([c]) => c) : [];
-      if (!j && !t) { $("#pbody").innerHTML = `<div class="pad note">Type a jockey or a trainer (or both), and a track if you like.</div>`; return; }
+      if (!j && !t) { $("#pbody").innerHTML = `<div class="pad note">Type a jockey, a trainer or a horse (or a combination), and a track if you like.</div>`; return; }
       if (k && !codes.length) { $("#pbody").innerHTML = `<div class="pad note">Pick a track from the list as you type.</div>`; return; }
-      location.href = `person.html?${j ? "jockey=" + encodeURIComponent(j) + "&" : ""}${t ? "trainer=" + encodeURIComponent(t) + "&" : ""}${codes.length ? "track=" + encodeURIComponent(codes.join(",")) : ""}`.replace(/&$/, ""); };
+      location.href = `person.html?${j ? "jockey=" + encodeURIComponent(j) + "&" : ""}${t ? "trainer=" + encodeURIComponent(t) + "&" : ""}${codes.length ? "track=" + encodeURIComponent(codes.join(",")) + "&" : ""}${h ? "horse=" + encodeURIComponent(h) : ""}`.replace(/&$/, ""); };
     if (!name) { $("#ptitle").textContent = "Jockeys & Trainers"; return; }
-    const title = [jq, tq].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
+    const title = [jq, tq].filter(Boolean).join(" + ") + (hq ? " on " + hq : "") + (trackName ? " at " + trackName : "");
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?v=6&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    let P; try { P = await get(`/api/person?v=7&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}${hq ? "&horse=" + encodeURIComponent(hq) : ""}`); }
     catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
-    const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
+    const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (hq ? " on " + hq : "") + (trackName ? " at " + trackName : "");
     $("#ptitle").textContent = shownTitle; document.title = shownTitle + " | The Sporting Almanac";
     const ARR = type === "trainer" && !withName ? await stableArrivals(P.name) : null;
     $("#psub").textContent = `${withName ? "Jockey & trainer together" : T}${trackName ? " at " + trackName : ""} · last 12 months (since ${fmtDate(P.since)})`;
@@ -1534,6 +1536,19 @@
       + `<p class="pad note">From the official stewards' report.</p>`;
   }
 
+  // track upgraded or downgraded during the day: "Good 4 (R1–R4) → upgraded to Good 3 from R5"
+  function goingChanges(el, firsts) {
+    if (!el) return;
+    const segs = [];
+    for (const r of firsts) { const g = goingLabel(r); if (!g) continue; const last = segs[segs.length - 1];
+      if (last && last.g === g) last.to = r.race; else segs.push({ g, from: r.race, to: r.race }); }
+    const old = $("#goingchg"); if (old) old.remove();
+    if (segs.length < 2) return;
+    const n = (g) => parseInt(String(g).replace(/\D+/g, " ").trim().split(" ").pop(), 10);
+    el.insertAdjacentHTML("afterend", `<div id="goingchg" class="goingchg"><b>Track rating changed today:</b> ${segs.map((x, i) => {
+      const dir = i === 0 ? "" : n(x.g) < n(segs[i - 1].g) ? "upgraded to " : n(x.g) > n(segs[i - 1].g) ? "downgraded to " : "changed to ";
+      return `${i ? " → " : ""}${dir}<b>${esc(x.g)}</b> <span class="mini">(${x.from === x.to ? "R" + x.from : "R" + x.from + "–R" + x.to})</span>`; }).join("")}</div>`);
+  }
   pages["meeting"] = async function () {
     const t = qs("track"), d = qs("date");
     if (!t || !d) { $("#main").innerHTML = `<p class="sub">Choose a meeting from the <a href="form-guide.html">Form Guide</a>.</p>`; return; }
@@ -1541,18 +1556,21 @@
     loading($("#runners"));
     let card;
     try { card = fixHistory(await get(`/api/card?track=${encodeURIComponent(t)}&date=${d}`)); } catch (e) { return fail($("#runners"), e); }
-    const tr = track(t, card.runs[0]), up = card.upcoming;
+    const tr = track(t, card.runs[0]), up = card.upcoming, upSet = new Set(card.upcoming_races || []);
+    const upR = (n) => up || upSet.has(Number(n));                       // part-way through the day: some races still to run
+    const RES_HEAD = $("#runners").closest("table").querySelector("thead").innerHTML;
     document.title = `${tr.name} ${fmtDate(d)} | The Sporting Almanac`;
     $("#trackname").textContent = tr.name; $("#trackcrumb").textContent = tr.name;
     if (!$("#rbbtn")) {
       $("#trackname").insertAdjacentHTML("afterend", `<a id="rbbtn" class="btn" href="racebook.html?track=${encodeURIComponent(t)}&date=${d}">🖨 Racebook (PDF)</a> <a id="skbtn" class="btn" href="silks.html?track=${encodeURIComponent(t)}&date=${d}">🎽 Silks (PDF)</a>`);
       $("#rbbtn").onclick = (e) => { if (!loggedIn()) { e.preventDefault(); signIn("signup"); } };
     }
-    $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true), up ? "Upcoming" : "Results", card.runs[0] && card.runs[0].rail ? "Rail: " + card.runs[0].rail : ""].filter(Boolean).join(" · ");
-    if (up) { $("#runners").closest("table").querySelector("thead").innerHTML = FIELD_HEAD; $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats"); }
+    $("#meta").textContent = [tr.state, tr.type, fmtDate(d, true), up ? "Upcoming" : upSet.size ? "Racing today · results so far" : "Results", card.runs[0] && card.runs[0].rail ? "Rail: " + card.runs[0].rail : ""].filter(Boolean).join(" · ");
+
     const races = groupBy(card.runs, (r) => r.race);
     const nums = Object.keys(races).map(Number).sort((a, b) => a - b);
     $("#m-races").textContent = nums.length; $("#m-runners").textContent = card.runs.filter((r) => !isScr(r)).length;
+    goingChanges($("#meta"), nums.map((k) => races[k][0]));
     if (up) { $("#m-first-box").classList.remove("hidden"); $("#m-first").textContent = fmtTime(card.runs.map((r) => r.start_time).filter(Boolean).sort()[0]) || "—"; }
     $("#m-going").textContent = goingLabel(card.runs[0] || {}) || "—";
     trackLeaders($("#leaders"), t, card.runs[0], card.runs);
@@ -1560,8 +1578,9 @@
     let active = Number(qs("race")) || nums[0];
     function setRace(n) {
       active = n;
-      const runs = races[n], r0 = runs[0];
-      $("#racebuttons").innerHTML = nums.map((x) => `<button class="${x === n ? "primary" : ""}" data-r="${x}">R${x}<small>${up ? esc(fmtTime(races[x][0].start_time)) : dash(races[x][0].distance) + "m"}</small></button>`).join("");
+      const runs = races[n], r0 = runs[0], up = upR(n);
+      $("#runners").closest("table").querySelector("thead").innerHTML = up ? FIELD_HEAD : RES_HEAD;
+      $("#racebuttons").innerHTML = nums.map((x) => `<button class="${x === n ? "primary" : ""}" data-r="${x}">R${x}<small>${upR(x) ? esc(fmtTime(races[x][0].start_time)) : dash(races[x][0].distance) + "m"}</small></button>`).join("");
       $$("#racebuttons button").forEach((b) => b.onclick = () => { setRace(Number(b.dataset.r)); history.replaceState(null, "", `?track=${encodeURIComponent(t)}&date=${d}&race=${b.dataset.r}`); });
       $("#racelabel").textContent = "Race " + n + (up && r0.start_time ? " · " + fmtTime(r0.start_time) : "");
       $("#racelink").href = raceURL(r0);
@@ -1585,9 +1604,9 @@
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
       stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, false, card.history);
     }
-    $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1);
+    $("#raceall").innerHTML = nums.map((n) => { const runs = races[n], r0 = runs[0], w = runs.find((r) => pos(r) === 1), up = upR(n);
       return `<tr><td>${n}</td><td>${up ? esc(fmtTime(r0.start_time)) + " · " : ""}${dash(r0.distance)}m</td><td>${esc(classLabel(r0)) || "—"}</td><td class="name">${esc(raceName(r0.race_name))}</td><td>${runs.filter((r) => !isScr(r)).length}</td><td>${w ? esc(w.horse) : up ? "—" : "—"}</td><td><a href="${raceURL(r0)}">View Race →</a></td></tr>`; }).join("");
-    if (up) $("#raceall").closest("table").querySelector("thead").innerHTML = `<tr><th>Race</th><th>Time · Distance</th><th>Class</th><th class="name">Race Name</th><th>Runners</th><th>Winner</th><th></th></tr>`;
+    if (up || upSet.size) $("#raceall").closest("table").querySelector("thead").innerHTML = `<tr><th>Race</th><th>Time · Distance</th><th>Class</th><th class="name">Race Name</th><th>Runners</th><th>Winner</th><th></th></tr>`;
     setRace(nums.includes(active) ? active : nums[0]);
     tabs("#meetingtabs");
   };
