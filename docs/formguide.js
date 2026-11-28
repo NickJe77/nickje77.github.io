@@ -562,7 +562,8 @@
           : `<label>Email<input class="field" type="email" name="email" autocomplete="email" required></label>
           <label>Password${mode === "signup" ? " <span class='mini'>(8+ characters)</span>" : ""}<input class="field" type="password" name="password" autocomplete="${mode === "signup" ? "new-password" : "current-password"}" minlength="${mode === "signup" ? 8 : 1}" required></label>`}
           <p class="err hidden"></p><button class="primary" type="submit">${pw ? "Change password" : mode === "login" ? "Log in" : "Create account"}</button></form>
-        ${pw ? "" : `<p class="note swap">${mode === "login" ? "<a href='#' data-m='forgot'>Forgot password?</a> · New here? <a href='#' data-m='signup'>Create an account</a>" : "Already have one? <a href='#' data-m='login'>Log in</a>"}</p>`}</div>`;
+        ${pw ? "" : `<p class="note swap">${mode === "login" ? "<a href='#' data-m='forgot'>Forgot password?</a> · New here? <a href='#' data-m='signup'>Create an account</a>" : "Already have one? <a href='#' data-m='login'>Log in</a>"}</p>`}
+        ${mode === "signup" ? `<p class="mini" style="margin:6px 0 0">We only use your email to sign you in and for the alerts you choose. <a href="privacy.html" target="_blank">Privacy</a></p>` : ""}</div>`;
       $(".x", box).onclick = () => box.remove();
       $$("[data-m]", box).forEach((a) => a.onclick = (e) => { e.preventDefault(); mode = a.dataset.m; draw(); });
       $("form", box).onsubmit = async (e) => {
