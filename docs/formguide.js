@@ -624,9 +624,28 @@
     const t = track(code, r), k = nameKey(t.name);
     return [...new Set([String(code).toUpperCase(), ...Object.keys(TRACKS).filter((c) => nameKey(TRACKS[c][0]) === k && AU.has(TRACKS[c][1]) === t.aus)])].slice(0, 6);
   }
+  const ordinal = (n) => { const v = n % 100; return n + (v >= 11 && v <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th"); };
+  // where the first three settled in this race (and where they were at the 400m)
+  function placedSettled(box, runs) {
+    if (!box) return;
+    const live = runs.filter((r) => !isScr(r)), field = live.length;
+    const dist = num((runs[0] || {}).distance);
+    const at = (v) => { const n = parseInt(v, 10); return n > 0 ? n : null; };
+    const bucket = (s, n) => s === 1 ? "Leader" : n < 2 ? "" : (s - 1) / (n - 1) <= 0.25 ? "On Pace" : (s - 1) / (n - 1) <= 0.55 ? "Midfield" : (s - 1) / (n - 1) <= 0.8 ? "Off Pace" : "Backmarker";
+    const top = [1, 2, 3].map((p) => live.find((r) => pos(r) === p)).filter(Boolean).map((r) => {
+      const n = parseInt(r.starters, 10) || field, s = dist >= 1400 && at(r.pos_1200) ? at(r.pos_1200) : at(r.pos_800);
+      return { r, n, s, p400: at(r.pos_400) };
+    });
+    if (!top.length || !top.some((x) => x.s || x.p400)) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="placed"><p class="settlehead mini"><b>Where the placegetters settled</b> · settled = position at the ${dist >= 1400 ? "1200m" : "800m"}</p>
+      <div class="placedrow">${top.map((x) => `<div><span class="mini">${posLabel(x.r)}</span><a href="${horseURL(x.r.horse, x.r)}"><b>${esc(x.r.horse)}</b></a>
+        <span>${x.s ? `Settled <b>${ordinal(x.s)}</b> of ${x.n} · <b>${bucket(x.s, x.n)}</b>` : "Settled: not recorded"}</span>
+        <small>${x.p400 ? `${ordinal(x.p400)} at the 400m` : ""}</small></div>`).join("")}</div></div>`;
+  }
   async function raceExtras(host, runs, allRuns, up) {
     const r0 = runs[0], d = r0.date, code = String(r0.track).toUpperCase(), tr = track(r0.track, r0), dist = num(r0.distance);
-    host.innerHTML = `<div class="extras"><div data-settle><p class="mini">Loading where winners settle…</p></div>${up ? "" : `<div data-wout></div>`}</div>`;
+    host.innerHTML = `<div class="extras"><div data-settle><p class="mini">Loading where winners settle…</p></div>${up ? "" : `<div data-placed></div><div data-wout></div>`}</div>`;
+    if (!up) placedSettled($("[data-placed]", host), runs);
     const key = code + "|" + d;
     const c = (extrasCache[key] ||= {
       settled: get(`/api/settled?tracks=${encodeURIComponent(sameTrackCodes(r0.track, r0).join(","))}&dists=${[...new Set(allRuns.map((r) => num(r.distance)).filter(Boolean))].join(",")}`).catch(() => ({})),
@@ -1580,8 +1599,8 @@
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
       stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw);
       $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats");
-      $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
-      $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
+      if ($('[data-tabcontent="stats"]')) $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
+      if ($('[data-tabcontent="sectionals"]')) $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
       raceHistory($('[data-tabcontent="history"]'), r0);
       tabs("#racetabs");
       return;
@@ -1603,8 +1622,8 @@
     }
     render();
     speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, false, mapKey(r0));
-    $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
-    $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
+    if ($('[data-tabcontent="stats"]')) $('[data-tabcontent="stats"]').innerHTML = raceSummary(runs);
+    if ($('[data-tabcontent="sectionals"]')) $('[data-tabcontent="sectionals"]').innerHTML = `<div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>1200m</th><th>800m</th><th>400m</th><th>Finish</th><th>Time</th><th>Margin</th></tr></thead><tbody>${runs.map((r) =>
       `<tr><td>${posLabel(r)}</td><td class="name">${horseCell(r)}</td><td>${dash(r.pos_1200)}</td><td>${dash(r.pos_800)}</td><td>${dash(r.pos_400)}</td><td>${dash(pos(r))}</td><td>${timeCell(r)}</td><td>${marginTxt(r, runs)}</td></tr>`).join("")}</tbody></table></div>
       <p class="pad note">Positions in running at each point of the race. Split times aren't in the data.</p>`;
     raceHistory($('[data-tabcontent="history"]'), r0);
