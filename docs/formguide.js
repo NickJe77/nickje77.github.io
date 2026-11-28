@@ -1059,13 +1059,19 @@
       }
     }
   }
+  // dual acceptances: the same horse (same stable) accepted in another race that day
+  const DUALP = {}, DUALR = {};
+  const loadDual = (d) => (DUALP[d] ||= get(`/api/dual?date=${d}`).catch(() => ({})).then((x) => (DUALR[d] = x || {})));
+  const dualOthers = (r) => ((DUALR[r.date] || {})[r.horse_key] || []).filter((x) =>
+    !(String(x.track).toUpperCase() === String(r.track).toUpperCase() && Number(x.race) === Number(r.race)) && (!x.trainer || !r.trainer || sameStable(x.trainer, r.trainer)));
   function fieldRows(runs, history) {
     const b = book();
     return (runs.length && !runs.some((r) => Number(r.barrier) > 0) ? `<tr class="nomrow"><td colspan="13"><b>Nominations</b> · this isn't the final field: barriers, weights and the final list come with acceptances, usually 2–4 days before the race.</td></tr>` : "")
       + runs.map((r) => {
-      const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r);
-      return `<tr style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
-        <td class="name">${horseCell(r)}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
+      const s = horseStats(history[r.horse_key] || [], r), scr = isScr(r), dual = scr ? [] : dualOthers(r);
+      return `<tr class="${dual.length ? "dualrow" : ""}" style="${scr ? "opacity:.45;text-decoration:line-through" : ""}"><td><b>${dash(r.number)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}</td>
+        <td class="name">${horseCell(r)}${dual.length ? `<div class="mini dualnote"><b>Dual accepted</b> · also ${dual.map((x) =>
+          `<a href="${raceURL({ track: x.track, date: r.date, race: x.race })}">${esc(track(x.track).name)} R${x.race}</a>${x.start_time ? ` <span>${esc(fmtTime(x.start_time))}</span>` : ""}`).join(", ")}</div>` : ""}${r.gear ? `<div class="mini">Gear: ${esc(r.gear)}</div>` : ""}${stewLine(lastStew(r, history))}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td>
         <td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}${((st) => st && st.n < 3
           ? `<div class="mini newstable" title="Previously trained by ${esc(st.from)}"><b>New stable</b> · ${ordStart(st.n + 1)} start<br>was ${esc(st.from)}</div>` : "")(stableStint(r.trainer, history[r.horse_key]))}</td>${lswCell(history[r.horse_key] || [], r)}<td>${s.career.text}</td><td>${s.dist.text}</td><td>${s.going.text}</td>
         <td>${s.daysSince ?? "1st"}</td>${mypCell(r, scr)}<td><button class="star ${b[r.horse] ? "on" : ""}" data-h="${esc(r.horse)}" title="Blackbook">${b[r.horse] ? "★" : "☆"}</button></td></tr>`;
@@ -1236,13 +1242,13 @@
           <span class="mini">${[num(h0.distance) ? num(h0.distance) + "m" : "", goingLabel(h0), H.length + " runners"].filter(Boolean).join(" · ")}</span></div>
           ${woBox(H)}
           <div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>Margin</th><th>Time</th>
-          <th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Barrier</th><th>Jockey</th><th>Trainer</th></tr></thead><tbody>
+          <th title="Lengths faster (+) or slower (−) than the average trial winner over this track, distance and going">Average</th><th>Jockey</th><th>Trainer</th></tr></thead><tbody>
           ${H.map((r) => { const p = pos(r);
             return `<tr class="${p === 1 ? "winner" : ""}"><td><b>${p ? posLabel(r) : dash(r.position)}</b></td>
               <td class="name">${r.silk ? `<img class="silk" src="${esc(r.silk)}" alt="" loading="lazy">` : ""}<a href="${horseURL(r.horse)}">${esc(r.horse)}</a>${wonSince.has(r) ? ` <span class="pill wonsince" title="Won ${wonSince.get(r).n} race${wonSince.get(r).n > 1 ? "s" : ""} since">W since</span>` : ""}</td>
               <td>${p === 1 ? "—" : r.margin ? esc(r.margin) + "L" : "—"}</td>
               <td>${runTime(r.finish_time) === "—" ? "—" : /time_estimated/.test(r.extra || "") ? `<span title="Worked out from the winner's time and the margin (0.17s a length)">≈${runTime(r.finish_time)}</span>` : runTime(r.finish_time)}</td>
-              ${vsAverage(r, avgs, "trials")}<td>${dash(r.barrier)}</td><td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}</td></tr>`; }).join("")}
+              ${vsAverage(r, avgs, "trials")}<td>${personLink("jockey", r.jockey)}</td><td>${personLink("trainer", r.trainer)}</td></tr>`; }).join("")}
           </tbody></table></div></section>`; }).join("") +
         `<p class="mini">Average = lengths faster (green) or slower (red) than the average trial winner at ${esc(m.t.name)} over that distance and going. ≈ = worked out from the winner's time and the margin.</p>`;
       $("#tback").onclick = (e) => { e.preventDefault(); cardBox.innerHTML = ""; $("#tlist").classList.remove("hidden"); setHead(); history.replaceState(null, "", "?date=" + data.date); };
@@ -1352,6 +1358,19 @@
   // ---------------------------------------------- 2. Meeting
 
   // ------------------------------------------------------------ jockey / trainer page (last 12 months)
+  // where their winners came from: settled position, same groups as "where winners settled" for a track
+  function settledPanel(S, type) {
+    if (!S) return "";
+    const ks = ["Leader", "On Pace", "Midfield", "Off Pace", "Backmarker"], W = ks.reduce((a, k) => a + S[k].wins, 0), R = ks.reduce((a, k) => a + S[k].rides, 0);
+    if (!W) return "";
+    const most = Math.max(...ks.map((k) => S[k].wins));
+    return `<section class="panel"><div class="panelhead"><span>Where their winners came from</span><span class="mini">settled position · ${W} wins with a position recorded</span></div>
+      <div class="pad settlebars">${ks.map((k) => { const x = S[k], pc = W ? x.wins / W * 100 : 0;
+        return `<div class="sbrow${x.wins === most ? " top" : ""}"><span class="sblabel">${k}</span><div class="sbtrack"><div class="sbfill" style="width:${Math.max(pc, x.wins ? 2 : 0).toFixed(1)}%"></div></div>
+          <span class="sbval"><b>${Math.round(pc)}%</b> <span class="mini">${x.wins} win${x.wins === 1 ? "" : "s"}</span></span>
+          <span class="mini sbsr">${x.rides ? `${(x.wins / x.rides * 100).toFixed(1)}% strike from ${x.rides} ${type === "jockey" ? "rides" : "runners"} settled here` : ""}</span></div>`; }).join("")}
+        <p class="mini" style="margin:8px 0 0">Settled = position at the 1200m in races of 1400m or more, otherwise at the 800m, against the size of the field (Leader = 1st; On Pace = front quarter; Midfield; Off Pace; Backmarker = last fifth).</p></div></section>`;
+  }
   function arrivalsPanel(A) {
     const rec = (t) => t.starts ? `<b>${t.starts}: ${t.wins}-${t.seconds}-${t.thirds}</b>` : "—";
     const roi = (v) => v === null || v === undefined ? "—" : `<span class="${v >= 0 ? "pos" : "neg"}">${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}%</span>`;
@@ -1396,7 +1415,7 @@
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?v=5&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    let P; try { P = await get(`/api/person?v=6&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
     catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
     const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
@@ -1428,6 +1447,7 @@
         ${P.form ? `<section class="panel"><div class="panelhead">Recent form</div><div class="tablewrap"><table><thead><tr><th class="name"></th><th>${ride}</th><th>Wins</th><th>2nds</th><th>3rds</th><th>Strike</th><th>Place %</th><th>ROI</th><th title="Actual to expected: wins ÷ the wins the starting prices said they should have">A/E</th></tr></thead><tbody>
           ${[["Last 50", P.form.last50], ["Last 100", P.form.last100], ["Last 12 months", o]].filter(([, x]) => x && x.rides).map(([k, x]) =>
             `<tr><td class="name"><b>${k}</b>${k !== "Last 12 months" && x.rides < (k === "Last 50" ? 50 : 100) ? ` <span class="mini">(${x.rides} in 12 months)</span>` : ""}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
+        ${settledPanel(P.settled, type)}
         <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.
           A/E (actual to expected) = wins ÷ the wins the starting prices said they should have (bookmakers' margin taken out). Over 1.00 = winning more often than the market expects.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
         ${P.upcoming.length ? `<section class="panel"><div class="panelhead">Coming up · ${P.upcoming.length} ${type === "jockey" ? "ride" : "runner"}${P.upcoming.length === 1 ? "" : "s"}</div><div class="tablewrap"><table>
@@ -1554,7 +1574,7 @@
         const draw = () => { if (active !== n) return; $("#runners").innerHTML = fieldRows(runs, card.history); bindStars($("#runners"), draw); };
         draw();
         speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
-        stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw);
+        stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw); loadDual(d).then(draw);
         return;
       }
       $("#runners").innerHTML = byFinish(runs).map((r) => {
@@ -1622,7 +1642,7 @@
       const draw = () => { $("#field").innerHTML = fieldRows(runs, card.history); bindStars($("#field"), draw); };
       draw();
       speedMapEditor($('[data-tabcontent="speed"]'), runs, card.history, true, mapKey(r0));
-      stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw);
+      stewardsPanel($('[data-tabcontent="stewards"]'), t, d, n, runs, true, card.history).then(draw); loadDual(d).then(draw);
       $$('[data-panel="stats"]').forEach((b) => b.textContent = "Field Stats");
       if ($('[data-tabcontent="stats"]')) $('[data-tabcontent="stats"]').innerHTML = fieldStats(runs, card.history);
       if ($('[data-tabcontent="sectionals"]')) $('[data-tabcontent="sectionals"]').innerHTML = `<div class="pad note">Positions in running appear here after the race.</div>`;
