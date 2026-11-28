@@ -1405,6 +1405,8 @@
     suggest($("#pjockey"), $("#pjlist"), "jockey"); suggest($("#ptrainer"), $("#ptlist"), "trainer"); if ($("#phorse")) suggest($("#phorse"), $("#phlist"), "horse");
     const tnames = [...new Set(Object.values(TRACKS).map((v) => v[0]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
     $("#ptklist").innerHTML = tnames.map((n) => `<option value="${esc(n)}">`).join("");
+    // Safari: with a suggestion list open, the first click on Show only closes the list; go on the press itself
+    { const b = $("#pfind button[type=submit]"); if (b) b.addEventListener("pointerdown", (e) => { e.preventDefault(); $("#pfind").requestSubmit ? $("#pfind").requestSubmit() : $("#pfind").onsubmit(new Event("submit")); }); }
     $("#pfind").onsubmit = (e) => { e.preventDefault();
       const j = $("#pjockey").value.trim(), t = $("#ptrainer").value.trim(), k = $("#ptrack").value.trim().toLowerCase(), h = $("#phorse") ? $("#phorse").value.trim() : "";
       if (h && !j && !t) { location.href = horseURL(h); return; }              // a horse on its own: its own page
@@ -1417,8 +1419,13 @@
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?v=7&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}${hq ? "&horse=" + encodeURIComponent(hq) : ""}`); }
-    catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
+    // the first look at a busy jockey adds up a year of results and can time out: try again by itself (it's quick once done)
+    let P;
+    for (let attempt = 1; attempt <= 4 && !P; attempt++) {
+      try { P = await get(`/api/person?v=7&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}${hq ? "&horse=" + encodeURIComponent(hq) : ""}`); }
+      catch (e) { if (attempt === 4) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now. Press Show to try again.</div>`; return; }
+        $("#pbody").innerHTML = `<div class="pad note">Adding up 12 months of results… (${attempt + 1} of 4)</div>`; await new Promise((ok) => setTimeout(ok, 1500 * attempt)); }
+    }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
     const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (hq ? " on " + hq : "") + (trackName ? " at " + trackName : "");
     $("#ptitle").textContent = shownTitle; document.title = shownTitle + " | The Sporting Almanac";
