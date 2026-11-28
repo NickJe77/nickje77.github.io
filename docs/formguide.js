@@ -1224,7 +1224,15 @@
             </tbody></table></div></div>`; }).join("")}</section>` : "";
       cardBox.innerHTML = `<p><a href="?date=${data.date}" id="tback">← All trial venues on ${esc(fmtDate(data.date, true))}</a></p>` + best + nums.map((n) => {
         const H = heats[n], h0 = H[0], kind = /jump/i.test(h0.race_name || "") ? "Jump-out" : "Trial";
-        return `<section class="panel" id="heat${n}"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}</span>
+        // the heat's time (the winner's), and in brackets the fastest heat of the day of the same kind (Open, Maiden,
+        // 2yo, Jump-out...) over the same distance: "Open Trial · 54.23 (Best 54.12 – Heat 3)"
+        const kindOf = (G) => (raceName(G[0].race_name) || (/jump/i.test(G[0].race_name || "") ? "Jump-out" : "Trial")).toLowerCase() + "|" + num(G[0].distance);
+        const heatT = (G) => { const w = G.find((r) => pos(r) === 1); return w ? timeSecs(w.finish_time) : null; };
+        const fmtS = (x) => x < 60 ? x.toFixed(2) : Math.floor(x / 60) + ":" + (x % 60).toFixed(2).padStart(5, "0");
+        const wt = heatT(H), same = nums.filter((k) => kindOf(heats[k]) === kindOf(H) && heatT(heats[k]) !== null);
+        const bestN = same.sort((x, y) => heatT(heats[x]) - heatT(heats[y]) || x - y)[0];
+        const heatTime = wt === null ? "" : ` · ${fmtS(wt)} <span class="heatbest">${same.length < 2 ? "" : bestN === n ? "(Best of the day)" : `(Best ${fmtS(heatT(heats[bestN]))} – <a href="#heat${bestN}">Heat ${bestN}</a>)`}</span>`;
+        return `<section class="panel" id="heat${n}"><div class="panelhead"><span>Heat ${n} · ${esc(raceName(h0.race_name) || kind)}${heatTime}</span>
           <span class="mini">${[num(h0.distance) ? num(h0.distance) + "m" : "", goingLabel(h0), H.length + " runners"].filter(Boolean).join(" · ")}</span></div>
           ${woBox(H)}
           <div class="tablewrap"><table><thead><tr><th>Pos</th><th class="name">Horse</th><th>Margin</th><th>Time</th>
