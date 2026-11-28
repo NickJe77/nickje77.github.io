@@ -1923,7 +1923,7 @@
           <div class="skimg">${r.silk ? `<img src="${esc(r.silk)}" alt="">` : `<span class="silk none big"></span>`}</div>
           <div class="sknum">${esc(r.number || "")}</div>
           <div class="skname">${esc(r.horse)}${isScr(r) ? " <small>SCR</small>" : ""}</div>
-          <div class="skmeta">${r.barrier ? `Barrier ${esc(r.barrier)}` : ""}${r.jockey ? `<br>${esc(r.jockey)}` : ""}${r.trainer ? `<br><span>${esc(r.trainer)}</span>` : ""}</div></div>`).join("")}</div></section>`;
+          <div class="skmeta">${[r.jockey, r.trainer].filter(Boolean).map((x) => esc(x)).join("<br>")}</div></div>`).join("")}</div></section>`;
     }).join("");
     const pageEach = $("#skpage"); pageEach.onchange = () => out.classList.toggle("skpaged", pageEach.checked);
     // wait for every silk to load before printing, so none are missing from the PDF
