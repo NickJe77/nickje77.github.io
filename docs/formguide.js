@@ -1396,7 +1396,7 @@
     $("#ptitle").textContent = title; document.title = title + " | The Sporting Almanac";
     $("#pcrumb").textContent = jq && tq ? "Combination" : T + "s";
     loading($("#pbody"));
-    let P; try { P = await get(`/api/person?v=4&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
+    let P; try { P = await get(`/api/person?v=5&type=${type}&name=${encodeURIComponent(name)}${withName ? "&with=" + encodeURIComponent(withName) : ""}${trackCodes.length ? "&tracks=" + encodeURIComponent(trackCodes.join(",")) : ""}`); }
     catch (e) { $("#pbody").innerHTML = `<div class="pad note">Couldn't load that just now.</div>`; return; }
     if (!P.overall.rides && !P.upcoming.length) { $("#pbody").innerHTML = `<div class="pad note">No ${type === "jockey" ? "rides" : "runners"} found for that in the last 12 months. Check the spelling (pick a name from the list as you type).</div>`; return; }
     const shownTitle = [type === "jockey" ? P.name : P.with, type === "jockey" ? P.with : P.name].filter(Boolean).join(" + ") + (trackName ? " at " + trackName : "");
@@ -1408,7 +1408,8 @@
     // tracks: one row per track name (Randwick and its inner track kept apart, as named)
     const byName = new Map();
     for (const x of P.byTrack) { const nm = track(x.key).name || x.key, t = byName.get(nm);
-      if (!t) byName.set(nm, { ...x, name: nm, code: x.key }); else ["rides", "wins", "seconds", "thirds", "places", "priced"].forEach((k) => t[k] += x[k]); }
+      if (!t) byName.set(nm, { ...x, name: nm, code: x.key, _e: (x.expected || 0) }); else { ["rides", "wins", "seconds", "thirds", "places", "priced"].forEach((k) => t[k] += x[k]); t._e += x.expected || 0;
+        t.expected = Math.round(t._e * 10) / 10; t.ae = t._e > 0 ? Math.round(t.wins / t._e * 100) / 100 : null; } }
     const tracks = [...byName.values()].map((t) => ({ ...t, strike: t.rides ? t.wins / t.rides * 100 : 0, place: t.rides ? t.places / t.rides * 100 : 0,
       roi: P.byTrack.filter((x) => (track(x.key).name || x.key) === t.name).reduce((a, x) => a + (x.roi === null ? 0 : x.roi * x.priced), 0) / (t.priced || 1) }));
     tracks.forEach((t) => { if (!t.priced) t.roi = null; });
@@ -1416,17 +1417,19 @@
     const head = (cols, st, id) => `<tr>${cols.map(([k, lab, cls]) => `<th class="${cls || ""} sortable" data-sort="${k}" data-tbl="${id}">${lab}${st.k === k ? (st.d < 0 ? " ▾" : " ▴") : ""}</th>`).join("")}</tr>`;
     const sorted = (list, st) => [...list].sort((a, b) => { const x = a[st.k], y = b[st.k]; if (typeof x === "string") return st.d * String(x).localeCompare(String(y));
       return st.d * ((x ?? -1e9) - (y ?? -1e9)); });
-    const statCols = [["rides", ride], ["wins", "Wins"], ["seconds", "2nds"], ["thirds", "3rds"], ["strike", "Strike"], ["place", "Place %"], ["roi", "ROI"]];
-    const statTds = (x) => `<td>${x.rides}</td><td><b>${x.wins}</b></td><td>${x.seconds}</td><td>${x.thirds}</td><td>${x.strike.toFixed(1)}%</td><td>${x.place.toFixed(1)}%</td><td>${roiTxt(x.roi)}</td>`;
+    const statCols = [["rides", ride], ["wins", "Wins"], ["seconds", "2nds"], ["thirds", "3rds"], ["strike", "Strike"], ["place", "Place %"], ["roi", "ROI"], ["ae", "A/E"]];
+    const aeTxt = (x) => x.ae === null || x.ae === undefined ? "—" : `<span class="${x.ae >= 1 ? "pos" : "neg"}" title="${x.wins} wins against ${x.expected} expected from the starting prices">${x.ae.toFixed(2)}</span>`;
+    const statTds = (x) => `<td>${x.rides}</td><td><b>${x.wins}</b></td><td>${x.seconds}</td><td>${x.thirds}</td><td>${x.strike.toFixed(1)}%</td><td>${x.place.toFixed(1)}%</td><td>${roiTxt(x.roi)}</td><td>${aeTxt(x)}</td>`;
     function draw() {
       const parts = P.partners.filter((x) => x.rides >= minRides);
       $("#pbody").innerHTML = `
-        <div class="grid stats5">${[[ride, o.rides], ["Wins", o.wins], ["Strike rate", o.strike.toFixed(1) + "%"], ["Place %", o.place.toFixed(1) + "%"], ["ROI", roiTxt(o.roi)]]
+        <div class="grid stats6">${[[ride, o.rides], ["Wins", o.wins], ["Strike rate", o.strike.toFixed(1) + "%"], ["Place %", o.place.toFixed(1) + "%"], ["ROI", roiTxt(o.roi)], ["A/E", aeTxt(o)]]
           .map(([k, v]) => `<div class="stat"><small>${k}</small><b>${v}</b></div>`).join("")}</div>
-        ${P.form ? `<section class="panel"><div class="panelhead">Recent form</div><div class="tablewrap"><table><thead><tr><th class="name"></th><th>${ride}</th><th>Wins</th><th>2nds</th><th>3rds</th><th>Strike</th><th>Place %</th><th>ROI</th></tr></thead><tbody>
+        ${P.form ? `<section class="panel"><div class="panelhead">Recent form</div><div class="tablewrap"><table><thead><tr><th class="name"></th><th>${ride}</th><th>Wins</th><th>2nds</th><th>3rds</th><th>Strike</th><th>Place %</th><th>ROI</th><th title="Actual to expected: wins ÷ the wins the starting prices said they should have">A/E</th></tr></thead><tbody>
           ${[["Last 50", P.form.last50], ["Last 100", P.form.last100], ["Last 12 months", o]].filter(([, x]) => x && x.rides).map(([k, x]) =>
             `<tr><td class="name"><b>${k}</b>${k !== "Last 12 months" && x.rides < (k === "Last 50" ? 50 : 100) ? ` <span class="mini">(${x.rides} in 12 months)</span>` : ""}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
-        <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
+        <p class="mini" style="margin:6px 0 16px">ROI = profit or loss from $1 on every ${type === "jockey" ? "ride" : "runner"} at the starting price.
+          A/E (actual to expected) = wins ÷ the wins the starting prices said they should have (bookmakers' margin taken out). Over 1.00 = winning more often than the market expects.${type === "trainer" && P.asStable.length > 1 ? " Includes every stable they're part of." : ""}</p>
         ${P.upcoming.length ? `<section class="panel"><div class="panelhead">Coming up · ${P.upcoming.length} ${type === "jockey" ? "ride" : "runner"}${P.upcoming.length === 1 ? "" : "s"}</div><div class="tablewrap"><table>
           <thead><tr><th>Date</th><th class="name">Meeting</th><th>Race</th><th class="name">Horse</th><th>Barrier</th><th class="name">${O}</th>
             <th title="This jockey and trainer together over the last 12 months">Strike with ${O.toLowerCase()}</th><th title="$1 on every ride together at SP, last 12 months">ROI with ${O.toLowerCase()}</th>
@@ -1444,7 +1447,7 @@
         ${withName ? "" : `<section class="panel"><div class="panelhead"><span>Best ${O.toLowerCase()}s with ${esc(P.name)}${trackName ? " at " + esc(trackName) : ""}</span>
           <span class="filters" style="margin:0">${[3, 5, 10, 20].map((n) => `<button class="filter ${minRides === n ? "active" : ""}" data-min="${n}">${n}+ ${type === "jockey" ? "rides" : "rides"}</button>`).join("")}</span></div>
           <div class="tablewrap"><table><thead>${head([["name", O, "name"], ...statCols], pSort, "p")}</thead><tbody>
-          ${sorted(parts, pSort).map((x) => `<tr><td class="name">${personLink(other, x.name)}</td>${statTds(x)}</tr>`).join("") || `<tr><td colspan="8">None with ${minRides}+ rides together.</td></tr>`}</tbody></table></div></section>`}
+          ${sorted(parts, pSort).map((x) => `<tr><td class="name">${personLink(other, x.name)}</td>${statTds(x)}</tr>`).join("") || `<tr><td colspan="9">None with ${minRides}+ rides together.</td></tr>`}</tbody></table></div></section>`}
         ${type === "trainer" && P.asStable.length > 1 ? `<section class="panel"><div class="panelhead">By stable name</div><div class="tablewrap"><table><thead><tr><th class="name">Trained as</th>${statCols.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
           ${P.asStable.map((x) => `<tr><td class="name">${personLink("trainer", x.name)}</td>${statTds(x)}</tr>`).join("")}</tbody></table></div></section>` : ""}
         <section class="panel"><div class="panelhead">Latest ${type === "jockey" ? "rides" : "runners"}</div><div class="tablewrap"><table>
