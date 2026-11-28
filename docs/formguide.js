@@ -383,11 +383,19 @@
         const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas"); c.width = w; c.height = h;
         const x = c.getContext("2d"); x.drawImage(im, 0, 0);
         const d = x.getImageData(0, 0, w, h).data;
+        // background: see-through, or a solid colour (usually white) that all four corners share
+        const px = (i, y) => { const k = (y * w + i) * 4; return [d[k], d[k + 1], d[k + 2], d[k + 3]]; };
+        const cs = [px(0, 0), px(w - 1, 0), px(0, h - 1), px(w - 1, h - 1)];
+        const near = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]) < 40;
+        const solid = cs.every((c) => c[3] > 200) && cs.every((c) => near(c, cs[0])) ? cs[0] : null;
+        const isBg = (k) => d[k + 3] <= 16 || (solid && Math.abs(d[k] - solid[0]) + Math.abs(d[k + 1] - solid[1]) + Math.abs(d[k + 2] - solid[2]) < 40);
         let x0 = w, y0 = h, x1 = -1, y1 = -1;
-        for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) { if (d[(y * w + i) * 4 + 3] > 16) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+        for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) { if (!isBg((y * w + i) * 4)) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
         if (x1 < 0 || (x0 <= 1 && y0 <= 1 && x1 >= w - 2 && y1 >= h - 2)) { SILK_TRIM.set(src, "x"); return; }   // nothing to trim
         const bw = x1 - x0 + 1, bh = y1 - y0 + 1, side = Math.max(bw, bh), o = document.createElement("canvas"); o.width = o.height = side;
-        o.getContext("2d").drawImage(c, x0, y0, bw, bh, Math.round((side - bw) / 2), Math.round((side - bh) / 2), bw, bh);
+        const ox = o.getContext("2d");
+        if (solid) { ox.fillStyle = `rgba(${solid[0]},${solid[1]},${solid[2]},${solid[3] / 255})`; ox.fillRect(0, 0, side, side); }
+        ox.drawImage(c, x0, y0, bw, bh, Math.round((side - bw) / 2), Math.round((side - bh) / 2), bw, bh);
         const url = o.toDataURL("image/png"); SILK_TRIM.set(src, url);
         document.querySelectorAll("img").forEach((el) => { if (el.src === src) { el.dataset.trimmed = "1"; el.src = url; } });
       } catch (e) { SILK_TRIM.set(src, "x"); }
@@ -2074,6 +2082,11 @@
     const trs = [...new Set(card.runs.flatMap((r) => (card.history[r.horse_key] || []).slice(0, 5).map((h) => String(h.track).toUpperCase())))];
     const avgs = Object.assign({}, ...(await Promise.all(Array.from({ length: Math.ceil(trs.length / 60) }, (_, i) =>
       get("/api/avgtimes?tracks=" + encodeURIComponent(trs.slice(i * 60, i * 60 + 60).join(","))).catch(() => ({}))))));
+    // who won each of the runners' last 5 starts (or ran 2nd behind them), and the stewards' comment on them
+    const wanted = card.runs.flatMap((r) => (card.history[r.horse_key] || []).slice(0, 5).map((h) => [h.track, h.date, h.race, r.horse_key]));
+    let EX = {};
+    try { EX = await (await fetch(API + "/api/run-extras", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ runs: wanted }) })).json(); } catch (e) {}
+    const exOf = (h) => EX[`${String(h.track).toUpperCase()}|${h.date}|${h.race}`] || {};
     const figTxt = (L) => { if (L === null) return ""; const k = Math.min(1, Math.abs(L) / 8), a = (0.12 + 0.38 * k).toFixed(2);
       return `<span class="fpill ${L > 0 ? "fplus" : L < 0 ? "fminus" : ""}" style="background:${L > 0 ? `rgba(22,163,74,${a})` : L < 0 ? `rgba(220,38,38,${a})` : "#eef0f3"}">${L > 0 ? "+" : L < 0 ? "−" : ""}${Math.abs(L).toFixed(1)}L</span>`; };
     const rec = (x) => x && x.n ? x.text : "—";
@@ -2091,17 +2104,26 @@
           <p>${[r0.start_time && fmtTime(r0.start_time), r0.distance && r0.distance + "m", r0.class || classLabel(r0), num(r0.prize_money) ? money(r0.prize_money) : "", goingLabel(r0), r0.rail && "Rail " + r0.rail].filter((x) => x && x !== "—").map(esc).join(" · ")}</p></div></div>
         <div class="rbinfo"><div><b>Where winners settle at ${esc(tr.name)} ${dash(r0.distance)}m</b>${settleLine}</div>
           <div class="rbmap"><b>Speed map</b> <span class="mini">expected ${esc(pace.toLowerCase())} pace</span>${cols.map((list, c) => list.length ? `<div class="rbmaprow"><span class="rbcol c${c}">${COLS[c]}</span>${list.map((r) => `<span class="rbchip c${c}"><b>${esc(r.number || "?")}</b> ${esc(r.horse)}</span>`).join("")}</div>` : "").join("")}</div></div>
+        <table class="rbfield"><thead><tr><th>No.</th><th>Form</th><th class="name">Horse</th><th>Career</th><th class="name">Trainer</th><th class="name">Jockey</th><th>Bar</th><th>Wt</th><th>Days</th><th class="rbprice">My price</th></tr></thead><tbody>
+          ${sorted.map((r) => { const p = card.history[r.horse_key] || [], x = horseStats(p, r);
+            return isScr(r) ? `<tr class="scr"><td>${esc(r.number || "")}</td><td></td><td class="name"><s>${esc(r.horse)}</s></td><td colspan="7" class="mini">scratched</td></tr>`
+              : `<tr><td><b>${esc(r.number || "")}</b></td><td class="rbform">${x.last10 || "—"}</td><td class="name"><b>${esc(r.horse)}</b>${Number(r.emergency) === 1 ? " (EM)" : ""}</td><td>${x.career.text}</td>
+                 <td class="name">${esc(r.trainer || "—")}</td><td class="name">${esc(r.jockey || "—")}</td><td>${dash(r.barrier)}</td><td>${wt(r)}</td><td>${x.daysSince ?? "1st"}</td><td class="rbprice"></td></tr>`; }).join("")}</tbody></table>
+        ${live.some((r) => r.gear) ? `<p class="rbgear"><b>Gear changes:</b> ${live.filter((r) => r.gear).map((r) => `No. ${esc(r.number || "")} <b>${esc(r.horse)}</b>: ${esc(r.gear)}`).join(" · ")}</p>` : ""}
         ${sorted.map((r) => {
           const prior = card.history[r.horse_key] || [], s = horseStats(prior, r), scr = isScr(r);
           if (scr) return `<div class="rbrunner scr"><span class="rbnum">${esc(r.number || "")}</span> <s>${esc(r.horse)}</s> <span class="mini">scratched</span></div>`;
           const gd = (g) => rec(record(prior.filter((h) => going(h) === g)));
-          const last3 = prior.slice(0, 3).map((h) => `<tr><td class="${["", "p1", "p2", "p3"][pos(h)] || ""}"><b>${posLabel(h)}</b>${h.starters ? "/" + esc(h.starters) : ""}</td><td>${esc(track(h.track, h).name)}</td><td>${fmtDate(h.date)}</td><td>${dash(h.distance)}m</td>
-            <td>${esc(goingLabel(h)) || "—"}</td><td>${esc(classLabel(h) || "")}</td><td>${h.weight ? esc(h.weight) + "kg" : ""}</td><td>${esc(h.jockey || "")}</td><td>${dash(h.starting_odds)}</td><td>${timeCell(h)}</td><td>${marginTxt(h)}</td><td title="Lengths faster (+) or slower (−) than the average winner of this class here">${figTxt(lengthsVsAvg(h, avgs))}</td></tr>`).join("");
+          const last3 = prior.slice(0, 5).map((h) => { const e = exOf(h), other = pos(h) === 1 ? e.second : e.first, cm = (e.stewards || {})[r.horse_key];
+            return `<tr><td class="${["", "p1", "p2", "p3"][pos(h)] || ""}"><b>${posLabel(h)}</b>${h.starters ? "/" + esc(h.starters) : ""}</td><td>${esc(track(h.track, h).name)}</td><td>${fmtDate(h.date)}</td><td>${dash(h.distance)}m</td>
+            <td>${esc(goingLabel(h)) || "—"}</td><td>${esc(classLabel(h) || "")}</td><td>${h.barrier ? "b" + esc(h.barrier) : ""}</td><td>${h.weight ? esc(h.weight) + "kg" : ""}</td><td>${esc(h.jockey || "")}</td><td>${dash(h.starting_odds)}</td>
+            <td class="rbwho">${other ? `${pos(h) === 1 ? "2nd " : "1st "}${esc(other.horse)}${other.weight ? " " + esc(other.weight) : ""}` : ""}</td><td>${timeCell(h)}</td><td>${marginTxt(pos(h) === 1 && e.second ? { ...h, win_margin: e.second.margin } : h)}</td><td title="Lengths faster (+) or slower (−) than the average winner of this class here">${figTxt(lengthsVsAvg(h, avgs))}</td></tr>`
+              + (cm ? `<tr class="rbstew"><td></td><td colspan="13">🗒 ${esc(cm)}</td></tr>` : ""); }).join("");
           const f5 = prior.slice(0, 5).map((h) => lengthsVsAvg(h, avgs)).filter((x) => x !== null), fig = f5.length ? Math.round(f5.reduce((a, b) => a + b, 0) / f5.length * 10) / 10 : null;
           return `<div class="rbrunner"><div class="rbtop"><span class="rbnum">${esc(r.number || "")}</span>${silk(r)}
               <div class="rbname"><b>${esc(r.horse)}</b>${Number(r.emergency) === 1 ? ' <span class="pill">EM</span>' : ""}<div class="mini">Barrier ${dash(r.barrier)} · ${wt(r)}kg · ${esc(r.jockey || "—")} · Trainer: ${esc(r.trainer || "—")}</div></div>
               <div class="rbcareer"><div><span class="mini">Career</span> <b>${s.career.text}</b></div><div><span class="mini">Last 10</span> <b>${s.last10 || "—"}</b></div>${fig === null ? "" : `<div><span class="mini">Speed (${f5.length} run${f5.length === 1 ? "" : "s"})</span> <b>${figTxt(fig)}</b></div>`}</div></div>
-            <div class="rbstats">Track ${rec(s.track)} · Dist ${rec(s.dist)} · Trk/Dist ${rec(s.trackDist)} · Good ${gd("Good")} · Soft ${gd("Soft")} · Heavy ${gd("Heavy")} · 1st up ${rec(s.firstUp)} · 2nd up ${rec(s.secondUp)} · 3rd up ${rec(s.thirdUp)} · ${s.daysSince === null ? "First starter" : s.daysSince + " days since run"}${r.gear ? ` · <b>Gear:</b> ${esc(r.gear)}` : ""}</div>
+            <div class="rbstats">Track ${rec(s.track)} · Dist ${rec(s.dist)} · Trk/Dist ${rec(s.trackDist)} · Good ${gd("Good")} · Soft ${gd("Soft")} · Heavy ${gd("Heavy")} · 1st up ${rec(s.firstUp)} · 2nd up ${rec(s.secondUp)} · 3rd up ${rec(s.thirdUp)} · ${s.daysSince === null ? "First starter" : s.daysSince + " days since run"}${((w) => w ? ` · ${days(w.date, d)} days since win` : prior.length ? " · no wins yet" : "")(prior.find((h) => pos(h) === 1))}${r.gear ? ` · <b>Gear:</b> ${esc(r.gear)}` : ""}</div>
             ${last3 ? `<table class="rblast">${last3}</table>` : `<p class="mini" style="margin:2px 0 0">No race starts yet.</p>`}</div>`;
         }).join("")}
         <p class="rbfoot">thesportingalmanac.com · Printed for ${esc(store.get(EMAIL))} · Speed = lengths faster (+) or slower (−) than the average winner of that class at that track, distance and going. Form is each horse's record before this meeting. Check final scratchings and fields before betting.</p></section>`;
