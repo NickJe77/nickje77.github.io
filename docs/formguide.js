@@ -370,6 +370,31 @@
   const personLink = (type, n) => { const t = String(n || "").trim(); return t && t !== "-" && t !== "—" ? `<a class="plink" href="${personURL(type, t)}">${esc(t)}</a>` : "—"; };
   const horseURL = (n, r) => `horse.html?horse=${encodeURIComponent(n)}` + (r && r.track ? "&c=" + countryOf(r) : "")
     + (r && trainerKeys(r.trainer)[0] ? "&t=" + encodeURIComponent(trainerKeys(r.trainer)[0]) : "");
+  // every silk the same size: trim the empty space around each picture (they come with different margins) and
+  // centre what's left in a square, so the jacket fills the same box everywhere
+  const SILK_TRIM = new Map();
+  function trimSilk(img) {
+    if (img.dataset.trimmed || !img.naturalWidth || /^data:/.test(img.src)) return;
+    img.dataset.trimmed = "1";
+    const src = img.src, done = SILK_TRIM.get(src);
+    if (done) { if (done !== "x") img.src = done; return; }
+    const work = (im) => {
+      try {
+        const w = im.naturalWidth, h = im.naturalHeight, c = document.createElement("canvas"); c.width = w; c.height = h;
+        const x = c.getContext("2d"); x.drawImage(im, 0, 0);
+        const d = x.getImageData(0, 0, w, h).data;
+        let x0 = w, y0 = h, x1 = -1, y1 = -1;
+        for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) { if (d[(y * w + i) * 4 + 3] > 16) { if (i < x0) x0 = i; if (i > x1) x1 = i; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+        if (x1 < 0 || (x0 <= 1 && y0 <= 1 && x1 >= w - 2 && y1 >= h - 2)) { SILK_TRIM.set(src, "x"); return; }   // nothing to trim
+        const bw = x1 - x0 + 1, bh = y1 - y0 + 1, side = Math.max(bw, bh), o = document.createElement("canvas"); o.width = o.height = side;
+        o.getContext("2d").drawImage(c, x0, y0, bw, bh, Math.round((side - bw) / 2), Math.round((side - bh) / 2), bw, bh);
+        const url = o.toDataURL("image/png"); SILK_TRIM.set(src, url);
+        document.querySelectorAll("img").forEach((el) => { if (el.src === src) { el.dataset.trimmed = "1"; el.src = url; } });
+      } catch (e) { SILK_TRIM.set(src, "x"); }
+    };
+    const im = new Image(); im.crossOrigin = "anonymous"; im.onload = () => work(im); im.onerror = () => SILK_TRIM.set(src, "x"); im.src = src;
+  }
+  document.addEventListener("load", (e) => { const t = e.target; if (t && t.tagName === "IMG" && /\/silks\//.test(t.src || "")) trimSilk(t); }, true);
   const silk = (r, big) => r && r.silk ? `<img class="silk${big ? " big" : ""}" src="${esc(r.silk)}" alt="" loading="lazy">` : `<span class="silk none${big ? " big" : ""}"></span>`;
   const horseCell = (r) => `<span class="horsecell">${silk(r)}<a href="${horseURL(r.horse, r)}">${esc(r.horse)}</a></span>`;
 
